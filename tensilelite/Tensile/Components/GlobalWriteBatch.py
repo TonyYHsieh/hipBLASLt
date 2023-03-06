@@ -326,11 +326,6 @@ class GlobalWriteBatchWriter:
       if not self.kernel["BufferStore"]:
         offsetSrc = (self.tmpVgpr + 2) if self.beta else addrDVgpr
 
-        module.add(VAddCOU32(vgpr(addrDVgpr+0), VCC(), vgpr(self.addrD+0), \
-            vgpr(offsetSrc+0), "addrDVgpr = D + index*bytes (lo)"))
-        module.add(VAddCCOU32(vgpr(addrDVgpr+1), VCC(), vgpr(self.addrD+1), \
-            vgpr(offsetSrc+1), VCC(), "addrDVgpr = D + index*bytes (hi)"))
-
         # restore full exec mask for calculating addr of next element
         if self.edge and (self.beta or self.atomic):
           module.add(self.getEdgeMovInstType()(EXEC(), -1, "full mask -1 -> exec"))

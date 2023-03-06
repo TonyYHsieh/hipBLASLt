@@ -5613,13 +5613,13 @@ class KernelWriterAssembly(KernelWriter):
               tid0Scale=kernel["GlobalWriteVectorWidth"], \
               tid1Scale=1))
 
+    self.vgprs.addrScaleD = -1
     if kernel["BufferStore"]:
       #print "----AddressC-LocalSplitU"
       #print self.vgprPool.state()
       self.vgprs.addrD    = -1
       self.vgprs.addrC    = -1
       self.vgprs.addrBias = -1
-      self.vgprs.addrScaleD = -1
     else:
       self.vgprs.addrD = self.vgprPool.checkOut(2)
       module.add(VMovB32(
@@ -5686,13 +5686,13 @@ class KernelWriterAssembly(KernelWriter):
               tid0Scale=kernel["VectorWidth"], \
               tid1Scale=kernel["VectorWidth"]))
 
+    self.vgprs.addrScaleD = -1
     if kernel["BufferStore"]:
       #print "----AddressC-nonLSU-----"
       #print self.vgprPool.state()
       self.vgprs.addrD    = -1
       self.vgprs.addrC    = -1
       self.vgprs.addrBias = -1
-      self.vgprs.addrScaleD = -1
     else:
       self.vgprs.addrD = self.vgprPool.checkOut(2, 'addrD')
       module.add(VMovB32(
@@ -5746,9 +5746,10 @@ class KernelWriterAssembly(KernelWriter):
       self.vgprPool.checkIn(self.vgprs.storeRemapCoord0)
       self.vgprPool.checkIn(self.vgprs.storeRemapCoord1)
       self.vgprPool.checkIn(self.vgprs.storeRemapOffsetCoord1)
-    if kernel["BufferStore"]:
-      self.vgprPool.checkIn(self.vgprs.cinRowPtr)
-      self.vgprPool.checkIn(self.vgprs.coutRowPtr)
+
+    self.vgprPool.checkIn(self.vgprs.cinRowPtr)
+    self.vgprPool.checkIn(self.vgprs.coutRowPtr)
+
     if not kernel["BufferStore"]:
       self.vgprPool.checkIn(self.vgprs.addrD)
       self.vgprPool.checkIn(self.vgprs.addrC)
@@ -6908,7 +6909,7 @@ class KernelWriterAssembly(KernelWriter):
       if bps==2 and hi16:
         module.add(FlatStoreD16HIB16(vaddr=addr0, src=vgpr(srcVgpr*2), flat=flat, comment="store D"))
       elif bps==2 and not hi16:
-        module.add(FlatStoreD16B16(vaddr=addr0, src=vgpr(srcVgpr, rpv*2), flat=flat, comment="store D"))
+        module.add(FlatStoreB16(vaddr=addr0, src=vgpr(srcVgpr, rpv*2), flat=flat, comment="store D"))
       elif bps==4:
         module.add(FlatStoreB32(vaddr=addr0, src=vgpr(srcVgpr, rpv), flat=flat, comment="store D"))
       elif bps==8:

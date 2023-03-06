@@ -48,9 +48,8 @@ class ComputeStoreVgprsMFMA(ComputeStoreVgprs):
         # alloc resources
         tid0 = writer.vgprPool.checkOut(1)
         tid1 = writer.vgprPool.checkOut(1)
-        if kernel["BufferStore"]:
-            writer.vgprs.cinRowPtr  = writer.vgprPool.checkOut(1, "cinRowPtr")
-            writer.vgprs.coutRowPtr = writer.vgprPool.checkOut(1, "coutRowPtr")
+        writer.vgprs.cinRowPtr  = writer.vgprPool.checkOut(1, "cinRowPtr")
+        writer.vgprs.coutRowPtr = writer.vgprPool.checkOut(1, "coutRowPtr")
 
         wave_id = writer.vgprPool.checkOut(1)
 
@@ -152,9 +151,8 @@ class ComputeStoreVgprsMFMASwap(ComputeStoreVgprs):
         # alloc resources
         tid0 = writer.vgprPool.checkOut(1)
         tid1 = writer.vgprPool.checkOut(1)
-        if kernel["BufferStore"]:
-            writer.vgprs.cinRowPtr  = writer.vgprPool.checkOut(1, "cinRowPtr")
-            writer.vgprs.coutRowPtr = writer.vgprPool.checkOut(1, "coutRowPtr")
+        writer.vgprs.cinRowPtr  = writer.vgprPool.checkOut(1, "cinRowPtr")
+        writer.vgprs.coutRowPtr = writer.vgprPool.checkOut(1, "coutRowPtr")
 
         wave_id = writer.vgprPool.checkOut(1)
 
