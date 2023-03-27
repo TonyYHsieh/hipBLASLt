@@ -253,6 +253,9 @@ class GlobalWriteBatchWriter:
 
       # create code Module to push mov vgpr,acc instructions
       if self.beta:
+        # calculate flat load offset
+        if not self.kernel["BufferStore"]:
+          module.add(addrCalc.flatStoreAddress(self.kernel, self.tmpVgpr, self.tmpS01, elementIdx, addrCVgpr, 'C'))
         module.add(addrCalc.emitLdChange(self.kernel, self.ss, 'C', self.edge, self.beta, mask, (elementIdx == 0), self.tmpVgpr, self.tmpSgpr, addrCVgpr, self.addrC))
         if self.kernel["GroupLoadStore"]:
           loadInputCode.add(self.parentWriter.readCInput(self.kernel, self.ss, addrCalc, vc0, data, self.gwvw, addrCVgpr, self.tmpS01))
@@ -294,6 +297,9 @@ class GlobalWriteBatchWriter:
           loadedDataScaleD[dataScaleD] = 1
           self.loadsScaleDIssued += 1
       self.scaleDLoadIssued.append(len(loadedDataScaleD))
+
+      if not self.kernel["BufferStore"]:
+        module.add(addrCalc.flatStoreAddress(self.kernel, self.tmpVgpr, self.tmpS01, elementIdx, addrDVgpr, 'D'))
 
       module.add(addrCalc.emitLdChange(self.kernel, self.ss, 'D', self.edge, self.beta, mask, (elementIdx == len(self.batchElements) - 1), self.tmpVgpr, self.tmpSgpr, addrDVgpr, self.addrD))
 

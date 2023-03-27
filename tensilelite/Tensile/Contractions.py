@@ -67,7 +67,7 @@ class ProblemType:
     StateKeys = ['operationIdentifier', 'aType', 'bType', 'cType', 'dType',
                  'useBeta', 'useBias', 'useScaleD', 'biasDataTypeWhiteList', 'highPrecisionAccumulate',
                  'useInitialStridesAB', 'useInitialStridesCD', 'stridedBatched', 'groupedGemm',
-                 'activationType', 'activationHPA']
+                 'activationType', 'activationHPA', 'useReshapeAndPermute']
     @classmethod
     def FromOriginalState(cls, d):
         indices = [None]*d['TotalIndices']
@@ -148,6 +148,10 @@ class ProblemType:
         rv.stridedBatched = True
         if 'StridedBatched' in d:
           rv.stridedBatched = d['StridedBatched']
+
+        rv.useReshapeAndPermute = 0
+        if 'UseReshapeAndPermute' in d:
+          rv.useReshapeAndPermute = d['UseReshapeAndPermute']
 
         rv.groupedGemm = False
         if 'GroupedGemm' in d:
@@ -298,6 +302,7 @@ class ProblemType:
             predicates.append(ProblemPredicate("ActivationHPA", value=self.activationHPA))
             predicates.append(ProblemPredicate("UseBias", value=self.useBias))
             predicates.append(ProblemPredicate("StridedBatched", value=self.stridedBatched))
+            predicates.append(ProblemPredicate("UseReshapeAndPermute", value=self.useReshapeAndPermute))
             predicates.append(ProblemPredicate("GroupedGemm", value=self.groupedGemm))
             predicates.append(ProblemPredicate("UseScaleD", value=self.useScaleD))
 

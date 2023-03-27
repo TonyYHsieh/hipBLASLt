@@ -468,6 +468,23 @@ namespace Tensile
             magicNumberWgmRemainder1 = smallMagicNumber(wgmRemainder1);
         }
 
+        if (problemType.useReshapeAndPermute)
+        {
+            rv.args.append<uint32_t>("dimReshapeAndPermute", problemType.useReshapeAndPermute);
+            for(int i=0; i<problem.reshape().dimensions(); i++) {
+                std::string str = std::string("reshape") + std::to_string(i);
+                rv.args.append<uint32_t>(str.c_str(), problem.reshape().sizes()[i]);
+            }
+            for(int i=0; i<problem.reshape().dimensions(); i++) {
+                std::string str = std::string("reshapeMagic") + std::to_string(i);
+                rv.args.append<uint32_t>(str.c_str(), smallMagicNumber(problem.reshape().sizes()[i]));
+            }
+            for(int i=0; i<problem.permute().size(); i++) {
+                std::string str = std::string("permute") + std::to_string(i);
+               rv.args.append<uint32_t>(str.c_str(), problem.permute()[i]);
+            }
+        }
+
         rv.args.append<uint32_t>("numFullBlocks", numFullBlocks);
         rv.args.append<uint32_t>("wgmRemainder1", wgmRemainder1);
         rv.args.append<uint32_t>("magicNumberWgmRemainder1", magicNumberWgmRemainder1);
@@ -481,6 +498,7 @@ namespace Tensile
         if((problem.activationType() != ActivationType::None) && sizeMapping.activationFused
             && (sizeMapping.globalSplitU == 1))
             runActivation = true;
+
         if(problemType.useBias && (sizeMapping.globalSplitU == 1))
         {
             rv.args.append<void const*>("bias", inputs.bias);
@@ -715,6 +733,23 @@ namespace Tensile
                 if(wgmRemainder1 == 0)
                     wgmRemainder1 = sizeMapping.workGroupMapping;
                 magicNumberWgmRemainder1 = smallMagicNumber(wgmRemainder1);
+            }
+
+            if (problemType.useReshapeAndPermute)
+            {
+                rv.args.append<uint32_t>("dimReshapeAndPermute", problemType.useReshapeAndPermute);
+                for(int i=0; i<problem.reshape().dimensions(); i++) {
+                    std::string str = std::string("reshape") + std::to_string(i);
+                    rv.args.append<uint32_t>(str.c_str(), problem.reshape().sizes()[i]);
+                }
+                for(int i=0; i<problem.reshape().dimensions(); i++) {
+                    std::string str = std::string("reshapeMagic") + std::to_string(i);
+                    rv.args.append<uint32_t>(str.c_str(), smallMagicNumber(problem.reshape().sizes()[i]));
+                }
+                for(int i=0; i<problem.permute().size(); i++) {
+                    std::string str = std::string("permute") + std::to_string(i);
+                   rv.args.append<uint32_t>(str.c_str(), problem.permute()[i]);
+                }
             }
 
             args.append<uint32_t>("numFullBlocks", numFullBlocks);

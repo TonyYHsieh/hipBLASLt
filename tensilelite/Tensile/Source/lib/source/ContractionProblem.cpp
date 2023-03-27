@@ -54,7 +54,9 @@ namespace Tensile
                                                         size_t   cStride,
                                                         size_t   ldd,
                                                         size_t   dStride,
-                                                        double   beta)
+                                                        double   beta,
+                                                        std::vector<size_t> const& reshape,
+                                                        std::vector<size_t> const& permute)
     {
         return GEMM_Strides(transA,
                             transB,
@@ -78,7 +80,9 @@ namespace Tensile
                             ldd,
                             dStride,
                             0,
-                            beta);
+                            beta,
+                            reshape,
+                            permute);
     }
 
     ContractionProblem ContractionProblem::GEMM_Strides(bool     transA,
@@ -103,7 +107,9 @@ namespace Tensile
                                                         size_t   ldd,
                                                         size_t   dStride,
                                                         size_t   dOffset,
-                                                        double   beta)
+                                                        double   beta,
+                                                        std::vector<size_t> const& reshape,
+                                                        std::vector<size_t> const& permute)
     {
         Tensile::ContractionProblem::FreeIndices  free(2);
         Tensile::ContractionProblem::BoundIndices bound(1);
@@ -116,7 +122,7 @@ namespace Tensile
 
         batch[0].a = batch[0].b = batch[0].c = batch[0].d = 2;
 
-        TensorDescriptor a, b, c, d;
+        TensorDescriptor a, b, c, d, rD;
 
         if(transA)
         {
@@ -144,12 +150,13 @@ namespace Tensile
             bound[0].b = 0;
         }
 
-        c = TensorDescriptor(cType, {m, n, batchSize}, {1, ldc, cStride}, cOffset);
-        d = TensorDescriptor(dType, {m, n, batchSize}, {1, ldd, dStride}, dOffset);
+        c  = TensorDescriptor(cType, {m, n, batchSize}, {1, ldc, cStride}, cOffset);
+        d  = TensorDescriptor(dType, {m, n, batchSize}, {1, ldd, dStride}, dOffset);
+        rD = TensorDescriptor(dType, reshape.begin(), reshape.end());
 
         TensorOps nop;
 
-        ContractionProblem problem(a, nop, b, nop, c, nop, d, nop, free, batch, bound, beta);
+        ContractionProblem problem(a, nop, b, nop, c, nop, d, nop, free, batch, bound, rD, permute, beta);
 
         return problem;
     }
@@ -164,9 +171,11 @@ namespace Tensile
                                                 size_t ldc,
                                                 double beta,
                                                 bool   colMajor,
-                                                size_t batchCount)
+                                                size_t batchCount,
+                                                std::vector<size_t> const& reshape,
+                                                std::vector<size_t> const& permute)
     {
-        return GEMM(transA, transB, m, n, k, lda, 0, ldb, 0, ldc, 0, beta, colMajor, batchCount);
+        return GEMM(transA, transB, m, n, k, lda, 0, ldb, 0, ldc, 0, beta, colMajor, batchCount, reshape, permute);
     }
 
     ContractionProblem ContractionProblem::GEMM(bool   transA,
@@ -182,7 +191,9 @@ namespace Tensile
                                                 size_t offsetC,
                                                 double beta,
                                                 bool   colMajor,
-                                                size_t batchCount)
+                                                size_t batchCount,
+                                                std::vector<size_t> const& reshape,
+                                                std::vector<size_t> const& permute)
     {
         if(colMajor)
             throw std::runtime_error("Column major not yet implemented.");
@@ -195,7 +206,7 @@ namespace Tensile
         free[1].isA                       = false;
         free[1].i = free[1].c = free[1].d = 1;
 
-        TensorDescriptor a, b, c, d;
+        TensorDescriptor a, b, c, d, rD;
         if(transA)
         {
             a         = TensorDescriptor(DataType::Float, {k, m}, {1, lda}, offsetA);
@@ -238,8 +249,10 @@ namespace Tensile
 
         TensorOps nop;
 
+        rD = TensorDescriptor(DataType::Float, reshape.begin(), reshape.end());
+
         return ContractionProblem(
-            a, nop, b, nop, c, nop, d, nop, freeIndices, batchIndices, boundIndices, beta);
+            a, nop, b, nop, c, nop, d, nop, freeIndices, batchIndices, boundIndices, rD, permute, beta);
     }
 
     ContractionProblem ContractionProblem::GEMM(bool                    transA,
@@ -252,7 +265,9 @@ namespace Tensile
                                                 TensorOps const&        cOps,
                                                 TensorDescriptor const& d,
                                                 TensorOps const&        dOps,
-                                                double                  beta)
+                                                double                  beta,
+                                                std::vector<size_t> const& reshape,
+                                                std::vector<size_t> const& permute)
     {
         Tensile::ContractionProblem::FreeIndices free(2);
         BoundIndex                               bound;
@@ -290,8 +305,10 @@ namespace Tensile
 
         batchIndices.push_back({2, 2, 2, 2});
 
+        TensorDescriptor rD(d.dataType(), reshape.begin(), reshape.end());
+
         return ContractionProblem(
-            a, aOps, b, bOps, c, cOps, d, cOps, freeIndices, batchIndices, boundIndices, beta);
+            a, aOps, b, bOps, c, cOps, d, cOps, freeIndices, batchIndices, boundIndices, rD, permute, beta);
     }
 
     void ContractionProblem::IdentifierToIndices(std::string const& identifier,
@@ -446,6 +463,8 @@ namespace Tensile
 
     ContractionProblem ContractionProblem::FromIndexSizes(std::string const& operationIdentifier,
                                                           std::vector<size_t> const& indexSizes,
+                                                          std::vector<size_t> const& reshape,
+                                                          std::vector<size_t> const& permute,
                                                           DataType                   aType,
                                                           std::vector<size_t> const& aStrides,
                                                           DataType                   bType,
@@ -458,6 +477,8 @@ namespace Tensile
     {
         return FromIndexSizes(operationIdentifier,
                               indexSizes,
+                              reshape,
+                              permute,
                               aType,
                               aStrides,
                               0,
@@ -475,6 +496,8 @@ namespace Tensile
 
     ContractionProblem ContractionProblem::FromIndexSizes(std::string const& operationIdentifier,
                                                           std::vector<size_t> const& indexSizes,
+                                                          std::vector<size_t> const& reshape,
+                                                          std::vector<size_t> const& permute,
                                                           DataType                   aType,
                                                           std::vector<size_t> const& aStrides,
                                                           size_t                     aOffset,
@@ -502,6 +525,8 @@ namespace Tensile
                               batchIndices,
                               boundIndices,
                               indexSizes,
+                              reshape,
+                              permute,
                               aType,
                               aStrides,
                               aOps,
@@ -525,6 +550,8 @@ namespace Tensile
                                                           BatchIndices const&        batchIndices,
                                                           BoundIndices const&        boundIndices,
                                                           std::vector<size_t> const& indexSizes,
+                                                          std::vector<size_t> const& reshape,
+                                                          std::vector<size_t> const& permute,
                                                           DataType                   aType,
                                                           std::vector<size_t> const& aStrides,
                                                           TensorOps const&           aOps,
@@ -543,6 +570,8 @@ namespace Tensile
                               batchIndices,
                               boundIndices,
                               indexSizes,
+                              reshape,
+                              permute,
                               aType,
                               aStrides,
                               aOps,
@@ -566,6 +595,8 @@ namespace Tensile
                                                           BatchIndices const&        batchIndices,
                                                           BoundIndices const&        boundIndices,
                                                           std::vector<size_t> const& indexSizes,
+                                                          std::vector<size_t> const& reshape,
+                                                          std::vector<size_t> const& permute,
                                                           DataType                   aType,
                                                           std::vector<size_t> const& aStrides,
                                                           TensorOps const&           aOps,
@@ -658,24 +689,27 @@ namespace Tensile
             cType, cSizes.begin(), cSizes.end(), cStrides.begin(), cStrides.end(), cOffset);
         TensorDescriptor d(
             dType, dSizes.begin(), dSizes.end(), dStrides.begin(), dStrides.end(), dOffset);
+        TensorDescriptor rD(dType, reshape.begin(), reshape.end());
 
         return ContractionProblem(
-            a, aOps, b, bOps, c, cOps, d, dOps, freeIndices, batchIndices, boundIndices, beta);
+            a, aOps, b, bOps, c, cOps, d, dOps, freeIndices, batchIndices, boundIndices, rD, permute, beta);
     }
 
-    ContractionProblem::ContractionProblem(TensorDescriptor const& a,
-                                           TensorOps const&        aOps,
-                                           TensorDescriptor const& b,
-                                           TensorOps const&        bOps,
-                                           TensorDescriptor const& c,
-                                           TensorOps const&        cOps,
-                                           TensorDescriptor const& d,
-                                           TensorOps const&        dOps,
-                                           FreeIndices const&      freeIndices,
-                                           BatchIndices const&     batchIndices,
-                                           BoundIndices const&     boundIndices,
-                                           double                  beta,
-                                           size_t                  workspaceSize)
+    ContractionProblem::ContractionProblem(TensorDescriptor const&    a,
+                                           TensorOps const&           aOps,
+                                           TensorDescriptor const&    b,
+                                           TensorOps const&           bOps,
+                                           TensorDescriptor const&    c,
+                                           TensorOps const&           cOps,
+                                           TensorDescriptor const&    d,
+                                           TensorOps const&           dOps,
+                                           FreeIndices const&         freeIndices,
+                                           BatchIndices const&        batchIndices,
+                                           BoundIndices const&        boundIndices,
+                                           TensorDescriptor const&    reshape,
+                                           std::vector<size_t> const& permute,
+                                           double                     beta,
+                                           size_t                     workspaceSize)
         : m_a(a)
         , m_b(b)
         , m_c(c)
@@ -687,11 +721,12 @@ namespace Tensile
         , m_freeIndices(freeIndices)
         , m_batchIndices(batchIndices)
         , m_boundIndices(boundIndices)
+        , m_reshape(reshape)
+        , m_permute(permute)
         , m_beta(beta)
         , m_workspaceSize(workspaceSize)
     {
-        m_betaRestriction = toScalarValueEnum(
-            m_beta); // Set enum using beta to potentially allow for faster solutions
+        m_betaRestriction = toScalarValueEnum(m_beta); // Set enum using beta to potentially allow for faster solutions
         consistencyCheck();
         normalize();
     }

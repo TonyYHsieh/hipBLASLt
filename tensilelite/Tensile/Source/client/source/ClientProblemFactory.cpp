@@ -38,6 +38,8 @@ namespace Tensile
             , m_batchIndices(args["batch"].as<ContractionProblem::BatchIndices>())
             , m_boundIndices(args["bound"].as<ContractionProblem::BoundIndices>())
             , m_problemSizes(args["problem-size"].as<std::vector<std::vector<size_t>>>())
+            , m_reshape(args["reshape"].as<std::vector<std::vector<size_t>>>())
+            , m_permute(args["permute"].as<std::vector<std::vector<size_t>>>())
             , m_aType(DataType::Float)
             , m_bType(DataType::Float)
             , m_cType(DataType::Float)
@@ -45,6 +47,7 @@ namespace Tensile
             , m_alphaType(DataType::Float)
             , m_betaType(DataType::Float)
             , m_stridedBatched(args["strided-batched"].as<bool>())
+            , m_useReshapeAndPermute(args["use-reshape-and-permute"].as<size_t>())
             , m_groupedGemm(args["grouped-gemm"].as<bool>())
             , m_highPrecisionAccumulate(args["high-precision-accumulate"].as<bool>())
             , m_kernelLanguage(args["kernel-language"].as<KernelLanguage>())
@@ -164,6 +167,8 @@ namespace Tensile
                                                                         m_batchIndices,
                                                                         m_boundIndices,
                                                                         m_problemSizes[i],
+                                                                        m_reshape[i],
+                                                                        m_permute[i],
                                                                         m_aType,
                                                                         aStrides,
                                                                         m_aOps,
@@ -187,6 +192,7 @@ namespace Tensile
                         rv.back().setAlphaType(m_alphaType);
                         rv.back().setBetaType(m_betaType);
                         rv.back().setStridedBatched(m_stridedBatched);
+                        rv.back().setUseReshapeAndPermute(m_useReshapeAndPermute);
                         rv.back().setGroupedGemm(m_groupedGemm);
                         rv.back().setHighPrecisionAccumulate(m_highPrecisionAccumulate);
                         rv.back().setUseBias(m_useBias);

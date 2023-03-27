@@ -1046,6 +1046,7 @@ defaultProblemType = {
     "ComputeDataType":          0,                # compute data types can specified by a variety of ways, such as "s", as listed in SolutionStructs.py::DataType
     "UseBeta":                  True,             # =True use beta parameter (asm will check for B=0 and optimize the write for that), =False don't use beta parameter
     "UseBias":                  False,            # =True use bias vector
+    "UseReshapeAndPermute":     0,                # -dimision of reshape and permute
     "UseScaleD":                False,            # =True use scaleD vector
     "HighPrecisionAccumulate":  False,            # f32 += f16*f16
     "SilentHighPrecisionAccumulate": False,       # Keep kernel names the same for HPA mode.  Useful for testing.

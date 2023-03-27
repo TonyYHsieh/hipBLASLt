@@ -120,7 +120,9 @@ namespace Tensile
                                                size_t   cStride,
                                                size_t   ldd,
                                                size_t   dStride,
-                                               double   beta);
+                                               double   beta,
+                                               std::vector<size_t> const& reshape,
+                                               std::vector<size_t> const& permute);
 
         /**
    * Create a ContractionProblem representing a batched GEMM, specifying
@@ -148,7 +150,9 @@ namespace Tensile
                                                size_t   ldd,
                                                size_t   dStride,
                                                size_t   dOffset,
-                                               double   beta);
+                                               double   beta,
+                                               std::vector<size_t> const& reshape,
+                                               std::vector<size_t> const& permute);
 
         /**
    * Create a ContractionProblem representing a batched SGEMM, with
@@ -164,7 +168,9 @@ namespace Tensile
                                        size_t ldc,
                                        double beta,
                                        bool   unused,
-                                       size_t batchCount);
+                                       size_t batchCount,
+                                       std::vector<size_t> const& reshape,
+                                       std::vector<size_t> const& permute);
 
         /**
    * Create a ContractionProblem representing a batched SGEMM, with
@@ -183,7 +189,9 @@ namespace Tensile
                                        size_t offsetC,
                                        double beta,
                                        bool   unused,
-                                       size_t batchCount);
+                                       size_t batchCount,
+                                       std::vector<size_t> const& reshape,
+                                       std::vector<size_t> const& permute);
 
         /**
    * Create a ContractionProblem representing a batched GEMM based on the
@@ -199,7 +207,9 @@ namespace Tensile
                                        TensorOps const&        cOps,
                                        TensorDescriptor const& d,
                                        TensorOps const&        dOps,
-                                       double                  beta);
+                                       double                  beta,
+                                       std::vector<size_t> const& reshape,
+                                       std::vector<size_t> const& permute);
 
         /**
    * Converts an identifier such as `Contraction_l_AlikC_Bjlk_Cijk_Dijk`
@@ -248,6 +258,8 @@ namespace Tensile
                                                  BatchIndices const&        batchIndices,
                                                  BoundIndices const&        boundIndices,
                                                  std::vector<size_t> const& indexSizes,
+                                                 std::vector<size_t> const& reshape,
+                                                 std::vector<size_t> const& permute,
                                                  DataType                   aType,
                                                  std::vector<size_t> const& aStrides,
                                                  TensorOps const&           aOps,
@@ -300,6 +312,8 @@ namespace Tensile
                                                  BatchIndices const&        batchIndices,
                                                  BoundIndices const&        boundIndices,
                                                  std::vector<size_t> const& indexSizes,
+                                                 std::vector<size_t> const& reshape,
+                                                 std::vector<size_t> const& permute,
                                                  DataType                   aType,
                                                  std::vector<size_t> const& aStrides,
                                                  TensorOps const&           aOps,
@@ -346,6 +360,8 @@ namespace Tensile
    */
         static ContractionProblem FromIndexSizes(std::string const&         operationIdentifier,
                                                  std::vector<size_t> const& indexSizes,
+                                                 std::vector<size_t> const& reshape,
+                                                 std::vector<size_t> const& permute,
                                                  DataType                   aType,
                                                  std::vector<size_t> const& aStrides,
                                                  DataType                   bType,
@@ -388,6 +404,8 @@ namespace Tensile
    */
         static ContractionProblem FromIndexSizes(std::string const&         operationIdentifier,
                                                  std::vector<size_t> const& indexSizes,
+                                                 std::vector<size_t> const& reshape,
+                                                 std::vector<size_t> const& permute,
                                                  DataType                   aType,
                                                  std::vector<size_t> const& aStrides,
                                                  size_t                     aOffset,
@@ -402,19 +420,21 @@ namespace Tensile
                                                  size_t                     dOffset,
                                                  double                     beta);
 
-        ContractionProblem(TensorDescriptor const& a,
-                           TensorOps const&        aOps,
-                           TensorDescriptor const& b,
-                           TensorOps const&        bOps,
-                           TensorDescriptor const& c,
-                           TensorOps const&        cOps,
-                           TensorDescriptor const& d,
-                           TensorOps const&        dOps,
-                           FreeIndices const&      freeIndices,
-                           BatchIndices const&     batchIndices,
-                           BoundIndices const&     boundIndices,
-                           double                  beta,
-                           size_t                  workspaceSize = 0);
+        ContractionProblem(TensorDescriptor const&    a,
+                           TensorOps const&           aOps,
+                           TensorDescriptor const&    b,
+                           TensorOps const&           bOps,
+                           TensorDescriptor const&    c,
+                           TensorOps const&           cOps,
+                           TensorDescriptor const&    d,
+                           TensorOps const&           dOps,
+                           FreeIndices const&         freeIndices,
+                           BatchIndices const&        batchIndices,
+                           BoundIndices const&        boundIndices,
+                           TensorDescriptor const&    reshape,
+                           std::vector<size_t> const& permute,
+                           double                     beta,
+                           size_t                     workspaceSize = 0);
 
         //! Returns size given original index assignment (in range
         //! 0..NumIndicesC+boundSizes)
@@ -548,6 +568,16 @@ namespace Tensile
         bool stridedBatched() const
         {
             return m_stridedBatched;
+        }
+
+        void setUseReshapeAndPermute(size_t value)
+        {
+            m_useReshapeAndPermute = value;
+        }
+
+        size_t useReshapeAndPermute() const
+        {
+            return m_useReshapeAndPermute;
         }
 
         void setGroupedGemm(bool value)
@@ -685,6 +715,10 @@ namespace Tensile
         {
             return m_d;
         }
+        TensorDescriptor const& reshape() const
+        {
+            return m_reshape;
+        }
 
         TensorOps const& aOps() const
         {
@@ -792,11 +826,17 @@ namespace Tensile
             return m_eligibleForPK;
         }
 
+        std::vector<size_t> const& permute() const
+        {
+            return m_permute;
+        }
+
     private:
         TensorDescriptor m_a;
         TensorDescriptor m_b;
         TensorDescriptor m_c;
         TensorDescriptor m_d;
+        TensorDescriptor m_reshape;
         TensorOps        m_aOps;
         TensorOps        m_bOps;
         TensorOps        m_cOps;
@@ -820,6 +860,7 @@ namespace Tensile
         bool              m_fp16AltImpl             = false;
         bool              m_useBias                 = false;
         bool              m_useScaleD               = false;
+        size_t            m_useReshapeAndPermute    = 0;
         ActivationType    m_activationType          = ActivationType::None;
         ActivationType    m_activationEnumArg       = ActivationType::None;
         bool              m_activationHPA           = false;
@@ -847,6 +888,8 @@ namespace Tensile
 
         std::vector<size_t> m_problemSizes;
         std::vector<size_t> m_problemStrides;
+
+        std::vector<size_t> m_permute;
 
         bool   m_transposeC01;
         double m_beta;

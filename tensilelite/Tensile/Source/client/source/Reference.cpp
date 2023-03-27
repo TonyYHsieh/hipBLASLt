@@ -463,7 +463,28 @@ namespace Tensile
                                                 1);
                     resultD *= scaleD;
                 }
-                inputs.d[dIndex] = SaturateCast<typename Inputs::DType>(resultD);
+
+                auto const& reshape = problem.reshape();
+                auto const& permute = problem.permute();
+
+                if (reshape.dimensions() == 0)
+                  inputs.d[dIndex] = SaturateCast<typename Inputs::DType>(resultD);
+                else {
+                  // permute with new shape
+                  std::vector<int> dim(reshape.dimensions());
+                  for(int i=0; i<reshape.dimensions(); i++)
+                      dim[i] = reshape.sizes()[permute[i]];
+                  TensorDescriptor permuteShape(reshape.dataType(), dim.begin(), dim.end());
+
+                  std::vector<int64_t> coord(reshape.dimensions());
+                  CoordNumbered(dIndex, coord.begin(), coord.end(), reshape.sizes().begin(), reshape.sizes().end());
+                  std::vector<int64_t> t_coord(coord.size());
+                  for(int i=0; i<reshape.dimensions(); i++)
+                      t_coord[i] = coord[permute[i]];
+                  auto t_index = permuteShape.index(t_coord);
+
+                  inputs.d[t_index] = SaturateCast<typename Inputs::DType>(resultD);
+                }
             }
         }
 

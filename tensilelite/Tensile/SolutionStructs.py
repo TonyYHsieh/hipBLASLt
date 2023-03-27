@@ -403,6 +403,8 @@ class ProblemType(Mapping):
     else:
       name += "" if self["StridedBatched"] else "_GB" # legacy
 
+    name += (f"_RP{self['UseReshapeAndPermute']}" if self["UseReshapeAndPermute"] else "")
+
     # Activation Naming
     if self["ActivationType"] != 'none':
       if self["ActivationType"] == 'all':
@@ -587,8 +589,10 @@ class ProblemSizeRange:
 
 class Problem:
   """ Problem sizes, strides, padding and other info"""
-  def __init__(self, sizes=None, stridesA=None, stridesB=None, stridesC=None, stridesD=None, count=None):
+  def __init__(self, sizes=None, stridesA=None, stridesB=None, stridesC=None, stridesD=None, count=None, reshape=None, permute=None):
     self.sizes = tuple(sizes) if sizes else None
+    self.reshape = tuple(reshape) if reshape else tuple()
+    self.permute = tuple(permute) if permute else tuple()
     self.stridesA = tuple(stridesA) if stridesA else None
     self.stridesB = tuple(stridesB) if stridesB else None
     self.stridesC = tuple(stridesC) if stridesC else None
@@ -616,20 +620,32 @@ class ExactList(Problem):
         printExit("ExactSize %s contains -1" % (e))
       if problemType["OperationType"] == "GEMM":
         e += [-1, -1, -1, -1]
-        e = ExactList.convertLeadingDims(problemType, tuple(e))
-      sizes=e
-
-    elif len(e) == (problemType["TotalIndices"] + problemType["NumIndicesLD"]):
+    if len(e) >= (problemType["TotalIndices"] + problemType["NumIndicesLD"]):
       sizes = ExactList.convertLeadingDims(problemType, tuple(e))
+      reshape = ExactList.getReshape(e[(problemType["TotalIndices"] + problemType["NumIndicesLD"]):])
+      permute = ExactList.getPermute(e[(problemType["TotalIndices"] + problemType["NumIndicesLD"]):])
+      if (len(reshape) != problemType["UseReshapeAndPermute"]) or (len(permute) != problemType["UseReshapeAndPermute"]):
+        printExit("ExactSize %s doesn't match indices of ProblemType %s, totalIndices=%d" \
+          % (e, problemType, problemType["TotalIndices"]) )
     else:
       printExit("ExactSize %s doesn't match indices of ProblemType %s, totalIndices=%d" \
           % (e, problemType, problemType["TotalIndices"]) )
 
     # TODO- pass strides here, remove calls to convertLeadingDims
-    Problem.__init__(self, sizes=sizes)
+    Problem.__init__(self, sizes=sizes, reshape=reshape, permute=permute)
 
   def __str__(self):
     return str(list(self.sizes))
+
+  @staticmethod
+  def getReshape(reshape):
+    size = len(reshape)
+    return reshape[0:size//2]
+
+  @staticmethod
+  def getPermute(reshape):
+    size = len(reshape)
+    return reshape[(size//2):]
 
   @staticmethod
   def convertLeadingDims(problemType, problemSize, stridesA = None, stridesB = None, stridesC = None, stridesD = None):
@@ -688,7 +704,6 @@ class ProblemSizesMock:
     self.problems = [Problem(problem) for problem, solution in exactLogic]
 
 class ProblemSizes:
-
   ########################################
   def __init__(self, problemType, config):
     self.problemType = problemType
@@ -703,7 +718,7 @@ class ProblemSizes:
             psr = ProblemSizeRange(problemType, dictionary[sizeTypeKey])
             self.ranges.append( psr )
           elif sizeTypeKey == "Exact":
-            e= dictionary[sizeTypeKey]
+            e = dictionary[sizeTypeKey]
             if isinstance(e,list):
               self.exacts.append(ExactList(e, problemType))
             elif isinstance(e,dict):
@@ -1798,6 +1813,10 @@ class Solution(collections.abc.Mapping):
     if "LoopUnroll" in state:
       state["LoopIters"] = state["LoopUnroll"]
 
+    if state["ProblemType"]["UseReshapeAndPermute"] and state["BufferStore"]:
+      reject(state, "UseReshapeAndPermute only support with BufferStore false")
+      return
+
     if state["ScheduleIterAlg"] == 2:
       state["InnerUnroll"] = state["DepthU"] // state["MatrixInstK"]
       state["PrefetchLocalRead"] = 1
@@ -2068,6 +2087,9 @@ class Solution(collections.abc.Mapping):
         state["StoreVectorWidth"] = 4
       else:
         state["StoreVectorWidth"] = 4//state["ProblemType"]["DataType"].numRegisters()
+
+    if state["ProblemType"]["UseReshapeAndPermute"]:
+      state["StoreVectorWidth"] = 1
 
     if state["EnableMatrixInstruction"]:
       if state["SourceSwap"]:

@@ -114,6 +114,7 @@ namespace Tensile
                 ("beta-type",                po::value<DataType>()->default_value(DataType::None), "beta data type")
                 ("high-precision-accumulate", po::value<bool>()->default_value(false), "Use high-precision accumulate.")
                 ("strided-batched",          po::value<bool>()->default_value(true), "Use strided-batched or general batched")
+                ("use-reshape-and-permute",  po::value<size_t>()->default_value(0), "Use strided-batched or general batched")
                 ("grouped-gemm",             po::value<bool>()->default_value(false), "Use grouped gemm")
                 ("kernel-language",          po::value<KernelLanguage>()->default_value(KernelLanguage::Any), "Select kernel language.")
                 ("deterministic-mode",       po::value<bool>()->default_value(false), "Enforce deterministic summation patterns"
@@ -197,6 +198,8 @@ namespace Tensile
                                                                                   "(prev_dim_stride*prev_dim_size)"
                                                                                   "specifying once applies to all problem sizes, "
                                                                                   "otherwise specify once per problem size.")
+                ("reshape",                  vector_default_empty<std::string>(), "reshape d matrix after gemm")
+                ("permute",                  vector_default_empty<std::string>(), "permute d matrix after gemm")
 
                 ("a-ops",                    vector_default_empty<TensorOp>(), "Operations applied to A.")
                 ("b-ops",                    vector_default_empty<TensorOp>(), "Operations applied to B.")
@@ -434,6 +437,8 @@ namespace Tensile
             parse_arg_ints(args, "b-strides");
             parse_arg_ints(args, "c-strides");
             parse_arg_ints(args, "d-strides");
+            parse_arg_ints(args, "reshape");
+            parse_arg_ints(args, "permute");
             parse_bias_type_args(args, "bias-type-args");
             parse_activation_int(args, "activation-type");
             parse_activation_enum_args(args, "activation-enum-args");

@@ -92,9 +92,12 @@ namespace Tensile
             std::vector<DataType>       m_biasTypeArgs;
             bool                        m_activationHPA;
             std::vector<ActivationType> m_activationEnumArg;
+            size_t                      m_useReshapeAndPermute;
             size_t                      m_maxWorkspaceSize = 0;
 
             std::vector<std::vector<size_t>> m_problemSizes;
+            std::vector<std::vector<size_t>> m_reshape;
+            std::vector<std::vector<size_t>> m_permute;
             std::vector<std::vector<size_t>> m_aStrides;
             std::vector<std::vector<size_t>> m_bStrides;
             std::vector<std::vector<size_t>> m_cStrides;
