@@ -76,6 +76,8 @@ namespace Tensile
 
             const std::string TotalFlops   = "total-flops";
             const std::string ProblemSizes = "problem-sizes";
+            const std::string Reshape      = "reshape";
+            const std::string Permute      = "permute";
 
             const std::string BiasType       = "bias-type";
             const std::string ActivationType = "activation-type";

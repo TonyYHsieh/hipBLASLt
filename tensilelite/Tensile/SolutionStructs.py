@@ -725,7 +725,8 @@ class ExactList(Problem):
            (max(problemSize[problemType["IndexAssignmentsLD"][2]],
                 problemSize[problemType["IndexAssignmentsA"][0]]) if not predStridesA else stridesA[1], ) + \
            (max(problemSize[problemType["IndexAssignmentsLD"][3]],
-                problemSize[problemType["IndexAssignmentsB"][0]]) if not predStridesB else stridesB[1], )
+                problemSize[problemType["IndexAssignmentsB"][0]]) if not predStridesB else stridesB[1], ) + \
+           problemSize[problemType["TotalIndices"] + problemType["NumIndicesLD"]:]
 
 
 class ExactDict(Problem):

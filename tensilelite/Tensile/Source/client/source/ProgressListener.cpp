@@ -94,14 +94,24 @@ namespace Tensile
             {
                 writeReport(groupedProblem->gemms[0]);
                 std::vector<std::vector<size_t>> sizes;
+                std::vector<std::vector<size_t>> reshapes;
+                std::vector<std::vector<size_t>> permutes;
                 for(auto& it : groupedProblem->gemms)
+                {
                     sizes.push_back(it.problemSizes());
+                    reshapes.push_back(it.reshape().sizes());
+                    permutes.push_back(it.permute());
+                }
                 m_reporter->report(ResultKey::ProblemSizes, sizes);
+                m_reporter->report(ResultKey::Reshape, reshapes);
+                m_reporter->report(ResultKey::Permute, permutes);
             }
             else if(auto gemmProblem = dynamic_cast<const ContractionProblemGemm*>(problem))
             {
                 writeReport(*gemmProblem);
                 m_reporter->report(ResultKey::ProblemSizes, gemmProblem->problemSizes());
+                m_reporter->report(ResultKey::Reshape, gemmProblem->reshape().sizes());
+                m_reporter->report(ResultKey::Permute, gemmProblem->permute());
             }
             else
             {
