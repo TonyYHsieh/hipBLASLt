@@ -252,6 +252,8 @@ namespace
                                     {prob.row_stride_d, prob.col_stride_d, prob.batch_stride_d},
                                     prob.buffer_offset_d};
 
+        Tensile::TensorDescriptor reshape{Tensile_To, prob.reshape.begin(), prob.reshape.end(), 0};
+
         // The ContractionProblem
         Tensile::ContractionProblem tensileProblem{a,
                                                    aops,
@@ -264,11 +266,15 @@ namespace
                                                    freeIndex,
                                                    batchIndex,
                                                    boundIndex,
+                                                   reshape,
+                                                   prob.permute,
                                                    *prob.beta,
                                                    prob.workspaceSize};
 
         tensileProblem.setAlphaType(Tensile_Tc);
         tensileProblem.setBetaType(Tensile_Tc);
+
+        tensileProblem.setUseReshapeAndPermute(prob.permute.size());
 
         // HPA is active iff sizeof(compute type) > sizeof(input type)
         tensileProblem.setHighPrecisionAccumulate(sizeof(Tc) > sizeof(Ti));
@@ -824,26 +830,29 @@ RocblasltContractionProblem<Ti, To, Tc>
     int64_t n = num_cols_d;
     int64_t k = (opA == HIPBLAS_OP_N) ? num_cols_a : num_rows_a;
 
+    std::vector<size_t> reshape(&matmul_descr->reshape[0], &matmul_descr->reshape[matmul_descr->dim_of_reshape_and_permute]);
+    std::vector<size_t> permute(&matmul_descr->permute[0], &matmul_descr->permute[matmul_descr->dim_of_reshape_and_permute]);
+
     int8_t      dummy;
     const void* dummy_ptr = &dummy;
     auto        validArgs = validateMatmulArgs(handle,
-                                        m,
-                                        n,
-                                        k,
-                                        dummy_ptr,
-                                        dummy_ptr,
-                                        dummy_ptr,
-                                        dummy_ptr,
-                                        dummy_ptr,
-                                        dummy_ptr,
-                                        num_batches_a,
-                                        num_batches_b,
-                                        num_batches_c,
-                                        num_batches_d,
-                                        batch_stride_a,
-                                        batch_stride_b,
-                                        batch_stride_c,
-                                        batch_stride_d);
+                                               m,
+                                               n,
+                                               k,
+                                               dummy_ptr,
+                                               dummy_ptr,
+                                               dummy_ptr,
+                                               dummy_ptr,
+                                               dummy_ptr,
+                                               dummy_ptr,
+                                               num_batches_a,
+                                               num_batches_b,
+                                               num_batches_c,
+                                               num_batches_d,
+                                               batch_stride_a,
+                                               batch_stride_b,
+                                               batch_stride_c,
+                                               batch_stride_d);
     if(validArgs != rocblaslt_status_continue)
     {
         m = 0;
@@ -886,6 +895,8 @@ RocblasltContractionProblem<Ti, To, Tc>
                                                     epilogue,
                                                     nullptr,
                                                     maxWorkSpaceBytes,
+                                                    reshape,
+                                                    permute,
                                                     nullptr};
     return problem;
 }

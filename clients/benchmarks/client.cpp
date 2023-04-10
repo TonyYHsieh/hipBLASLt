@@ -238,6 +238,8 @@ try
     std::string initialization;
     std::string filter;
     std::string activation_type;
+    std::string reshape;
+    std::string permute;
     int         device_id;
     int         flags             = 0;
     bool        datafile          = hipblaslt_parse_data(argc, argv);
@@ -421,6 +423,14 @@ try
          value<std::string>(&filter),
          "Simple strstr filter on function name only without wildcards")
 
+        ("reshape",
+         value<std::string>(&reshape)->default_value(""),
+         "")
+
+        ("permute",
+         value<std::string>(&permute)->default_value(""),
+         "")
+
         ("help,h", "produces this help message")
 
         ("version", "Prints the version number");
@@ -505,6 +515,12 @@ try
     arg.activation_type = string_to_hipblaslt_activation_type(activation_type);
     if(arg.activation_type == static_cast<hipblaslt_activation_type>(-1))
         throw std::invalid_argument("Invalid value for --activation_type " + activation_type);
+
+    size_t reshape_count = string_to_hipblaslt_size_t(arg.reshape, reshape);
+    size_t permute_count = string_to_hipblaslt_size_t(arg.permute, permute);
+    if (reshape_count != permute_count)
+        throw std::invalid_argument("Invalid dimension for reshape and permute");
+    arg.dim_of_reshape_and_permute = reshape_count;
 
     if(arg.M < 0)
         throw std::invalid_argument("Invalid value for -m " + std::to_string(arg.M));

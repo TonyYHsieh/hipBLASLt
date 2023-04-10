@@ -118,6 +118,10 @@ struct Arguments
     bool              scaleD_vector;
     bool              c_noalias_d;
     bool              HMM;
+
+    size_t            dim_of_reshape_and_permute;
+    size_t            reshape[16];
+    size_t            permute[16];
     /*************************************************************************
      *                     End Of Arguments                                  *
      *************************************************************************/

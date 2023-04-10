@@ -119,6 +119,41 @@ void scaleD_func(
     }
 }
 
+template<typename To>
+void reshape_and_permute_func(host_vector<To>& hD_gold, int64_t M, int64_t N, int64_t B, size_t dim, const size_t* reshape, const size_t* permute)
+{
+    host_vector<To> tmp(hD_gold.size());
+
+#pragma omp parallel for
+    for(int j=0; j<M*N*B; j++)
+    {
+        int index = j;
+        To value = hD_gold[index];
+
+        std::vector<size_t> coord(dim);
+        for(int i=0; i<dim; i++)
+        {
+            coord[i] = index % reshape[i];
+            index    = index / reshape[i];
+        }
+
+        index = 0;
+        int ldd = 1;
+        for(int i=0; i<dim; i++)
+        {
+            index += coord[permute[i]] * ldd;
+            ldd *= reshape[permute[i]];
+        }
+        tmp[index] = value;
+    }
+
+#pragma omp parallel for
+    for(int i=0; i<M*N*B; i++)
+    {
+        hD_gold[i] = tmp[i];
+    }
+}
+
 auto _relu = [](auto in, auto /*arg1*/, auto /*arg2*/) -> decltype(in) {
     return static_cast<decltype(in)>(std::max(static_cast<decltype(in)>(0), in));
 };
@@ -245,7 +280,7 @@ void testing_matmul(const Arguments& arg)
             HIPBLAS_STATUS_SUCCESS);
     }
 
-    hipblaslt_local_matmul_descr matmul(transA, transB, arg.compute_type, arg.scale_type);
+    hipblaslt_local_matmul_descr matmul(transA, transB, arg.compute_type, arg.scale_type, arg.dim_of_reshape_and_permute, arg.reshape, arg.permute);
     bool                         epilogue_on = false;
     hipblasLtEpilogue_t          epilogue    = HIPBLASLT_EPILOGUE_DEFAULT;
     if(arg.bias_vector)
@@ -463,7 +498,7 @@ void testing_matmul(const Arguments& arg)
     int                              returnedAlgoCount  = 0;
     EXPECT_HIPBLAS_STATUS(
         (hipblasLtMatmulAlgoGetHeuristic(
-            handle, matmul, matA, matB, matC, matD, pref, 3, heuristicResult, &returnedAlgoCount)),
+            handle, matmul, matA, matB, matC, matD, pref, 1, heuristicResult, &returnedAlgoCount)),
         HIPBLAS_STATUS_SUCCESS);
 
     size_t                       workspace_size = heuristicResult[0].workspaceSize;
@@ -602,6 +637,11 @@ void testing_matmul(const Arguments& arg)
                                            ldd,
                                            false);
             }
+        }
+
+        if (arg.dim_of_reshape_and_permute)
+        {
+            reshape_and_permute_func(hD_gold, M, N, num_batches, arg.dim_of_reshape_and_permute, arg.reshape, arg.permute);
         }
 
         if(arg.timing)

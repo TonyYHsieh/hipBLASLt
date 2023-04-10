@@ -105,6 +105,9 @@ struct RocblasltContractionProblem
     void*              workspace;
     size_t             workspaceSize;
 
+    std::vector<size_t> reshape;
+    std::vector<size_t> permute;
+
     hipStream_t stream;
 
     // gemm_ex
@@ -145,6 +148,8 @@ struct RocblasltContractionProblem
                                 rocblaslt_epilogue epilogue,
                                 void*              workspace,
                                 size_t             workspaceSize,
+                                std::vector<size_t> reshape,
+                                std::vector<size_t> permute,
                                 hipStream_t        stream)
         : handle(handle)
         , trans_a(trans_a)
@@ -186,6 +191,8 @@ struct RocblasltContractionProblem
         , epilogue(epilogue)
         , workspace(workspace)
         , workspaceSize(workspaceSize)
+        , reshape(reshape)
+        , permute(permute)
         , stream(stream)
     {
     }

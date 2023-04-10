@@ -144,7 +144,10 @@ rocblaslt_status rocblaslt_matrix_layout_get_attribute(rocblaslt_matrix_layout  
  */
 rocblaslt_status rocblaslt_matmul_desc_create(rocblaslt_matmul_desc* matmulDesc,
                                               rocblaslt_compute_type computeType,
-                                              hipblasDatatype_t      scaleType);
+                                              hipblasDatatype_t      scaleType,
+                                              size_t                 dimOfReshapeAndPermute=0,
+                                              const size_t*          reshape=nullptr,
+                                              const size_t*          permute=nullptr);
 
 /*! \ingroup aux_module
  *  \brief Destroy a matrix multiplication descriptor

@@ -106,6 +106,9 @@ rocblaslt_status rocblaslt_matmul_impl(const rocblaslt_handle       handle,
     int64_t n = num_cols_d;
     int64_t k = (opA == HIPBLAS_OP_N) ? num_cols_a : num_rows_a;
 
+    std::vector<size_t> reshape(&matmul_descr->reshape[0], &matmul_descr->reshape[matmul_descr->dim_of_reshape_and_permute]);
+    std::vector<size_t> permute(&matmul_descr->permute[0], &matmul_descr->permute[matmul_descr->dim_of_reshape_and_permute]);
+
     auto validArgs = validateMatmulArgs(handle,
                                         m,
                                         n,
@@ -134,7 +137,7 @@ rocblaslt_status rocblaslt_matmul_impl(const rocblaslt_handle       handle,
     handle, opA, opB, m, n, k, alpha, A, type_a, lda, batch_stride_a, 0, B, type_b, ldb, \
         batch_stride_b, 0, beta, C, type_c, ldc, batch_stride_c, 0, D, type_d, ldd,      \
         batch_stride_d, 0, num_batches_a, true, compute_type, algo, workspace,           \
-        workspaceSizeInBytes, bias, scaleD, bias_type, epilogue, stream
+        workspaceSizeInBytes, bias, scaleD, bias_type, epilogue, reshape, permute, stream
 
     return rocblaslt_matmul_template(EX_PARM);
 }

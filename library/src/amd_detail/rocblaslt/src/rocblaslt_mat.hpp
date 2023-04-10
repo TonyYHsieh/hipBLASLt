@@ -67,6 +67,8 @@ rocblaslt_status rocblaslt_batched_template(rocblaslt_handle             handle,
                                             const Tc*                    scaleD,
                                             hipblasDatatype_t            bias_type,
                                             rocblaslt_epilogue           epilogue,
+                                            const std::vector<size_t>&   reshape,
+                                            const std::vector<size_t>&   permute,
                                             hipStream_t                  stream)
 {
     workspaceSizeInBytes = min(workspaceSizeInBytes, algo->max_workspace_bytes);
@@ -106,6 +108,8 @@ rocblaslt_status rocblaslt_batched_template(rocblaslt_handle             handle,
                                                     epilogue,
                                                     workspace,
                                                     workspaceSizeInBytes,
+                                                    reshape,
+                                                    permute,
                                                     stream};
     return runContractionProblem(algo, problem);
 }
@@ -144,6 +148,8 @@ rocblaslt_status rocblaslt_matmul_typecasting(rocblaslt_handle             handl
                                               const void*                  scaleD,
                                               hipblasDatatype_t            bias_type,
                                               rocblaslt_epilogue           epilogue,
+                                              const std::vector<size_t>&   reshape,
+                                              const std::vector<size_t>&   permute,
                                               hipStream_t                  stream)
 {
     // check alignment of pointers before casting
@@ -186,6 +192,8 @@ rocblaslt_status rocblaslt_matmul_typecasting(rocblaslt_handle             handl
                                       reinterpret_cast<const Tc*>(scaleD),
                                       bias_type,
                                       epilogue,
+                                      reshape,
+                                      permute,
                                       stream);
 }
 
@@ -227,6 +235,8 @@ inline rocblaslt_status rocblaslt_matmul_template(rocblaslt_handle             h
                                                   const void*                  scaleD,
                                                   hipblasDatatype_t            bias_type,
                                                   rocblaslt_epilogue           epilogue,
+                                                  const std::vector<size_t>&   reshape,
+                                                  const std::vector<size_t>&   permute,
                                                   hipStream_t                  stream)
 {
     rocblaslt_status rs_status = rocblaslt_status_not_implemented;
@@ -235,7 +245,7 @@ inline rocblaslt_status rocblaslt_matmul_template(rocblaslt_handle             h
     handle, trans_a, trans_b, m, n, k, alpha, a, ld_a, batch_stride_a, offset_a, b, ld_b, \
         batch_stride_b, offset_b, beta, c, ld_c, batch_stride_c, offset_c, d, ld_d,       \
         batch_stride_d, offset_d, batch_count, strided_batch, algo, workspace,            \
-        workspaceSizeInBytes, bias, scaleD, bias_type, epilogue, stream
+        workspaceSizeInBytes, bias, scaleD, bias_type, epilogue, reshape, permute, stream
 
     if(a_type == HIPBLAS_R_32F && b_type == HIPBLAS_R_32F)
     {

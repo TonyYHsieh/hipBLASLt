@@ -384,7 +384,10 @@ hipblasStatus_t hipblasLtMatrixLayoutGetAttribute(hipblasLtMatrixLayout_t       
 HIPBLASLT_EXPORT
 hipblasStatus_t hipblasLtMatmulDescCreate(hipblasLtMatmulDesc_t* matmulDesc,
                                           hipblasLtComputeType_t computeType,
-                                          hipblasDatatype_t      scaleType);
+                                          hipblasDatatype_t      scaleType,
+                                          size_t                 dimOfReshapeAndPermute=0,
+                                          const size_t*          reshape=nullptr,
+                                          const size_t*          permute=nullptr);
 
 /*! \ingroup library_module
  *  \brief Destory a matrix multiply descriptor
