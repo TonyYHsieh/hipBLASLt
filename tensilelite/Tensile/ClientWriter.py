@@ -375,7 +375,7 @@ def problemSizeParams(problemType, problem):
 
     if len(problem.sizes) == numIndices:
         None
-    elif len(problem.sizes) == numIndices + 4:
+    elif len(problem.sizes) == (numIndices + 4 + 2 * problemType.useReshapeAndPermute):
         # FIXME-problem, this is Exact format with strides tacked onto sizes as 4 extra pams
         # should just set problem.stride* appropriately when reading the Yaml and not deal with extra fields here
         if astrides[1] == -1:

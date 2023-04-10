@@ -281,7 +281,7 @@ class LogicAnalyzer:
 
     # merge problem sizes from size groups
     #self.numIndices = len(problemSizesList[0].numProblemSizes)
-    self.numIndices = self.problemType["TotalIndices"] + problemType["NumIndicesLD"]
+    self.numIndices = self.problemType["TotalIndices"] + problemType["NumIndicesLD"] + problemType["UseReshapeAndPermute"]*2
     unifiedProblemSizes = []
     for i in range(0, self.numIndices):
       unifiedProblemSizes.append(set())
@@ -431,8 +431,8 @@ class LogicAnalyzer:
     if csvHasWinner:
       # the column of the two are fixed (GFlops, SizeI/J/K/L, LDD/C/A/B, TotalFlops, WinnerGFlops, WinnerTimeUs, WinnerIdx, WinnerName)
       # the order are implemented in ResultFileReporter.cpp (NewClient) and Client.h (OldClient)
-      columnOfWinnerGFlops = 12
-      columnOfWinnerIdx = 14
+      columnOfWinnerGFlops = totalSizeIdx + 3
+      columnOfWinnerIdx = totalSizeIdx + 5
 
     # iterate over rows
     rowIdx = 0

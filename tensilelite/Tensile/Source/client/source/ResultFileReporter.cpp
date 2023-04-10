@@ -156,6 +156,25 @@ namespace Tensile
                 m_output.setHeaderForKey(ResultKey::LDC, "LDC");
                 m_output.setHeaderForKey(ResultKey::LDA, "LDA");
                 m_output.setHeaderForKey(ResultKey::LDB, "LDB");
+            }
+            else if(key == ResultKey::Reshape)
+            {
+                for(size_t i = 0; i < value.size(); i++)
+                {
+                    std::string key = concatenate("Reshape", static_cast<char>('I' + i));
+                    m_output.setHeaderForKey(key, key);
+                    m_output.setValueForKey(key, value[i]);
+                }
+            }
+            else if(key == ResultKey::Permute)
+            {
+                for(size_t i = 0; i < value.size(); i++)
+                {
+                    std::string key = concatenate("Permute", static_cast<char>('I' + i));
+                    m_output.setHeaderForKey(key, key);
+                    m_output.setValueForKey(key, value[i]);
+                }
+
                 m_output.setHeaderForKey(ResultKey::TotalFlops, "TotalFlops");
                 if(m_extraCol)
                 {
