@@ -5621,6 +5621,24 @@ class KernelWriterAssembly(KernelWriter):
       self.vgprs.addrC    = -1
       self.vgprs.addrBias = -1
     else:
+      if kernel["_GlobalAccumulation"] == 'MultipleBuffer':
+        # GSU algorithm 2: adjust output buffer address to per GSU buffer
+        with self.allocTmpSgpr(5) as tmpSgprInfo:
+          tmpSgpr = tmpSgprInfo.idx
+          module.addComment("GSU Output Buffer offset: Free0 + (Free1-1)*StrideC1J + (Free2-1)*StrideCK * GSUIdx * bpe%s")
+          module.addModuleAsFlatItems(self.s_mul_u64_u32(sgpr(tmpSgpr+0), sgpr(tmpSgpr+1), sgpr("SizesFree+0"), sgpr("GSUSumIdx"), "Free0"))
+          for i in range(1, kernel["ProblemType"]["NumIndicesC"]):
+            module.add(SSubU32(dst=sgpr(tmpSgpr+4), src0=sgpr("SizesFree+%u"%i), src1=1, comment="Free%u" % i))
+            module.add(SMulI32(dst=sgpr(tmpSgpr+4), src0=sgpr(tmpSgpr+4), src1=sgpr("GSUSumIdx"), comment="Free%u" % i))
+            module.addModuleAsFlatItems(self.s_mul_u64_u32(sgpr(tmpSgpr+2), sgpr(tmpSgpr+3), sgpr(tmpSgpr+4), sgpr("StrideC%s"%self.states.indexChars[i]), "Free%u" % i))
+            module.add(SAddU32(dst=sgpr(tmpSgpr+0), src0=sgpr(tmpSgpr+0), src1=sgpr(tmpSgpr+2), comment="Free%u" % i))
+            module.add(SAddCU32(dst=sgpr(tmpSgpr+1), src0=sgpr(tmpSgpr+1), src1=sgpr(tmpSgpr+3), comment="Free%u" % i))
+          module.add(SLShiftLeftB64(dst=sgpr(tmpSgpr+0,2), src=sgpr(tmpSgpr+0,2), shiftHex=log2(self.states.bpeCexternal), comment="scale by bpe"))
+        module.add(SAddU32 (dst=sgpr("AddressC+0"), src0=sgpr("AddressC+0"), src1=sgpr(tmpSgpr+0)))
+        module.add(SAddCU32(dst=sgpr("AddressC+1"), src0=sgpr("AddressC+1"), src1=sgpr(tmpSgpr+1)))
+        module.add(SAddU32 (dst=sgpr("AddressD+0"), src0=sgpr("AddressD+0"), src1=sgpr(tmpSgpr+0)))
+        module.add(SAddCU32(dst=sgpr("AddressD+1"), src0=sgpr("AddressD+1"), src1=sgpr(tmpSgpr+1)))
+
       self.vgprs.addrD = self.vgprPool.checkOut(2)
       module.add(VMovB32(
           dst=vgpr(self.vgprs.addrD+0), \
@@ -5694,6 +5712,24 @@ class KernelWriterAssembly(KernelWriter):
       self.vgprs.addrC    = -1
       self.vgprs.addrBias = -1
     else:
+      if kernel["_GlobalAccumulation"] == 'MultipleBuffer':
+        # GSU algorithm 2: adjust output buffer address to per GSU buffer
+        with self.allocTmpSgpr(5) as tmpSgprInfo:
+          tmpSgpr = tmpSgprInfo.idx
+          module.addComment("GSU Output Buffer offset: Free0 + (Free1-1)*StrideC1J + (Free2-1)*StrideCK * GSUIdx * bpe%s")
+          module.addModuleAsFlatItems(self.s_mul_u64_u32(sgpr(tmpSgpr+0), sgpr(tmpSgpr+1), sgpr("SizesFree+0"), sgpr("GSUSumIdx"), "Free0"))
+          for i in range(1, kernel["ProblemType"]["NumIndicesC"]):
+            module.add(SSubU32(dst=sgpr(tmpSgpr+4), src0=sgpr("SizesFree+%u"%i), src1=1, comment="Free%u" % i))
+            module.add(SMulI32(dst=sgpr(tmpSgpr+4), src0=sgpr(tmpSgpr+4), src1=sgpr("GSUSumIdx"), comment="Free%u" % i))
+            module.addModuleAsFlatItems(self.s_mul_u64_u32(sgpr(tmpSgpr+2), sgpr(tmpSgpr+3), sgpr(tmpSgpr+4), sgpr("StrideC%s"%self.states.indexChars[i]), "Free%u" % i))
+            module.add(SAddU32(dst=sgpr(tmpSgpr+0), src0=sgpr(tmpSgpr+0), src1=sgpr(tmpSgpr+2), comment="Free%u" % i))
+            module.add(SAddCU32(dst=sgpr(tmpSgpr+1), src0=sgpr(tmpSgpr+1), src1=sgpr(tmpSgpr+3), comment="Free%u" % i))
+          module.add(SLShiftLeftB64(dst=sgpr(tmpSgpr+0,2), src=sgpr(tmpSgpr+0,2), shiftHex=log2(self.states.bpeCexternal), comment="scale by bpe"))
+        module.add(SAddU32 (dst=sgpr("AddressC+0"), src0=sgpr("AddressC+0"), src1=sgpr(tmpSgpr+0)))
+        module.add(SAddCU32(dst=sgpr("AddressC+1"), src0=sgpr("AddressC+1"), src1=sgpr(tmpSgpr+1)))
+        module.add(SAddU32 (dst=sgpr("AddressD+0"), src0=sgpr("AddressD+0"), src1=sgpr(tmpSgpr+0)))
+        module.add(SAddCU32(dst=sgpr("AddressD+1"), src0=sgpr("AddressD+1"), src1=sgpr(tmpSgpr+1)))
+
       self.vgprs.addrD = self.vgprPool.checkOut(2, 'addrD')
       module.add(VMovB32(
           dst=vgpr(self.vgprs.addrD+0), \
