@@ -512,7 +512,7 @@ class AddrCalculation:
                                         src=vgpr(self.coord0Vgpr), \
                                         comment="ScaleD address scaled by BPE"))
 
-            else:
+            if tc in ["C", "D"]:
                 # store a copy of the offset in 2 of the tmpVgpr for D
                 module.add(VAddCOU32(dst=vgpr(addrVgpr+0), dst1=VCC(), src0=vgpr(BufAddr+0), src1=vgpr(tmpVgpr+2), \
                             comment="addrVgpr = C(D) + index*bytes (lo)" ))

@@ -5623,6 +5623,11 @@ class KernelWriterAssembly(KernelWriter):
         module.add(allocPostLoopSrdSuppress("ScaleD", labelStr, sgprLength=sgpr("SizeI")))
         module.add(SMulI32(dst=sgpr("SrdScaleD+2"), src0=hex(self.states.bpeCinternal), src1=sgpr("SrdScaleD+2"), comment="scaled by BPE"))# scaled by BPE
       module.add(self.computeStoreSrdStart(kernel))
+    else:
+      if kernel["ProblemType"]["UseScaleD"] and (kernel["GlobalSplitU"] == 1):
+        labelStr = self.labels.getNameInc("ScaleD")
+        module.add(allocPostLoopSrdSuppress("ScaleD", labelStr, sgprLength=sgpr("SizeI")))
+        module.add(SMulI32(dst=sgpr("SrdScaleD+2"), src0=hex(self.states.bpeCinternal), src1=sgpr("SrdScaleD+2"), comment="scaled by BPE"))# scaled by BPE
     return module
 
   ##############################################################################
