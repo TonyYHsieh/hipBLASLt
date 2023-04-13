@@ -489,13 +489,14 @@ class AddrCalculation:
                                         shiftHex=hex(log2(self.kernelWriter.states.bpeCinternal)), \
                                         src=vgpr(self.addrBiasVgpr), \
                                         comment="Bias address scaled by BPE"))
+
             if tc == 'ScaleD' and kernel["ProblemType"]["UseScaleD"] and (kernel["GlobalSplitU"] == 1):
                 module.add(VLShiftLeftB32(dst=vgpr(self.addrScaleDVgpr), \
                                         shiftHex=hex(log2(self.kernelWriter.states.bpeCinternal)), \
                                         src=vgpr(self.coord0Vgpr), \
                                         comment="ScaleD address scaled by BPE"))
 
-            else:
+            if tc in ['C', 'D']:
                 # store a copy of the offset in 2 of the tmpVgpr for D
                 module.add(VAddCOU32(dst=vgpr(addrVgpr+0), dst1=VCC(), src0=vgpr(BufAddr+0), src1=vgpr(tmpVgpr+2), \
                             comment="addrVgpr = C(D) + index*bytes (lo)" ))
