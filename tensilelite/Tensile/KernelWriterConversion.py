@@ -118,6 +118,12 @@ class KernelWriterConversion(KernelWriterBase):
     kStr += "  unsigned int offsetD,%s" % self.endLine
     kStr += "  unsigned int offsetC,%s" % self.endLine
 
+    for i in range(0, self.state["ProblemType"]["UseReshapeAndPermute"]):
+      kStr += "  unsigned int const reshape%s,%s" % (i, self.endLine)
+
+    for i in range(0, self.state["ProblemType"]["UseReshapeAndPermute"]):
+      kStr += "  unsigned int const permute%s,%s" % (i, self.endLine)
+
     # gsu
     kStr += "  unsigned int const gsu)%s" % self.endLine
 
@@ -302,6 +308,32 @@ class KernelWriterConversion(KernelWriterBase):
       rvalueStr = "min(127, max(-128, (int32_t)std::nearbyint(%s)))" % rvalueStr
 
     kStr += "  result = (%s)%s;%s" % (typeStr, rvalueStr, self.endLine)
+
+    if self.state["ProblemType"]["UseReshapeAndPermute"]:
+      kStr += "  unsigned int reshape[%d] = {" % self.state["ProblemType"]["UseReshapeAndPermute"]
+      kStr += "reshape0"
+      for i in range(1,self.state["ProblemType"]["UseReshapeAndPermute"]):
+        kStr += ", reshape%d" % i
+      kStr += "};%s" % self.endLine
+
+      kStr += "  unsigned int permute[%d] = {" % self.state["ProblemType"]["UseReshapeAndPermute"]
+      kStr += "permute0"
+      for i in range(1,self.state["ProblemType"]["UseReshapeAndPermute"]):
+        kStr += ", permute%d" % i
+      kStr += "};%s" % self.endLine
+
+      kStr += "  unsigned int idR[%d];%s" % (self.state["ProblemType"]["UseReshapeAndPermute"], self.endLine)
+
+      kStr += "  for (int i=0;i<%d;i++) {%s" % (self.state["ProblemType"]["UseReshapeAndPermute"], self.endLine)
+      kStr += "    idR[i] = idxD %% reshape[i];%s" % self.endLine
+      kStr += "    idxD   = idxD / reshape[i];%s" % self.endLine
+      kStr += "  }%s" % self.endLine
+      kStr += "  unsigned int ldd = 1;%s" % self.endLine
+      kStr += "  idxD = 0;%s" % self.endLine
+      kStr += "  for (int i=0;i<%d;i++) {%s" % (self.state["ProblemType"]["UseReshapeAndPermute"], self.endLine)
+      kStr += "    idxD += idR[permute[i]] * ldd;%s" % self.endLine
+      kStr += "    ldd  *= reshape[permute[i]];%s" % self.endLine
+      kStr += "  }%s" % self.endLine
     kStr += "  D[idxD] = (%s)(result%s);%s" % (typeStr, scaleDStr, self.endLine)
 
     ########################################
@@ -340,6 +372,8 @@ class KernelWriterConversion(KernelWriterBase):
         name += "_%s"%str(self.state["ProblemType"]["ActivationType"]).upper()
       name += ("h" if self.state["ProblemType"]["ActivationHPA"] else "")
     name += "_ScaleD" if self.state["ProblemType"]["UseScaleD"] else ""
+    rp = self.state["ProblemType"]["UseReshapeAndPermute"]
+    name += f"_RP{rp}" if rp else ""
     name += "_PostGSU"
     return name
 

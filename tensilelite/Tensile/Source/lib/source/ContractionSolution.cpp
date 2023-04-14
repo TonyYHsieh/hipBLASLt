@@ -468,7 +468,7 @@ namespace Tensile
             magicNumberWgmRemainder1 = smallMagicNumber(wgmRemainder1);
         }
 
-        if (problemType.useReshapeAndPermute)
+        if (problemType.useReshapeAndPermute and (sizeMapping.globalAccumulation == 0))
         {
             rv.args.append<uint32_t>("dimReshapeAndPermute", problemType.useReshapeAndPermute);
             for(int i=0; i<problem.reshape().dimensions(); i++) {
@@ -735,7 +735,7 @@ namespace Tensile
                 magicNumberWgmRemainder1 = smallMagicNumber(wgmRemainder1);
             }
 
-            if (problemType.useReshapeAndPermute)
+            if (problemType.useReshapeAndPermute and (sizeMapping.globalAccumulation == 0))
             {
                 rv.args.append<uint32_t>("dimReshapeAndPermute", problemType.useReshapeAndPermute);
                 for(int i=0; i<problem.reshape().dimensions(); i++) {
@@ -1080,6 +1080,15 @@ namespace Tensile
         rv.args.append<uint32_t>("offsetD", d.offset());
         rv.args.append<uint32_t>("offsetC", c.offset());
 
+        for(int i=0; i<problem.reshape().dimensions(); i++) {
+            std::string str = std::string("reshape") + std::to_string(i);
+            rv.args.append<uint32_t>(str.c_str(), problem.reshape().sizes()[i]);
+        }
+        for(int i=0; i<problem.permute().size(); i++) {
+            std::string str = std::string("permute") + std::to_string(i);
+           rv.args.append<uint32_t>(str.c_str(), problem.permute()[i]);
+        }
+
         if(sizeMapping.globalAccumulation == 1)
             rv.args.append<uint32_t>("gsu", 1);
         else
@@ -1133,6 +1142,12 @@ namespace Tensile
         if(problemType.useScaleD)
         {
             name += ("_ScaleD");
+        }
+
+        if (problemType.useReshapeAndPermute)
+        {
+            std::string rpName = std::string("_RP") + std::to_string(problemType.useReshapeAndPermute);
+            name += rpName;
         }
 
         name += "_PostGSU";

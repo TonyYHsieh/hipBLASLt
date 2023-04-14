@@ -6389,7 +6389,8 @@ class KernelWriterAssembly(KernelWriter):
       if len(kernel["PackedC0IndicesX"]) > 1:
         numTmpVgpr += 1
     else:
-      numTmpVgpr = 2 + 4 + (10 if kernel["ProblemType"]["UseReshapeAndPermute"] else 0)
+      reshapeAndPermuteInAsm = kernel["ProblemType"]["UseReshapeAndPermute"] and (kernel["GlobalSplitU"] == 1)
+      numTmpVgpr = 2 + 4 + (10 if reshapeAndPermuteInAsm else 0)
     # Get max vgpr and sgpr for activation
     actPCGwvwVgpr = 0
     actPCMaxTempSgpr = 0

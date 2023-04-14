@@ -373,7 +373,7 @@ class AddrCalculation:
             else: # just a group index
                 params.append("sgprWorkGroup%u"%i)
         params.append("%s" % (tmpVgpr+2))
-        if kernel["ProblemType"]["UseReshapeAndPermute"] and (tc == 'D'):
+        if kernel["ProblemType"]["UseReshapeAndPermute"] and (tc == 'D') and (kernel["GlobalSplitU"] == 1):
             tmp2Vgpr    = tmpVgpr + 6
             loop1Sgpr   = tmpS01 + 2 * kw.states.laneSGPRCount
             loop2Sgpr   = loop1Sgpr + 1

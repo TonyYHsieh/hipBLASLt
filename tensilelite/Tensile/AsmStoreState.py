@@ -57,9 +57,10 @@ class StoreState:
                 self.numMaskSgprPerBatch   = kernelWriter.states.laneSGPRCount
                 self.numTempSgprPerBatch   = 2 * kernelWriter.states.laneSGPRCount
             else:
+                reshapeAndPermuteInAsm = kernel["ProblemType"]["UseReshapeAndPermute"] and (kernel["GlobalSplitU"] == 1)
                 self.numMaskSgprPerElement = kernelWriter.states.laneSGPRCount
                 self.numMaskSgprPerBatch   = 0
-                self.numTempSgprPerBatch   = 2 * kernelWriter.states.laneSGPRCount + (4 if kernel["ProblemType"]["UseReshapeAndPermute"] else 0)
+                self.numTempSgprPerBatch   = 2 * kernelWriter.states.laneSGPRCount + (4 if reshapeAndPermuteInAsm else 0)
 
             if self.numMaskSgprPerElement:
                 numSgprAvailable = kernelWriter.consts.maxSgprs - kernelWriter.sgprPool.size() + kernelWriter.sgprPool.availableBlockAtEnd()
