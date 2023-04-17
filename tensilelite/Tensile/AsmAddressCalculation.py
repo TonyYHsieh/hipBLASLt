@@ -20,7 +20,7 @@
 # CTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ################################################################################
 
-from .TensileInstructions import Module, EXEC, vgpr, sgpr, log2
+from .TensileInstructions import Module, Label, EXEC, vgpr, sgpr, mgpr, log2
 from .TensileInstructions.Instructions import *
 from .Common import globalParameters
 from .Utils import DataDirection
@@ -395,6 +395,103 @@ class AddrCalculation:
 
         return module
 
+
+    def flatStoreAddress(self, kernel, tmpVgpr, tmpS01, elementIdx, addrVgpr, tc):
+        module = Module("flatStoreAddress")
+
+        kw = self.kernelWriter
+
+        params = ["%u" % addrVgpr]
+        for i in range(0, kernel["ProblemType"]["NumIndicesC"]):
+            if i == kernel["ProblemType"]["Index0"]:
+                params.append("%s" % (self.coord0Vgpr))
+            elif i == kernel["ProblemType"]["Index1"]:
+                params.append("%s" % (self.coord1Vgpr))
+            else: # just a group index
+                params.append("sgprWorkGroup%u"%i)
+        params.append("%s" % (tmpVgpr+2))
+        if kernel["ProblemType"]["UseReshapeAndPermute"] and (tc == 'D'):
+            tmp2Vgpr    = tmpVgpr + 6
+            loop1Sgpr   = tmpS01 + 2 * kw.states.laneSGPRCount
+            loop2Sgpr   = loop1Sgpr + 1
+            loop3Sgpr   = loop2Sgpr + 1
+            loop4Sgpr   = loop3Sgpr + 1
+            label_1     = Label(kw.labels.getUniqueNamePrefix("Permute_%d_1"    %elementIdx), "")
+            label_1_1   = Label(kw.labels.getUniqueNamePrefix("Permute_%d_1_1"  %elementIdx), "")
+            label_1_2   = Label(kw.labels.getUniqueNamePrefix("Permute_%d_1_2"  %elementIdx), "")
+            label_1_2_1 = Label(kw.labels.getUniqueNamePrefix("Permute_%d_1_2_1"%elementIdx), "")
+
+            reshapeDimension = kernel["ProblemType"]["UseReshapeAndPermute"]
+
+            module.add(MacroInstruction(name=f"GLOBAL_INDEX_{tc}", args=params))
+            module.add(VMovB32(dst=vgpr(tmp2Vgpr+0), src=0, comment="int64_t newIndex = 0;"))
+            module.add(VMovB32(dst=vgpr(tmp2Vgpr+1), src=0, comment="int64_t newIndex = 0;"))
+            module.add(SMovB32(dst=sgpr(loop1Sgpr), src=0, comment="int i=0;"))
+            module.add(label_1)
+            module.add(VMovB32(dst=vgpr(tmp2Vgpr+2), src=vgpr(addrVgpr+0), comment="int tmpIndex = index;"))
+            module.add(VMovB32(dst=vgpr(tmp2Vgpr+3), src=vgpr(addrVgpr+1), comment="int tmpIndex = index;"))
+            module.add(SMovB32(dst=sgpr(loop2Sgpr), src=0, comment="int j=0;"))
+            module.add(SMovB32(dst=mgpr(0), src=sgpr(loop1Sgpr), comment="int pp = permute[i];"))
+            module.add(SNop(waitState=7, comment="int pp = permute[i];"))
+            module.add(SMovrelsB32(dst=sgpr(loop3Sgpr), src=sgpr("permute0"), comment="int pp = permute[i];"))
+            module.add(label_1_1)
+            module.add(SMovB32(dst=mgpr(0), src=sgpr(loop2Sgpr), comment="j"))
+            module.add(SNop(waitState=7, comment="int64_t magic = reshapeMagic[j];"))
+            module.add(SMovrelsB32(dst=sgpr(loop4Sgpr), src=sgpr("reshapeMagic0"), comment="int64_t magic = reshapeMagic[j];"))
+            module.add(VMulHIU32(dst=vgpr(tmp2Vgpr+7), src0=vgpr(tmp2Vgpr+2), src1=sgpr(loop4Sgpr), comment="int64_t tmp = tmpIndex * magic"))
+            module.add(VMulLOU32(dst=vgpr(tmp2Vgpr+6), src0=vgpr(tmp2Vgpr+2), src1=sgpr(loop4Sgpr), comment="int64_t tmp = tmpIndex * magic"))
+            module.add(VLShiftRightB64(dst=vgpr(tmp2Vgpr+6,2), shiftHex=hex(31), src=vgpr(tmp2Vgpr+6,2), comment="tmp = tmp >> 31;"))
+
+            module.add(SMovB32(dst=mgpr(0), src=sgpr(loop2Sgpr), comment="j"))
+            module.add(SNop(waitState=7, comment="int shape = reshape[j];"))
+            module.add(SMovrelsB32(dst=sgpr(loop4Sgpr), src=sgpr("reshape0"), comment="int shape = reshape[j];"))
+            module.add(VMulHIU32(dst=vgpr(tmp2Vgpr+9), src0=vgpr(tmp2Vgpr+6), src1=sgpr(loop4Sgpr), comment="int64_t tmp2 = tmp * shape;"))
+            module.add(VMulLOU32(dst=vgpr(tmp2Vgpr+8), src0=vgpr(tmp2Vgpr+6), src1=sgpr(loop4Sgpr), comment="int64_t tmp2 = tmp * shape;"))
+            module.add(VSubCoU32(dst=vgpr(tmp2Vgpr+4), dst1=VCC(), src0=vgpr(tmp2Vgpr+2), src1=vgpr(tmp2Vgpr+8), comment="coord = tmpIndex - tmp2;"))
+            module.add(VSubbCoU32(dst=vgpr(tmp2Vgpr+5), dst1=VCC(), src0=vgpr(tmp2Vgpr+3), src1=vgpr(tmp2Vgpr+9), src2=VCC(), comment="coord = tmpIndex - tmp2;"))
+            module.add(VMovB32(dst=vgpr(tmp2Vgpr+2), src=vgpr(tmp2Vgpr+6), comment="tmpIndex = tmp;"))
+            module.add(VMovB32(dst=vgpr(tmp2Vgpr+3), src=vgpr(tmp2Vgpr+7), comment="tmpIndex = tmp;"))
+            module.add(SAddU32(dst=sgpr(loop2Sgpr), src0=sgpr(loop2Sgpr), src1=1, comment="Permute_%d_1_1 iteration increasement"%elementIdx))
+            module.add(SCmpLeU32(src0=sgpr(loop2Sgpr), src1=sgpr(loop3Sgpr), comment="while (j<=pp)"))
+            module.add(SCBranchSCC1(labelName=label_1_1.getLabelName(), comment="while (j<=pp)"))
+
+            module.add(SMovB32(dst=sgpr(loop2Sgpr), src=0, comment="for(int j=0; j<i; j++)"))
+            module.add(label_1_2)
+            module.add(SCmpLtU32(src0=sgpr(loop2Sgpr), src1=sgpr(loop1Sgpr), comment="for(int j=0; j<i; j++)"))
+            module.add(SCBranchSCC0(labelName=label_1_2_1.getLabelName(), comment="for(int j=0; j<i; j++)"))
+
+            module.add(SMovB32(dst=mgpr(0), src=sgpr(loop2Sgpr), comment="int tmp = permute[j];"))
+            module.add(SNop(waitState=7, comment="int tmp = permute[j];"))
+            module.add(SMovrelsB32(dst=sgpr(loop3Sgpr), src=sgpr("permute0"), comment="int tmp = permute[j];"))
+            module.add(SMovB32(dst=mgpr(0), src=sgpr(loop3Sgpr), comment="tmp = shape[tmp];"))
+            module.add(SNop(waitState=7, comment="tmp = shape[tmp];"))
+            module.add(SMovrelsB32(dst=sgpr(loop3Sgpr), src=sgpr("reshape0"), comment="tmp = shape[tmp];"))
+            module.add(VMulHIU32(dst=vgpr(tmp2Vgpr+5), src0=vgpr(tmp2Vgpr+4), src1=sgpr(loop3Sgpr), comment="coord = coord * tmp;"))
+            module.add(VMulLOU32(dst=vgpr(tmp2Vgpr+4), src0=vgpr(tmp2Vgpr+4), src1=sgpr(loop3Sgpr), comment="coord = coord * tmp;"))
+
+            module.add(SAddU32(dst=sgpr(loop2Sgpr), src0=sgpr(loop2Sgpr), src1=1, comment="for(int j=0; j<i; j++)"))
+            module.add(SBranch(labelName=label_1_2.getLabelName(), comment="for(int j=0; j<i; j++)"))
+            module.add(label_1_2_1)
+
+            module.add(VAddCOU32(dst=vgpr(tmp2Vgpr+0), dst1=VCC(), src0=vgpr(tmp2Vgpr+0), src1=vgpr(tmp2Vgpr+4), comment="newIndex += coord;"))
+            module.add(VAddCCOU32(dst=vgpr(tmp2Vgpr+1), dst1=VCC(), src0=vgpr(tmp2Vgpr+1), src1=vgpr(tmp2Vgpr+5), src2=VCC(), comment="newIndex += coord;"))
+
+            module.add(SAddU32(dst=sgpr(loop1Sgpr), src0=sgpr(loop1Sgpr), src1=1, comment="Permute_%d_1 iteration increasement"%elementIdx))
+            module.add(SCmpLtU32(src0=sgpr(loop1Sgpr), src1=hex(reshapeDimension), comment="branch if iteration < reshapeDimension"))
+            module.add(SCBranchSCC1(labelName=label_1.getLabelName(), comment="branch if iteration != reshapeDimension"))
+
+            module.add(VMovB32(dst=vgpr(addrVgpr+0), src=vgpr(tmp2Vgpr+0), comment="int tmpIndex = index;"))
+            module.add(VMovB32(dst=vgpr(addrVgpr+1), src=vgpr(tmp2Vgpr+1), comment="int tmpIndex = index;"))
+
+            module.add(VLShiftLeftB64(dst=vgpr(addrVgpr,2), shiftHex=hex(log2(kw.states.bpeCexternal)), src=vgpr(addrVgpr,2), comment="convert to byte offset"))
+        else:
+            module.add(MacroInstruction(name=f"GLOBAL_OFFSET_{tc}", args=params))
+        module.add(VMovB32(dst=vgpr(tmpVgpr+2), src=vgpr(addrVgpr+0), comment="temp store offset 0"))
+        module.add(VMovB32(dst=vgpr(tmpVgpr+3), src=vgpr(addrVgpr+1), comment="temp store offset 1"))
+
+        return module
+
+
     # TODO - mask should be part of AddrCalc state not passed as parm
     def emitAddressSetupCode(self, kernel, tPB, ss, tmpVgpr, tmpS01, edge, beta, atomic, elementIdx, addrVgpr):
         """
@@ -412,24 +509,6 @@ class AddrCalculation:
 
         updateCoord1 = (edge or len(kernel["PackedC1IndicesX"]) > 1)
         module.add(self.emitAddressCoordIncrement(kernel, ss, tmpVgpr, tmpS01, updateCoord1))
-
-        # calculate flat load offset
-        if not kernel["BufferStore"]:
-            # flat: in-bounds exec mask
-            # global offset macro (requires 3 tmpVgpr)
-            # final address = C + index*bytes
-            params = ["%u" % addrVgpr]
-            for i in range(0, kernel["ProblemType"]["NumIndicesC"]):
-                if i == kernel["ProblemType"]["Index0"]:
-                    params.append("%s" % (self.coord0Vgpr))
-                elif i == kernel["ProblemType"]["Index1"]:
-                    params.append("%s" % (self.coord1Vgpr))
-                else: # just a group index
-                    params.append("sgprWorkGroup%u"%i)
-            params.append("%s" % (tmpVgpr+2))
-            module.add(MacroInstruction(name="GLOBAL_OFFSET_C", args=params))
-            module.add(VMovB32(dst=vgpr(tmpVgpr+2), src=vgpr(addrVgpr+0), comment="temp store offset 0"))
-            module.add(VMovB32(dst=vgpr(tmpVgpr+3), src=vgpr(addrVgpr+1), comment="temp store offset 1"))
 
         # Move the row ptr VGPR
         # optSrdIncForRow moves the SRD so don't move here

@@ -1363,6 +1363,35 @@ namespace Tensile
                 }
             };
 
+            struct UseReshapeAndPermuteEqual
+                : public Predicate_CRTP<UseReshapeAndPermuteEqual, ContractionProblemGemm>
+            {
+                enum
+                {
+                    HasIndex = false,
+                    HasValue = true
+                };
+                size_t value;
+
+                UseReshapeAndPermuteEqual() = default;
+                UseReshapeAndPermuteEqual(size_t value)
+                    : value(value)
+                {
+                }
+
+                static std::string Type()
+                {
+                    return "UseReshapeAndPermute";
+                }
+
+                virtual bool operator()(ContractionProblemGemm const& problem) const override
+                {
+                    return (problem.useReshapeAndPermute() == value)
+                        and (problem.reshape().dimensions() == value)
+                        and (problem.permute().size() == value);
+                }
+            };
+
             struct GroupedGemmEqual
                 : public Predicate_CRTP<GroupedGemmEqual, ContractionProblemGemm>
             {

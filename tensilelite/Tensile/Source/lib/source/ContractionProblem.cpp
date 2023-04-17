@@ -61,7 +61,9 @@ namespace Tensile
                                                                 size_t   cStride,
                                                                 size_t   ldd,
                                                                 size_t   dStride,
-                                                                double   beta)
+                                                                double   beta,
+                                                                std::vector<size_t> const& reshape,
+                                                                std::vector<size_t> const& permute)
     {
         Tensile::ContractionProblemGemm::FreeIndices  free(2);
         Tensile::ContractionProblemGemm::BoundIndices bound(1);
@@ -108,8 +110,9 @@ namespace Tensile
         TensorDescriptor e("e");
         TensorDescriptor bias("bias");
         TensorDescriptor scaleD("scaleD");
+        TensorDescriptor reshapeD = TensorDescriptor("reshape", dType, reshape.begin(), reshape.end());
 
-        ContractionProblemGemm problem(a, b, c, d, e, bias, scaleD, free, batch, bound, beta);
+        ContractionProblemGemm problem(a, b, c, d, e, bias, scaleD, reshapeD, permute, free, batch, bound, beta);
 
         return problem;
     }
@@ -124,7 +127,9 @@ namespace Tensile
                                                         size_t ldc,
                                                         double beta,
                                                         bool   colMajor,
-                                                        size_t batchCount)
+                                                        size_t batchCount,
+                                                        std::vector<size_t> const& reshape,
+                                                        std::vector<size_t> const& permute)
     {
         if(colMajor)
             throw std::runtime_error("Column major not yet implemented.");
@@ -147,7 +152,9 @@ namespace Tensile
                             -1,
                             ldc,
                             -1,
-                            beta);
+                            beta,
+                            reshape,
+                            permute);
     }
 
     ContractionProblemGemm ContractionProblemGemm::GEMM(bool                    transA,
@@ -156,7 +163,9 @@ namespace Tensile
                                                         TensorDescriptor const& b,
                                                         TensorDescriptor const& c,
                                                         TensorDescriptor const& d,
-                                                        double                  beta)
+                                                        double                  beta,
+                                                        std::vector<size_t> const& reshape,
+                                                        std::vector<size_t> const& permute)
     {
         Tensile::ContractionProblemGemm::FreeIndices free(2);
         BoundIndex                                   bound;
@@ -197,9 +206,10 @@ namespace Tensile
         TensorDescriptor e("e");
         TensorDescriptor bias("bias");
         TensorDescriptor scaleD("scaleD");
+        TensorDescriptor reshapeD = TensorDescriptor("reshape", d.dataType(), reshape.begin(), reshape.end());
 
         return ContractionProblemGemm(
-            a, b, c, d, e, bias, scaleD, freeIndices, batchIndices, boundIndices, beta);
+            a, b, c, d, e, bias, scaleD, reshapeD, permute, freeIndices, batchIndices, boundIndices, beta);
     }
 
     void ContractionProblemGemm::IdentifierToIndices(std::string const& identifier,
@@ -357,6 +367,8 @@ namespace Tensile
     ContractionProblemGemm
         ContractionProblemGemm::FromIndexSizes(std::string const&         operationIdentifier,
                                                std::vector<size_t> const& indexSizes,
+                                               std::vector<size_t> const& reshape,
+                                               std::vector<size_t> const& permute,
                                                DataType                   aType,
                                                std::vector<size_t> const& aStrides,
                                                DataType                   bType,
@@ -387,6 +399,8 @@ namespace Tensile
                               batchIndices,
                               boundIndices,
                               indexSizes,
+                              reshape,
+                              permute,
                               aType,
                               aStrides,
                               bType,
@@ -403,6 +417,8 @@ namespace Tensile
                                                BatchIndices const&        batchIndices,
                                                BoundIndices const&        boundIndices,
                                                std::vector<size_t> const& indexSizes,
+                                               std::vector<size_t> const& reshape,
+                                               std::vector<size_t> const& permute,
                                                DataType                   aType,
                                                std::vector<size_t> const& aStrides,
                                                DataType                   bType,
@@ -491,9 +507,10 @@ namespace Tensile
         TensorDescriptor e("e");
         TensorDescriptor bias("bias");
         TensorDescriptor scaleD("scaleD");
+        TensorDescriptor reshapeD = TensorDescriptor("reshape", dType, reshape.begin(), reshape.end());
 
         return ContractionProblemGemm(
-            a, b, c, d, e, bias, scaleD, freeIndices, batchIndices, boundIndices, beta);
+            a, b, c, d, e, bias, scaleD, reshapeD, permute, freeIndices, batchIndices, boundIndices, beta);
     }
 
     ContractionProblemGemm ContractionProblemGemm::GetDummy()
@@ -509,32 +526,36 @@ namespace Tensile
         return gemm;
     }
 
-    ContractionProblemGemm::ContractionProblemGemm(TensorDescriptor const& a,
-                                                   TensorDescriptor const& b,
-                                                   TensorDescriptor const& c,
-                                                   TensorDescriptor const& d,
-                                                   TensorDescriptor const& e,
-                                                   TensorDescriptor const& bias,
-                                                   TensorDescriptor const& scaleD,
-                                                   FreeIndices const&      freeIndices,
-                                                   BatchIndices const&     batchIndices,
-                                                   BoundIndices const&     boundIndices,
-                                                   double                  beta,
-                                                   size_t                  workspaceSize)
+    ContractionProblemGemm::ContractionProblemGemm(TensorDescriptor const&    a,
+                                                   TensorDescriptor const&    b,
+                                                   TensorDescriptor const&    c,
+                                                   TensorDescriptor const&    d,
+                                                   TensorDescriptor const&    e,
+                                                   TensorDescriptor const&    bias,
+                                                   TensorDescriptor const&    scaleD,
+                                                   TensorDescriptor const&    reshape,
+                                                   std::vector<size_t> const& permute,
+                                                   FreeIndices const&         freeIndices,
+                                                   BatchIndices const&        batchIndices,
+                                                   BoundIndices const&        boundIndices,
+                                                   double                     beta,
+                                                   size_t                     workspaceSize)
         : ContractionProblem(ContractionProblemGemm::TENSOR::TENSOR_COUNT)
         , m_freeIndices(freeIndices)
         , m_batchIndices(batchIndices)
         , m_boundIndices(boundIndices)
         , m_beta(beta)
+        , m_permute(permute)
     {
-        m_workspaceSize                                   = workspaceSize;
-        m_tensors[ContractionProblemGemm::TENSOR::A]      = a;
-        m_tensors[ContractionProblemGemm::TENSOR::B]      = b;
-        m_tensors[ContractionProblemGemm::TENSOR::C]      = c;
-        m_tensors[ContractionProblemGemm::TENSOR::D]      = d;
-        m_tensors[ContractionProblemGemm::TENSOR::E]      = e;
-        m_tensors[ContractionProblemGemm::TENSOR::BIAS]   = bias;
-        m_tensors[ContractionProblemGemm::TENSOR::SCALED] = scaleD;
+        m_workspaceSize                                    = workspaceSize;
+        m_tensors[ContractionProblemGemm::TENSOR::A]       = a;
+        m_tensors[ContractionProblemGemm::TENSOR::B]       = b;
+        m_tensors[ContractionProblemGemm::TENSOR::C]       = c;
+        m_tensors[ContractionProblemGemm::TENSOR::D]       = d;
+        m_tensors[ContractionProblemGemm::TENSOR::E]       = e;
+        m_tensors[ContractionProblemGemm::TENSOR::BIAS]    = bias;
+        m_tensors[ContractionProblemGemm::TENSOR::SCALED]  = scaleD;
+        m_tensors[ContractionProblemGemm::TENSOR::RESHAPE] = reshape;
         m_tensors[ContractionProblemGemm::TENSOR::D].setAsOutput(true); // Set d as output
         m_betaRestriction = toScalarValueEnum(
             m_beta); // Set enum using beta to potentially allow for faster solutions

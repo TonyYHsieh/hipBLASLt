@@ -90,8 +90,11 @@ namespace Tensile
             bool                        m_activationNoGuard;
             std::vector<ActivationType> m_activationEnumArg;
             size_t                      m_maxWorkspaceSize = 0;
+            size_t                      m_useReshapeAndPermute;
 
             std::vector<std::vector<size_t>> m_problemSizes;
+            std::vector<std::vector<size_t>> m_reshape;
+            std::vector<std::vector<size_t>> m_permute;
         };
 
     } // namespace Client

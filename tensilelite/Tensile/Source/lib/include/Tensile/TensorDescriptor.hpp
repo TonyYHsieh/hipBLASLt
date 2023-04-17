@@ -181,6 +181,14 @@ namespace Tensile
             this->calculate();
         }
 
+        template <typename Iter>
+        void resize(Iter sizesBegin, Iter sizesEnd)
+        {
+            m_sizes   = std::vector<size_t>(sizesBegin, sizesEnd);
+            m_strides = std::vector<size_t>();
+            this->calculate();
+        }
+
         void setName(const char* name)
         {
             m_name = name;

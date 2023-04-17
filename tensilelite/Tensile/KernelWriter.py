@@ -3401,6 +3401,15 @@ class KernelWriter(metaclass=abc.ABCMeta):
     self.defineSgpr("NumWorkGroups0", 1)
     self.defineSgpr("NumWorkGroups1", 1)
 
+    if kernel["ProblemType"]["UseReshapeAndPermute"]:
+      self.defineSgpr("dimReshapeAndPermute", 1)
+      for i in range(kernel["ProblemType"]["UseReshapeAndPermute"]):
+        self.defineSgpr(f"reshape{i}", 1)
+      for i in range(kernel["ProblemType"]["UseReshapeAndPermute"]):
+        self.defineSgpr(f"reshapeMagic{i}", 1)
+      for i in range(kernel["ProblemType"]["UseReshapeAndPermute"]):
+        self.defineSgpr(f"permute{i}", 1)
+
     #------------------------
     # Registers defined below this point are not available in the post-loop
     # Post-loop is after tail loop exits, ie the store code.
@@ -3424,6 +3433,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       1 + \
       2 + \
       (3 if kernel["WorkGroupMapping"] > 1 else 1) + \
+      ((kernel["ProblemType"]["UseReshapeAndPermute"] * 3 + 1) if kernel["ProblemType"]["UseReshapeAndPermute"] else 0) + \
       (2 if kernel["ProblemType"]["GroupedGemm"] else 0)
     # Get kernel argument end here
     ###################################

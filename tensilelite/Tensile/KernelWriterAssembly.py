@@ -592,16 +592,21 @@ class KernelWriterAssembly(KernelWriter):
     # justOffset32 means we should only write the 32-bit offset
     # This is used in Buffer addressing modes.
     # Flat addressing modes expect the GLOBAL_OFFSET to initialize a full 64-bit address
-    for (tc, indices, justOffset32, tP) in [ \
-        ("C", list(range(0, kernel["ProblemType"]["NumIndicesC"])), kernel["BufferStore"], None), \
-        ("A", kernel["ProblemType"]["IndexAssignmentsA"], kernel["BufferLoad"], tPA), \
-        ("B", kernel["ProblemType"]["IndexAssignmentsB"], kernel["BufferLoad"], tPB) ]:
+    for (tc, indices, justOffset32, tP, index) in [ \
+        ("D", list(range(0, kernel["ProblemType"]["NumIndicesC"])), kernel["BufferStore"], None, True), \
+        ("D", list(range(0, kernel["ProblemType"]["NumIndicesC"])), kernel["BufferStore"], None, False), \
+        ("C", list(range(0, kernel["ProblemType"]["NumIndicesC"])), kernel["BufferStore"], None, False), \
+        ("A", kernel["ProblemType"]["IndexAssignmentsA"], kernel["BufferLoad"], tPA, False), \
+        ("B", kernel["ProblemType"]["IndexAssignmentsB"], kernel["BufferLoad"], tPB, False) ]:
 
       # BufferStore does not use this macro so don't generate it:
-      if tc == "C" and kernel["BufferStore"]:
+      if (tc in ("C", "D")) and kernel["BufferStore"]:
         continue
 
-      module.addComment1("Global Offset %s"%tc)
+      if index:
+        module.addComment1("Global Index %s"%tc)
+      else:
+        module.addComment1("Global Offset %s"%tc)
       numDim = len(indices)
       idxChars = []
       for i in indices:
@@ -612,7 +617,7 @@ class KernelWriterAssembly(KernelWriter):
       mirrorSumDims = []
       macroArgs = []
       for i in range(0, numDim):
-        if tc == 'C':
+        if tc in ('C', 'D'):
           useInitialStrides = kernel["ProblemType"]["UseInitialStridesCD"]
           idxChar = self.states.indexChars[i]
         else:
@@ -639,7 +644,10 @@ class KernelWriterAssembly(KernelWriter):
           elif not justOffset32: # buffer/justOffset32 scalars are included in SRD not the offset, so skip here
             calcDims.append(i)
             macroArgs.append("sgprOffset%s:req" % idxChars[i])
-      macro = Macro("GLOBAL_OFFSET_%s" % tc, "vgprAddr:req", *macroArgs, "vgprTmp:req")
+      if index:
+        macro = Macro("GLOBAL_INDEX_%s" % tc, "vgprAddr:req", *macroArgs, "vgprTmp:req")
+      else:
+        macro = Macro("GLOBAL_OFFSET_%s" % tc, "vgprAddr:req", *macroArgs, "vgprTmp:req")
 
       # Each index may be skipped, scaled by stride, or unscaled
       # If destLo is unset, no accumulation is necessary.
@@ -812,14 +820,15 @@ class KernelWriterAssembly(KernelWriter):
             comment="add prepad for pointer shift"))
 
       # addr *= bytes/elemen
-      bpe = self.states.bpeAB if (tc in ('A', 'B')) else self.states.bpeCexternal
-      if justOffset32:
-        macro.add(staticMultiply("v[\\vgprAddr+0]", "v[\\vgprAddr+0]", bpe, None, "offset *= bytes/element"))
-      else:
-        macro.add(VLShiftLeftB64(dst="v[\\vgprAddr+0:\\vgprAddr+1]", \
-            shiftHex=hex(log2(bpe)), \
-            src="v[\\vgprAddr+0:\\vgprAddr+1]", \
-            comment="offset *= bytes/element"))
+      if not index:
+        bpe = self.states.bpeAB if (tc in ('A', 'B')) else self.states.bpeCexternal
+        if justOffset32:
+          macro.add(staticMultiply("v[\\vgprAddr+0]", "v[\\vgprAddr+0]", bpe, None, "offset *= bytes/element"))
+        else:
+          macro.add(VLShiftLeftB64(dst="v[\\vgprAddr+0:\\vgprAddr+1]", \
+              shiftHex=hex(log2(bpe)), \
+              src="v[\\vgprAddr+0:\\vgprAddr+1]", \
+              comment="offset *= bytes/element"))
       module.add(macro)
 
     module.add(MacroVDynamicScalarDiv(kernel["WavefrontSize"]))
@@ -6552,7 +6561,7 @@ class KernelWriterAssembly(KernelWriter):
       if len(kernel["PackedC0IndicesX"]) > 1:
         numTmpVgpr += 1
     else:
-      numTmpVgpr = 2 + 3 # GLOBAL_OFFSET_C needs 3, plus 2 tmps?
+      numTmpVgpr = 2 + 4 + (10 if kernel["ProblemType"]["UseReshapeAndPermute"] else 0)
     # Get max vgpr and sgpr for activation
     actPCGwvwVgpr = 0
     actPCMaxTempSgpr = 0

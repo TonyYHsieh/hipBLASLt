@@ -1246,6 +1246,11 @@ class SSetMask(CommonInstruction):
         else:
             self.setInst("s_mov_b64")
 
+class SMovrelsB32(CommonInstruction):
+    def __init__(self, dst, src, comment="") -> None:
+        super().__init__(InstType.INST_B32, dst, [src], None, None, comment)
+        self.setInst("s_movrels_b32")
+
 class SMovB32(CommonInstruction):
     def __init__(self, dst, src, comment="") -> None:
         super().__init__(InstType.INST_B32, dst, [src], None, None, comment)
@@ -1680,6 +1685,17 @@ class VSubCoU32(CommonInstruction):
             self.setInst("v_sub_co_u32")
         else:
             self.setInst("v_sub_u32")
+
+class VSubbCoU32(CommonInstruction):
+    def __init__(self, dst, dst1, src0, src1, src2, comment="") -> None:
+        super().__init__(InstType.INST_U32, dst, [src0, src1, src2], None, None, comment)
+        self.dst1 = dst1
+
+    def preStr(self):
+        if self.asmBugs["ExplicitCO"]:
+            self.setInst("v_subb_co_u32")
+        else:
+            self.setInst("v_subb_u32")
 
 # MAC
 class VMacF32(CommonInstruction):

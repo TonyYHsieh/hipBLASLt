@@ -1057,6 +1057,7 @@ defaultProblemType = {
     "Gradient":                 False,            # =True set globalWriteElements to gradient mode
     "UseBias":                  False,            # =True use bias vector
     "BiasSrc":                  "D",              # This parameter is used in gradient + bias. Support A, B, D.
+    "UseReshapeAndPermute":     0,                # -dimision of reshape and permute
     "UseScaleD":                False,            # =True use scaleD vector
     "HighPrecisionAccumulate":  False,            # f32 += f16*f16
     "SilentHighPrecisionAccumulate": False,       # Keep kernel names the same for HPA mode.  Useful for testing.

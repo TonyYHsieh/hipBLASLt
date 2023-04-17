@@ -35,6 +35,9 @@ namespace Tensile
     {
         ClientProblemFactory::ClientProblemFactory(po::variables_map const& args)
             : m_problemSizes(args["problem-size"].as<std::vector<std::vector<size_t>>>())
+            , m_reshape(args["reshape"].as<std::vector<std::vector<size_t>>>())
+            , m_permute(args["permute"].as<std::vector<std::vector<size_t>>>())
+            , m_useReshapeAndPermute(args["use-reshape-and-permute"].as<size_t>())
             , m_stridedBatched(args["strided-batched"].as<bool>())
             , m_groupedGemm(args["grouped-gemm"].as<bool>())
             , m_highPrecisionAccumulate(args["high-precision-accumulate"].as<bool>())
@@ -235,6 +238,8 @@ namespace Tensile
                             m_batchIndices,
                             m_boundIndices,
                             m_problemSizes[i],
+                            m_reshape[i],
+                            m_permute[i],
                             m_tensorTypes[ContractionProblemGemm::TENSOR::A],
                             aStrides,
                             m_tensorTypes[ContractionProblemGemm::TENSOR::B],
@@ -301,7 +306,7 @@ namespace Tensile
                         rv.back().setUseScaleD(m_useScaleD);
                         rv.back().setScaleD(m_constantTypes[ContractionProblemGemm::CONST::ALPHA],
                                             rv.back().d().sizes()[0]);
-
+                        rv.back().setUseReshapeAndPermute(m_useReshapeAndPermute);
                         rv.back().setGroupedGemm(m_groupedGemm);
                     }
                 }

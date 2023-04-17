@@ -267,6 +267,9 @@ class GlobalWriteBatchWriter:
 
       # create code Module to push mov vgpr,acc instructions
       if self.beta:
+        # calculate flat load offset
+        if not self.kernel["BufferStore"]:
+          module.add(addrCalc.flatStoreAddress(self.kernel, self.tmpVgpr, self.tmpS01, elementIdx, addrCVgpr, 'C'))
         module.add(addrCalc.emitLdChange(self.kernel, self.ss, 'C', self.edge, self.beta, mask, (elementIdx == 0), self.tmpVgpr, self.tmpSgpr, addrCVgpr, self.addrC))
         if self.kernel["GroupLoadStore"]:
           loadInputCode.add(self.parentWriter.readInput(self.kernel, self.ss, 'C', self.kernel["ProblemType"]["DestDataType"], addrCalc, vc0, data, self.gwvw, addrCVgpr, self.tmpS01))
@@ -323,6 +326,8 @@ class GlobalWriteBatchWriter:
         module.add(addrCalc.emitLdChange(self.kernel, self.ss, 'E', self.edge, self.beta, mask, (elementIdx == len(self.batchElements) - 1), self.tmpVgpr, self.tmpSgpr, addrEVgpr, self.addrE))
       if self.storeBiasD == 1:
         module.add(addrCalc.emitLdChange(self.kernel, self.ss, 'Bias', self.edge, self.beta, mask, (elementIdx == len(self.batchElements) - 1), self.tmpVgpr, self.tmpSgpr, addrBiasVgpr, self.addrBias))
+      if not self.kernel["BufferStore"]:
+        module.add(addrCalc.flatStoreAddress(self.kernel, self.tmpVgpr, self.tmpS01, elementIdx, addrDVgpr, 'D'))
       module.add(addrCalc.emitLdChange(self.kernel, self.ss, 'D', self.edge, self.beta, mask, (elementIdx == len(self.batchElements) - 1), self.tmpVgpr, self.tmpSgpr, addrDVgpr, self.addrD))
 
       if self.atomic and (not self.parentWriter.states.useAtomicAdd):

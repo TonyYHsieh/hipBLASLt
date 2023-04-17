@@ -413,6 +413,9 @@ def problemSizeParams(problemType, problem):
       if problemType.useE:
           rv.append(('e-strides', ",".join(map(str, dstrides))))
 
+    rv.append(('reshape', ",".join(map(str, problem.reshape))))
+    rv.append(('permute', ",".join(map(str, problem.permute))))
+
     return rv
 
 def dataInitParams(problemType):
@@ -488,6 +491,7 @@ def writeClientConfigIni(problemSizes, biasTypeArgs, activationArgs, problemType
 
         param('high-precision-accumulate', problemType.highPrecisionAccumulate)
         param('strided-batched', problemType.stridedBatched)
+        param('use-reshape-and-permute', problemType.useReshapeAndPermute)
         param('grouped-gemm', problemType.groupedGemm)
 
         for problem in problemSizes.problems:

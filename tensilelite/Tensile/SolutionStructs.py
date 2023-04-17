@@ -461,6 +461,8 @@ class ProblemType(Mapping):
     else:
       name += "" if self["StridedBatched"] else "_GB" # legacy
 
+    name += (f"_RP{self['UseReshapeAndPermute']}" if self["UseReshapeAndPermute"] else "")
+
     # Activation Naming
     if self["ActivationType"] != 'none':
       if self["ActivationType"] == 'all':
@@ -646,8 +648,10 @@ class ProblemSizeRange:
 
 class Problem:
   """ Problem sizes, strides, padding and other info"""
-  def __init__(self, sizes=None, stridesA=None, stridesB=None, stridesC=None, stridesD=None, count=None):
+  def __init__(self, sizes=None, stridesA=None, stridesB=None, stridesC=None, stridesD=None, count=None, reshape=None, permute=None):
     self.sizes = tuple(sizes) if sizes else None
+    self.reshape = tuple(reshape) if reshape else tuple()
+    self.permute = tuple(permute) if permute else tuple()
     self.stridesA = tuple(stridesA) if stridesA else None
     self.stridesB = tuple(stridesB) if stridesB else None
     self.stridesC = tuple(stridesC) if stridesC else None
@@ -675,17 +679,34 @@ class ExactList(Problem):
         printExit("ExactSize %s contains -1" % (e))
       if problemType["OperationType"] == "GEMM":
         e += [-1, -1, -1, -1]
-        e = ExactList.convertLeadingDims(problemType, tuple(e))
-      sizes=e
 
-    elif len(e) == (problemType["TotalIndices"] + problemType["NumIndicesLD"]):
+    if len(e) == (problemType["TotalIndices"] + problemType["NumIndicesLD"] + problemType["UseReshapeAndPermute"]*2):
       sizes = ExactList.convertLeadingDims(problemType, tuple(e))
+      start = problemType["TotalIndices"] + problemType["NumIndicesLD"]
+      end   = problemType["TotalIndices"] + problemType["NumIndicesLD"] + problemType["UseReshapeAndPermute"]
+      reshape = e[start:end]
+      start = problemType["TotalIndices"] + problemType["NumIndicesLD"] + problemType["UseReshapeAndPermute"]
+      end   = problemType["TotalIndices"] + problemType["NumIndicesLD"] + problemType["UseReshapeAndPermute"] * 2
+      permute = e[start:end]
+      _1Dsize = 1
+      for i in (problemType["IndicesFree"] + problemType["IndicesBatch"]):
+        _1Dsize = _1Dsize * sizes[i]
+      _1Dsize2 = 1
+      for i in range(len(reshape)):
+        _1Dsize2 *= reshape[i]
+      if _1Dsize != _1Dsize2:
+        printExit(f"can't transform origin shape to newshape {reshape}")
+      sortedPermute = deepcopy(permute)
+      sortedPermute.sort()
+      for i in range(len(sortedPermute)):
+        if i != sortedPermute[i]:
+          printExit(f"{permute} is invalid")
     else:
       printExit("ExactSize %s doesn't match indices of ProblemType %s, totalIndices=%d" \
           % (e, problemType, problemType["TotalIndices"]) )
 
     # TODO- pass strides here, remove calls to convertLeadingDims
-    Problem.__init__(self, sizes=sizes)
+    Problem.__init__(self, sizes=sizes, reshape=reshape, permute=permute)
 
   def __str__(self):
     return str(list(self.sizes))
@@ -762,7 +783,7 @@ class ProblemSizes:
             psr = ProblemSizeRange(problemType, dictionary[sizeTypeKey])
             self.ranges.append( psr )
           elif sizeTypeKey == "Exact":
-            e= dictionary[sizeTypeKey]
+            e = dictionary[sizeTypeKey]
             if isinstance(e,list):
               self.exacts.append(ExactList(e, problemType))
             elif isinstance(e,dict):
@@ -1871,6 +1892,10 @@ class Solution(collections.abc.Mapping):
     if "LoopUnroll" in state:
       state["LoopIters"] = state["LoopUnroll"]
 
+    if state["ProblemType"]["UseReshapeAndPermute"] and state["BufferStore"]:
+      reject(state, "UseReshapeAndPermute only support with BufferStore false")
+      return
+
     if state["ScheduleIterAlg"] == 2:
       state["InnerUnroll"] = state["DepthU"] // state["MatrixInstK"]
       state["PrefetchLocalRead"] = 1
@@ -2141,6 +2166,9 @@ class Solution(collections.abc.Mapping):
         state["StoreVectorWidth"] = 4
       else:
         state["StoreVectorWidth"] = 4//state["ProblemType"]["DataType"].numRegisters()
+
+    if state["ProblemType"]["UseReshapeAndPermute"]:
+      state["StoreVectorWidth"] = 1
 
     if state["EnableMatrixInstruction"]:
       if state["SourceSwap"]:

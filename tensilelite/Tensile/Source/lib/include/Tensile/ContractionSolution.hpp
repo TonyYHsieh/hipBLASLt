@@ -323,6 +323,7 @@ namespace Tensile
             bool                  useInitialStridesAB     = false;
             bool                  useInitialStridesCD     = false;
             bool                  stridedBatched          = true;
+            size_t                useReshapeAndPermute    = 0;
             bool                  groupedGemm             = false;
             bool                  fp16AltImpl             = false;
             ActivationType        activationType          = ActivationType::None;
