@@ -114,7 +114,7 @@ class SignatureCOV3(Signature):
         signature.addArg(               "NumWorkGroups0", SVK.SIG_VALUE,              "u32")
         signature.addArg(               "NumWorkGroups1", SVK.SIG_VALUE,              "u32")
 
-        if kernel["ProblemType"]["UseReshapeAndPermute"]:
+        if kernel["ProblemType"]["UseReshapeAndPermute"] and (kernel["GlobalSplitU"] == 1):
             signature.addArg(     "dimReshapeAndPermute", SVK.SIG_VALUE,              "u32")
             for i in range(kernel["ProblemType"]["UseReshapeAndPermute"]):
                 signature.addArg(          f"reshape{i}", SVK.SIG_VALUE,              "u32")

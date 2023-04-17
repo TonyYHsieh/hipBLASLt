@@ -3401,7 +3401,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     self.defineSgpr("NumWorkGroups0", 1)
     self.defineSgpr("NumWorkGroups1", 1)
 
-    if kernel["ProblemType"]["UseReshapeAndPermute"]:
+    if kernel["ProblemType"]["UseReshapeAndPermute"] and (kernel["GlobalSplitU"] == 1):
       self.defineSgpr("dimReshapeAndPermute", 1)
       for i in range(kernel["ProblemType"]["UseReshapeAndPermute"]):
         self.defineSgpr(f"reshape{i}", 1)
@@ -3426,6 +3426,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       self.defineSgpr("SmallMagicNumberDivWg0", 1)
       self.defineSgpr("SmallMagicNumberDivWg01", 1)
 
+    reshapeAndPermuteInAsm = kernel["ProblemType"]["UseReshapeAndPermute"] and (kernel["GlobalSplitU"] == 1)
     self.states.numSgprToLoad = numSgprAddressD + numSgprAddressC + numSgprAddressA + numSgprAddressB + numSgprAddressScaleD + numSgprAlpha + \
       (numSgprBeta if kernel["ProblemType"]["UseBeta"] else 0) + self.states.d.numSgprStrides + self.states.c.numSgprStrides + self.states.a.numSgprStrides + \
       self.states.b.numSgprStrides + self.states.numSgprSizesFree + self.states.numSgprSizesSum + \
@@ -3433,7 +3434,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       1 + \
       2 + \
       (3 if kernel["WorkGroupMapping"] > 1 else 1) + \
-      ((kernel["ProblemType"]["UseReshapeAndPermute"] * 3 + 1) if kernel["ProblemType"]["UseReshapeAndPermute"] else 0) + \
+      ((kernel["ProblemType"]["UseReshapeAndPermute"] * 3 + 1) if reshapeAndPermuteInAsm else 0) + \
       (2 if kernel["ProblemType"]["GroupedGemm"] else 0)
     # Get kernel argument end here
     ###################################
