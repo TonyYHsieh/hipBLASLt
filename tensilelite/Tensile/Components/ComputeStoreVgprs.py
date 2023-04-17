@@ -48,11 +48,10 @@ class ComputeStoreVgprsMFMA(ComputeStoreVgprs):
         # alloc resources
         tid0 = writer.vgprPool.checkOut(1)
         tid1 = writer.vgprPool.checkOut(1)
-        if kernel["BufferStore"]:
-            writer.vgprs.cinRowPtr   = writer.vgprPool.checkOut(1, "cinRowPtr")
-            writer.vgprs.coutRowPtrD  = writer.vgprPool.checkOut(1, "coutRowPtrD")
-            if kernel["ProblemType"]["UseE"] and (kernel["GlobalSplitU"] == 1):
-                writer.vgprs.coutRowPtrE = writer.vgprPool.checkOut(1, "coutRowPtrE")
+        writer.vgprs.cinRowPtr   = writer.vgprPool.checkOut(1, "cinRowPtr")
+        writer.vgprs.coutRowPtrD  = writer.vgprPool.checkOut(1, "coutRowPtrD")
+        if kernel["ProblemType"]["UseE"] and (kernel["GlobalSplitU"] == 1):
+            writer.vgprs.coutRowPtrE = writer.vgprPool.checkOut(1, "coutRowPtrE")
 
         wave_id = writer.vgprPool.checkOut(1)
 
@@ -156,11 +155,10 @@ class ComputeStoreVgprsMFMASwap(ComputeStoreVgprs):
         # alloc resources
         tid0 = writer.vgprPool.checkOut(1)
         tid1 = writer.vgprPool.checkOut(1)
-        if kernel["BufferStore"]:
-            writer.vgprs.cinRowPtr  = writer.vgprPool.checkOut(1, "cinRowPtr")
-            writer.vgprs.coutRowPtrD = writer.vgprPool.checkOut(1, "coutRowPtrD")
-            if kernel["ProblemType"]["UseE"] and (kernel["GlobalSplitU"] == 1):
-                writer.vgprs.coutRowPtrE = writer.vgprPool.checkOut(1, "coutRowPtrE")
+        writer.vgprs.cinRowPtr  = writer.vgprPool.checkOut(1, "cinRowPtr")
+        writer.vgprs.coutRowPtrD = writer.vgprPool.checkOut(1, "coutRowPtrD")
+        if kernel["ProblemType"]["UseE"] and (kernel["GlobalSplitU"] == 1):
+            writer.vgprs.coutRowPtrE = writer.vgprPool.checkOut(1, "coutRowPtrE")
 
         wave_id = writer.vgprPool.checkOut(1)
 

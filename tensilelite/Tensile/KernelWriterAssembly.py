@@ -5636,6 +5636,7 @@ class KernelWriterAssembly(KernelWriter):
               tid0Scale=kernel["GlobalWriteVectorWidth"], \
               tid1Scale=1))
 
+    self.vgprs.addrScaleD = -1
     if kernel["BufferStore"]:
       #print "----AddressC-LocalSplitU"
       #print self.vgprPool.state()
@@ -5643,7 +5644,6 @@ class KernelWriterAssembly(KernelWriter):
       self.vgprs.addrD    = -1
       self.vgprs.addrC    = -1
       self.vgprs.addrBias = -1
-      self.vgprs.addrScaleD = -1
     else:
       self.vgprs.addrD = self.vgprPool.checkOut(2)
       module.add(VMovB32(
@@ -5720,6 +5720,7 @@ class KernelWriterAssembly(KernelWriter):
               tid0Scale=kernel["VectorWidth"], \
               tid1Scale=kernel["VectorWidth"]))
 
+    self.vgprs.addrScaleD = -1
     if kernel["BufferStore"]:
       #print "----AddressC-nonLSU-----"
       #print self.vgprPool.state()
@@ -5727,7 +5728,6 @@ class KernelWriterAssembly(KernelWriter):
       self.vgprs.addrD    = -1
       self.vgprs.addrC    = -1
       self.vgprs.addrBias = -1
-      self.vgprs.addrScaleD = -1
     else:
       self.vgprs.addrD = self.vgprPool.checkOut(2, 'addrD')
       module.add(VMovB32(
@@ -5791,11 +5791,10 @@ class KernelWriterAssembly(KernelWriter):
       self.vgprPool.checkIn(self.vgprs.storeRemapCoord0)
       self.vgprPool.checkIn(self.vgprs.storeRemapCoord1)
       self.vgprPool.checkIn(self.vgprs.storeRemapOffsetCoord1)
-    if kernel["BufferStore"]:
-      self.vgprPool.checkIn(self.vgprs.cinRowPtr)
-      self.vgprPool.checkIn(self.vgprs.coutRowPtrD)
-      if kernel["ProblemType"]["UseE"] and (kernel["GlobalSplitU"] == 1):
-        self.vgprPool.checkIn(self.vgprs.coutRowPtrE)
+    self.vgprPool.checkIn(self.vgprs.cinRowPtr)
+    self.vgprPool.checkIn(self.vgprs.coutRowPtrD)
+    if kernel["ProblemType"]["UseE"] and (kernel["GlobalSplitU"] == 1):
+      self.vgprPool.checkIn(self.vgprs.coutRowPtrE)
     if not kernel["BufferStore"]:
       self.vgprPool.checkIn(self.vgprs.addrD)
       self.vgprPool.checkIn(self.vgprs.addrC)
@@ -6973,7 +6972,7 @@ class KernelWriterAssembly(KernelWriter):
       if bps==2 and hi16:
         module.add(FlatStoreD16HIB16(vaddr=addr0, src=vgpr(srcVgpr*2), flat=flat, comment=comment))
       elif bps==2 and not hi16:
-        module.add(FlatStoreD16B16(vaddr=addr0, src=vgpr(srcVgpr, rpv*2), flat=flat, comment=comment))
+        module.add(FlatStoreB16(vaddr=addr0, src=vgpr(srcVgpr, rpv*2), flat=flat, comment=comment))
       elif bps==4:
         module.add(FlatStoreB32(vaddr=addr0, src=vgpr(srcVgpr, rpv), flat=flat, comment=comment))
       elif bps==8:
