@@ -759,6 +759,10 @@ class FlatStoreD16B16(FLATStoreInstruction):
     def __init__(self, vaddr, src, flat: Optional[FLATModifiers] = None, comment="") -> None:
         super().__init__(InstType.INST_D16_B16, vaddr, src, flat, comment)
 
+class FlatStoreB16(FLATStoreInstruction):
+    def __init__(self, vaddr, src, flat: Optional[FLATModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_B16, vaddr, src, flat, comment)
+
 class FlatStoreB32(FLATStoreInstruction):
     def __init__(self, vaddr, src, flat: Optional[FLATModifiers] = None, comment="") -> None:
         super().__init__(InstType.INST_B32, vaddr, src, flat, comment)
