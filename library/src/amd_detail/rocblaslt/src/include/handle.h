@@ -148,6 +148,10 @@ struct _rocblaslt_matmul_desc
     //
     rocblaslt_compute_type compute_type;
     hipblasDatatype_t      scale_type;
+    //
+    uint32_t dim_of_reshape_and_permute  = 0;
+    const uint64_t* reshape              = nullptr;
+    const uint32_t* permute              = nullptr;
 };
 
 /********************************************************************************

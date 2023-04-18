@@ -120,6 +120,9 @@ struct Arguments
     bool              c_noalias_d;
     bool              HMM;
 
+    uint32_t          dim_of_reshape_and_permute;
+    uint64_t          reshape[16];
+    uint32_t          permute[16];
     /*************************************************************************
      *                     End Of Arguments                                  *
      *************************************************************************/
@@ -131,56 +134,58 @@ struct Arguments
     // clang-format off
 
 // Generic macro which operates over the list of arguments in order of declaration
-#define FOR_EACH_ARGUMENT(OPER, SEP) \
-    OPER(function) SEP               \
-    OPER(name) SEP                   \
-    OPER(category) SEP               \
-    OPER(known_bug_platforms) SEP    \
-    OPER(alpha) SEP                  \
-    OPER(beta) SEP                   \
-    OPER(stride_a) SEP               \
-    OPER(stride_b) SEP               \
-    OPER(stride_c) SEP               \
-    OPER(stride_d) SEP               \
-    OPER(user_allocated_workspace) SEP \
-    OPER(M) SEP                      \
-    OPER(N) SEP                      \
-    OPER(K) SEP                      \
-    OPER(lda) SEP                    \
-    OPER(ldb) SEP                    \
-    OPER(ldc) SEP                    \
-    OPER(ldd) SEP                    \
-    OPER(batch_count) SEP            \
-    OPER(iters) SEP                  \
-    OPER(cold_iters) SEP             \
-    OPER(algo) SEP                   \
-    OPER(solution_index) SEP         \
-    OPER(a_type) SEP                 \
-    OPER(b_type) SEP                 \
-    OPER(c_type) SEP                 \
-    OPER(d_type) SEP                 \
-    OPER(compute_type) SEP           \
-    OPER(scale_type) SEP             \
-    OPER(initialization) SEP         \
-    OPER(pad) SEP                    \
-    OPER(grouped_gemm) SEP           \
-    OPER(threads) SEP                \
-    OPER(streams) SEP                \
-    OPER(devices) SEP                \
-    OPER(norm_check) SEP             \
-    OPER(unit_check) SEP             \
-    OPER(timing) SEP                 \
-    OPER(transA) SEP                 \
-    OPER(transB) SEP                 \
-    OPER(activation_type) SEP        \
-    OPER(activation_arg1) SEP        \
-    OPER(activation_arg2) SEP        \
-    OPER(bias_type) SEP              \
-    OPER(bias_vector) SEP            \
-    OPER(scaleD_vector) SEP          \
-    OPER(c_noalias_d) SEP            \
-    OPER(HMM) SEP
-
+#define FOR_EACH_ARGUMENT(OPER, SEP)     \
+    OPER(function) SEP                   \
+    OPER(name) SEP                       \
+    OPER(category) SEP                   \
+    OPER(known_bug_platforms) SEP        \
+    OPER(alpha) SEP                      \
+    OPER(beta) SEP                       \
+    OPER(stride_a) SEP                   \
+    OPER(stride_b) SEP                   \
+    OPER(stride_c) SEP                   \
+    OPER(stride_d) SEP                   \
+    OPER(user_allocated_workspace) SEP   \
+    OPER(M) SEP                          \
+    OPER(N) SEP                          \
+    OPER(K) SEP                          \
+    OPER(lda) SEP                        \
+    OPER(ldb) SEP                        \
+    OPER(ldc) SEP                        \
+    OPER(ldd) SEP                        \
+    OPER(batch_count) SEP                \
+    OPER(iters) SEP                      \
+    OPER(cold_iters) SEP                 \
+    OPER(algo) SEP                       \
+    OPER(solution_index) SEP             \
+    OPER(a_type) SEP                     \
+    OPER(b_type) SEP                     \
+    OPER(c_type) SEP                     \
+    OPER(d_type) SEP                     \
+    OPER(compute_type) SEP               \
+    OPER(scale_type) SEP                 \
+    OPER(initialization) SEP             \
+    OPER(pad) SEP                        \
+    OPER(grouped_gemm) SEP               \
+    OPER(threads) SEP                    \
+    OPER(streams) SEP                    \
+    OPER(devices) SEP                    \
+    OPER(norm_check) SEP                 \
+    OPER(unit_check) SEP                 \
+    OPER(timing) SEP                     \
+    OPER(transA) SEP                     \
+    OPER(transB) SEP                     \
+    OPER(activation_type) SEP            \
+    OPER(activation_arg1) SEP            \
+    OPER(activation_arg2) SEP            \
+    OPER(bias_type) SEP                  \
+    OPER(bias_vector) SEP                \
+    OPER(scaleD_vector) SEP              \
+    OPER(c_noalias_d) SEP                \
+    OPER(HMM) SEP                        \
+    OPER(dim_of_reshape_and_permute) SEP \
+    OPER(reshape) SEP                    \
+    OPER(permute) SEP
     // clang-format on
 
     // Validate input format.

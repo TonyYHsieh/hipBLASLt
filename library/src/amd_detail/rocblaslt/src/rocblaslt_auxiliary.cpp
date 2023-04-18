@@ -315,7 +315,10 @@ rocblaslt_status rocblaslt_matrix_layout_get_attribute(rocblaslt_matrix_layout  
  *******************************************************************************/
 rocblaslt_status rocblaslt_matmul_desc_create(rocblaslt_matmul_desc* matmulDesc,
                                               rocblaslt_compute_type computeType,
-                                              hipblasDatatype_t      scaleType)
+                                              hipblasDatatype_t      scaleType,
+                                              uint32_t               dimOfReshapeAndPermute,
+                                              const uint64_t*        reshape,
+                                              const uint32_t*        permute)
 {
     // Check if matmulDesc is valid
     if(matmulDesc == nullptr)
@@ -341,9 +344,13 @@ rocblaslt_status rocblaslt_matmul_desc_create(rocblaslt_matmul_desc* matmulDesc,
                 throw rocblaslt_status_invalid_value;
             }
 
-            *matmulDesc                 = new _rocblaslt_matmul_desc();
-            (*matmulDesc)->compute_type = computeType;
-            (*matmulDesc)->scale_type   = scaleType;
+            *matmulDesc                               = new _rocblaslt_matmul_desc();
+            (*matmulDesc)->compute_type               = computeType;
+            (*matmulDesc)->scale_type                 = scaleType;
+            (*matmulDesc)->dim_of_reshape_and_permute = dimOfReshapeAndPermute;
+            (*matmulDesc)->reshape                    = reshape;
+            (*matmulDesc)->permute                    = permute;
+
             log_api(__func__,
                     "matmulDesc[out]",
                     matmulDesc,

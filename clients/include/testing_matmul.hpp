@@ -120,6 +120,42 @@ void scaleD_func(
     }
 }
 
+template<typename To>
+void reshape_and_permute_func(host_vector<To>& hD_gold, int64_t M, int64_t N, int64_t B, uint32_t dim, const uint64_t* reshape, const uint32_t* permute)
+{
+    host_vector<To> tmp(hD_gold.size());
+
+#pragma omp parallel for
+    for(int j=0; j<M*N*B; j++)
+    {
+        int index = j;
+        To value = hD_gold[index];
+
+        std::vector<size_t> coord(dim);
+        for(int i=0; i<dim; i++)
+        {
+            coord[i] = index % reshape[i];
+            index    = index / reshape[i];
+        }
+
+        index = 0;
+        int ldd = 1;
+        for(int i=0; i<dim; i++)
+        {
+            index += coord[permute[i]] * ldd;
+            ldd *= reshape[permute[i]];
+        }
+        tmp[index] = value;
+    }
+
+#pragma omp parallel for
+    for(int i=0; i<M*N*B; i++)
+    {
+        hD_gold[i] = tmp[i];
+    }
+}
+
+
 auto _relu = [](auto in, auto /*arg1*/, auto /*arg2*/) -> decltype(in) {
     return static_cast<decltype(in)>(std::max(static_cast<decltype(in)>(0), in));
 };
@@ -166,7 +202,7 @@ void testing_matmul_bad_arg(const Arguments& arg)
     hipblaslt_local_matrix_layout matB(K, N, ldb, arg.b_type);
     hipblaslt_local_matrix_layout matC(M, N, ldc, arg.c_type);
     hipblaslt_local_matrix_layout matD(M, N, ldc, arg.d_type);
-    hipblaslt_local_matmul_descr  matmul(transA, transB, arg.compute_type, arg.scale_type);
+    hipblaslt_local_matmul_descr  matmul(transA, transB, arg.compute_type, arg.scale_type, arg.dim_of_reshape_and_permute, arg.reshape, arg.permute);
 
     size_t                     workspace_size = 0;
     hipblaslt_local_preference pref;
@@ -283,7 +319,7 @@ void testing_matmul(const Arguments& arg)
                 HIPBLAS_STATUS_SUCCESS);
         }
 
-        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&(matmul[i]), arg.compute_type, arg.scale_type));
+        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&(matmul[i]), arg.compute_type, arg.scale_type, arg.dim_of_reshape_and_permute, arg.reshape, arg.permute));
 
         CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(
             matmul[i], HIPBLASLT_MATMUL_DESC_TRANSA, &transA, sizeof(int32_t)));
@@ -674,6 +710,10 @@ void testing_matmul(const Arguments& arg)
                                             ldd[gemmIdx],
                                             false);
                 }
+            }
+            if (arg.dim_of_reshape_and_permute)
+            {
+                reshape_and_permute_func(*hD_gold[gemmIdx], M[gemmIdx], N[gemmIdx], num_batches[gemmIdx], arg.dim_of_reshape_and_permute, arg.reshape, arg.permute);
             }
         }
 

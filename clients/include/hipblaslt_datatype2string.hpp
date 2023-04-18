@@ -119,3 +119,27 @@ inline const char* hipblaslt_activation_type_to_string(hipblaslt_activation_type
         return "invalid";
     }
 }
+
+template <typename T>
+inline uint32_t string_to_hipblaslt_uint(T* dst, std::string value)
+{
+    int count = 0;
+    int pos = 0;
+
+    while((pos = value.find(",")) != std::string::npos)
+    {
+        std::string result = value.substr(0, pos);
+        dst[count] = std::stoi(result);
+        value.erase(0, pos+1);
+        count++;
+    }
+
+    if (value != "")
+    {
+        dst[count] = std::stoi(value);
+        count++;
+    }
+
+    return count;
+}
+

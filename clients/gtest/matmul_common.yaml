@@ -443,3 +443,7 @@ Definitions:
     - { M: 8976, N: 8, K: 528, lda: 8976, ldb: 528, ldc: 8976, ldd: 8976 }
     - { M: 8976, N: 8, K: 832, lda: 8976, ldb: 832, ldc: 8976, ldd: 8976 }
 
+  - &3d_reshape_and_permute_one_matrix_size_range
+    - { M: 128, N: 128, K: 1024, batch_count: 1, dim_of_reshape_and_permute: 3, reshape: {64,128,2,0,0,0,0,0,0,0,0,0,0,0,0,0}, permute: {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0} }
+    - { M: 300, N: 600, K: 1024, batch_count: 2, dim_of_reshape_and_permute: 3, reshape: {900,8,50,0,0,0,0,0,0,0,0,0,0,0,0,0}, permute: {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0} }
+

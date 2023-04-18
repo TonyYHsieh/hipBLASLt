@@ -1,4 +1,5 @@
 /*! \file */
+
 /* ************************************************************************
  *
  * MIT License
@@ -101,43 +102,50 @@ struct RocblasltContractionProblem
     void*              workspace;
     size_t             workspaceSize;
 
+    uint32_t dim_of_reshape_and_permute;
+    const uint64_t* reshape;
+    const uint32_t* permute;
+
     hipStream_t stream;
 
     // gemm_ex
     // gemm_strided_batched_ex
-    RocblasltContractionProblem(hipblasOperation_t trans_a,
-                                hipblasOperation_t trans_b,
-                                int64_t            m,
-                                int64_t            n,
-                                int64_t            k,
-                                const Tc*          alpha,
-                                const Ti*          A,
-                                const Ti* const*   batch_A,
-                                int64_t            ld_a,
-                                int64_t            batch_stride_a,
-                                const Ti*          B,
-                                const Ti* const*   batch_B,
-                                int64_t            ld_b,
-                                int64_t            batch_stride_b,
-                                const Tc*          beta,
-                                const To*          C,
-                                const To* const*   batch_C,
-                                int64_t            ld_c,
-                                int64_t            batch_stride_c,
-                                To*                D,
-                                To* const*         batch_D,
-                                int64_t            ld_d,
-                                int64_t            batch_stride_d,
-                                int64_t            batch_count,
-                                bool               strided_batch,
-                                bool               grouped_gemm,
-                                const void*        bias,
-                                const Tc*          scaleD,
-                                hipblasDatatype_t  bias_type,
-                                rocblaslt_epilogue epilogue,
-                                void*              workspace,
-                                size_t             workspaceSize,
-                                hipStream_t        stream)
+    RocblasltContractionProblem(hipblasOperation_t    trans_a,
+                                hipblasOperation_t    trans_b,
+                                int64_t               m,
+                                int64_t               n,
+                                int64_t               k,
+                                const Tc*             alpha,
+                                const Ti*             A,
+                                const Ti* const*      batch_A,
+                                int64_t               ld_a,
+                                int64_t               batch_stride_a,
+                                const Ti*             B,
+                                const Ti* const*      batch_B,
+                                int64_t               ld_b,
+                                int64_t               batch_stride_b,
+                                const Tc*             beta,
+                                const To*             C,
+                                const To* const*      batch_C,
+                                int64_t               ld_c,
+                                int64_t               batch_stride_c,
+                                To*                   D,
+                                To* const*            batch_D,
+                                int64_t               ld_d,
+                                int64_t               batch_stride_d,
+                                int64_t               batch_count,
+                                bool                  strided_batch,
+                                bool                  grouped_gemm,
+                                const void*           bias,
+                                const Tc*             scaleD,
+                                hipblasDatatype_t     bias_type,
+                                rocblaslt_epilogue    epilogue,
+                                void*                 workspace,
+                                size_t                workspaceSize,
+                                uint32_t              dim_of_reshape_and_permute,
+                                const uint64_t*       reshape,
+                                const uint32_t*       permute,
+                                hipStream_t           stream)
         : trans_a(trans_a)
         , trans_b(trans_b)
         , m(m)
@@ -174,6 +182,9 @@ struct RocblasltContractionProblem
         , epilogue(epilogue)
         , workspace(workspace)
         , workspaceSize(workspaceSize)
+        , reshape(reshape)
+        , dim_of_reshape_and_permute(dim_of_reshape_and_permute)
+        , permute(permute)
         , stream(stream)
     {
     }

@@ -101,6 +101,9 @@ Arguments:
   - scaleD_vector: c_bool
   - c_noalias_d: c_bool
   - HMM: c_bool
+  - dim_of_reshape_and_permute: c_uint32
+  - reshape: c_uint64*16
+  - permute: c_uint32*16
 
 # These named dictionary lists [ {dict1}, {dict2}, etc. ] supply subsets of
 # test arguments in a structured way. The dictionaries are applied to the test
@@ -173,3 +176,6 @@ Defaults:
   bias_vector: false
   scaleD_vector: false
   grouped_gemm: 0
+  dim_of_reshape_and_permute: 0
+  reshape: {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}
+  permute: {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}

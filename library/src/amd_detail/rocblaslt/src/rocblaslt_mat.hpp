@@ -64,6 +64,9 @@ rocblaslt_status rocblaslt_batched_template(rocblaslt_handle             handle,
                                             const Tc*                    scaleD,
                                             hipblasDatatype_t            bias_type,
                                             rocblaslt_epilogue           epilogue,
+                                            uint32_t                     dim_of_reshape_and_permute,
+                                            const uint64_t*              reshape,
+                                            const uint32_t*              permute,
                                             hipStream_t                  stream)
 {
     workspaceSizeInBytes = min(workspaceSizeInBytes, algo->max_workspace_bytes);
@@ -99,6 +102,9 @@ rocblaslt_status rocblaslt_batched_template(rocblaslt_handle             handle,
                                                     epilogue,
                                                     workspace,
                                                     workspaceSizeInBytes,
+                                                    dim_of_reshape_and_permute,
+                                                    reshape,
+                                                    permute,
                                                     stream};
     return runContractionProblem(handle, algo, problem);
 }
@@ -125,12 +131,15 @@ rocblaslt_status rocblaslt_groupedgemm_create_batched_template(rocblaslt_grouped
                                             std::vector<int64_t>&                      ld_d,
                                             std::vector<int64_t>&                      batch_stride_d,
                                             std::vector<int64_t>&                      batch_count,
-                                            bool                         strided_batch,
-                                            bool                         grouped_gemm,
+                                            bool                                       strided_batch,
+                                            bool                                       grouped_gemm,
                                             std::vector<const void*>&                  bias,
                                             std::vector<const Tc*>&                    scaleD,
                                             std::vector<hipblasDatatype_t>&            bias_type,
-                                            std::vector<rocblaslt_epilogue>&           epilogue)
+                                            std::vector<rocblaslt_epilogue>&           epilogue,
+                                            std::vector<uint32_t>                      dim_of_reshape_and_permute,
+                                            std::vector<const uint64_t*>               reshape,
+                                            std::vector<const uint32_t*>               permute)
 {
     std::vector<RocblasltContractionProblem<Ti, To, Tc>> problems;
 
@@ -167,6 +176,9 @@ rocblaslt_status rocblaslt_groupedgemm_create_batched_template(rocblaslt_grouped
                                                                     epilogue[i],
                                                                     nullptr,
                                                                     0,
+                                                                    dim_of_reshape_and_permute[i],
+                                                                    reshape[i],
+                                                                    permute[i],
                                                                     0});
     }
     return groupedGemmCreate(groupedgemm, problems);
@@ -203,6 +215,9 @@ rocblaslt_status rocblaslt_matmul_typecasting(rocblaslt_handle             handl
                                               const void*                  scaleD,
                                               hipblasDatatype_t            bias_type,
                                               rocblaslt_epilogue           epilogue,
+                                              uint32_t                     dim_of_reshape_and_permute,
+                                              const uint64_t*              reshape,
+                                              const uint32_t*              permute,
                                               hipStream_t                  stream)
 {
     // check alignment of pointers before casting
@@ -242,6 +257,9 @@ rocblaslt_status rocblaslt_matmul_typecasting(rocblaslt_handle             handl
                                       reinterpret_cast<const Tc*>(scaleD),
                                       bias_type,
                                       epilogue,
+                                      dim_of_reshape_and_permute,
+                                      reshape,
+                                      permute,
                                       stream);
 }
 
@@ -272,7 +290,10 @@ rocblaslt_status rocblaslt_groupedgemm_create_typecasting(rocblaslt_groupedgemm 
                                                           std::vector<const void*>&        bias,
                                                           std::vector<const void*>&        scaleD,
                                                           std::vector<hipblasDatatype_t>&  bias_type,
-                                                          std::vector<rocblaslt_epilogue>& epilogue)
+                                                          std::vector<rocblaslt_epilogue>& epilogue,
+                                                          std::vector<uint32_t>            dim_of_reshape_and_permute,
+                                                          std::vector<const uint64_t*>     reshape,
+                                                          std::vector<const uint32_t*>     permute)
 {
     std::vector<const Tc*> groupedAlpha, groupedBeta;
     std::vector<const Ti*> groupedA, groupedB;
@@ -316,7 +337,10 @@ rocblaslt_status rocblaslt_groupedgemm_create_typecasting(rocblaslt_groupedgemm 
                                       bias,
                                       groupedScaleD,
                                       bias_type,
-                                      epilogue);
+                                      epilogue,
+                                      dim_of_reshape_and_permute,
+                                      reshape,
+                                      permute);
 }
 
 inline rocblaslt_status rocblaslt_matmul_template(rocblaslt_handle             handle,
@@ -354,6 +378,9 @@ inline rocblaslt_status rocblaslt_matmul_template(rocblaslt_handle             h
                                                   const void*                  scaleD,
                                                   hipblasDatatype_t            bias_type,
                                                   rocblaslt_epilogue           epilogue,
+                                                  uint32_t                     dim_of_reshape_and_permute,
+                                                  const uint64_t*              reshape,
+                                                  const uint32_t*              permute,
                                                   hipStream_t                  stream)
 {
     rocblaslt_status rs_status = rocblaslt_status_not_implemented;
@@ -362,7 +389,8 @@ inline rocblaslt_status rocblaslt_matmul_template(rocblaslt_handle             h
     handle, trans_a, trans_b, m, n, k, alpha, a, ld_a, batch_stride_a, b, ld_b, \
         batch_stride_b, beta, c, ld_c, batch_stride_c, d, ld_d,       \
         batch_stride_d, batch_count, strided_batch, grouped_gemm, algo, workspace,            \
-        workspaceSizeInBytes, bias, scaleD, bias_type, epilogue, stream
+        workspaceSizeInBytes, bias, scaleD, bias_type, epilogue, \
+        dim_of_reshape_and_permute, reshape, permute,  stream
 
     if(a_type == HIPBLAS_R_32F && b_type == HIPBLAS_R_32F)
     {
@@ -405,38 +433,41 @@ inline rocblaslt_status rocblaslt_matmul_template(rocblaslt_handle             h
     return rs_status;
 }
 
-inline rocblaslt_status rocblaslt_groupedgemm_create_template(rocblaslt_groupedgemm                      groupedgemm,
-                                                              hipblasOperation_t           trans_a,
-                                                              hipblasOperation_t           trans_b,
-                                                              std::vector<int64_t>&                      m,
-                                                              std::vector<int64_t>&                      n,
-                                                              std::vector<int64_t>&                      k,
-                                                              std::vector<const void*>&                  alpha,
-                                                              std::vector<const void*>&                  a,
-                                                              hipblasDatatype_t            a_type,
-                                                              std::vector<int64_t>&                      ld_a,
-                                                              std::vector<int64_t>&                      batch_stride_a,
-                                                              std::vector<const void*>&                  b,
-                                                              hipblasDatatype_t            b_type,
-                                                              std::vector<int64_t>&                      ld_b,
-                                                              std::vector<int64_t>&                      batch_stride_b,
-                                                              std::vector<const void*>&                  beta,
-                                                              std::vector<const void*>&                  c,
-                                                              hipblasDatatype_t            c_type,
-                                                              std::vector<int64_t>&                      ld_c,
-                                                              std::vector<int64_t>&                      batch_stride_c,
-                                                              std::vector<void*>&                        d,
-                                                              hipblasDatatype_t            d_type,
-                                                              std::vector<int64_t>&                      ld_d,
-                                                              std::vector<int64_t>&                      batch_stride_d,
-                                                              std::vector<int64_t>&                      batch_count,
-                                                              bool                         strided_batch,
-                                                              bool                         grouped_gemm,
-                                                              rocblaslt_compute_type       compute_type,
-                                                              std::vector<const void*>&                  bias,
-                                                              std::vector<const void*>&                  scaleD,
-                                                              std::vector<hipblasDatatype_t>&            bias_type,
-                                                              std::vector<rocblaslt_epilogue>&           epilogue)
+inline rocblaslt_status rocblaslt_groupedgemm_create_template(rocblaslt_groupedgemm            groupedgemm,
+                                                              hipblasOperation_t               trans_a,
+                                                              hipblasOperation_t               trans_b,
+                                                              std::vector<int64_t>&            m,
+                                                              std::vector<int64_t>&            n,
+                                                              std::vector<int64_t>&            k,
+                                                              std::vector<const void*>&        alpha,
+                                                              std::vector<const void*>&        a,
+                                                              hipblasDatatype_t                a_type,
+                                                              std::vector<int64_t>&            ld_a,
+                                                              std::vector<int64_t>&            batch_stride_a,
+                                                              std::vector<const void*>&        b,
+                                                              hipblasDatatype_t                b_type,
+                                                              std::vector<int64_t>&            ld_b,
+                                                              std::vector<int64_t>&            batch_stride_b,
+                                                              std::vector<const void*>&        beta,
+                                                              std::vector<const void*>&        c,
+                                                              hipblasDatatype_t                c_type,
+                                                              std::vector<int64_t>&            ld_c,
+                                                              std::vector<int64_t>&            batch_stride_c,
+                                                              std::vector<void*>&              d,
+                                                              hipblasDatatype_t                d_type,
+                                                              std::vector<int64_t>&            ld_d,
+                                                              std::vector<int64_t>&            batch_stride_d,
+                                                              std::vector<int64_t>&            batch_count,
+                                                              bool                             strided_batch,
+                                                              bool                             grouped_gemm,
+                                                              rocblaslt_compute_type           compute_type,
+                                                              std::vector<const void*>&        bias,
+                                                              std::vector<const void*>&        scaleD,
+                                                              std::vector<hipblasDatatype_t>&  bias_type,
+                                                              std::vector<rocblaslt_epilogue>& epilogue,
+                                                              std::vector<uint32_t>            dim_of_reshape_and_permute,
+                                                              std::vector<const uint64_t*>     reshape,
+                                                              std::vector<const uint32_t*>     permute)
 {
     rocblaslt_status rs_status = rocblaslt_status_not_implemented;
 
@@ -444,7 +475,7 @@ inline rocblaslt_status rocblaslt_groupedgemm_create_template(rocblaslt_groupedg
         groupedgemm, trans_a, trans_b, m, n, k, alpha, a, ld_a, batch_stride_a, b, ld_b, \
         batch_stride_b, beta, c, ld_c, batch_stride_c, d, ld_d,       \
         batch_stride_d, batch_count, strided_batch, grouped_gemm,             \
-        bias, scaleD, bias_type, epilogue
+        bias, scaleD, bias_type, epilogue, dim_of_reshape_and_permute, reshape, permute
 
     if(a_type == HIPBLAS_R_32F && b_type == HIPBLAS_R_32F)
     {

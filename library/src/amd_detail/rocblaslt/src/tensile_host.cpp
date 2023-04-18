@@ -253,6 +253,9 @@ namespace
         Tensile::TensorDescriptor bias{"bias"};
         Tensile::TensorDescriptor scaleD{"scaleD"};
 
+        Tensile::TensorDescriptor reshape{"reshape", Tensile_To, &prob.reshape[0], &prob.reshape[prob.dim_of_reshape_and_permute]};
+        std::vector<size_t> permute(&prob.permute[0], &prob.permute[prob.dim_of_reshape_and_permute]);
+
         // The ContractionProblemGemm
         Tensile::ContractionProblemGemm tensileProblem{a,
                                                        b,
@@ -261,6 +264,8 @@ namespace
                                                        e,
                                                        bias,
                                                        scaleD,
+                                                       reshape,
+                                                       permute,
                                                        freeIndex,
                                                        batchIndex,
                                                        boundIndex,
@@ -318,6 +323,7 @@ namespace
             break;
         }
         tensileProblem.setActivationEnumArg(tensileAct);
+        tensileProblem.setUseReshapeAndPermute(prob.dim_of_reshape_and_permute);
 
         return tensileProblem;
     }
@@ -382,6 +388,13 @@ namespace
         tensileProblem.resizeTensor(Tensile::ContractionProblemGemm::TENSOR::D,
                                     {prob.m, prob.n, prob.batch_count},
                                     {prob.row_stride_d, prob.col_stride_d, prob.batch_stride_d});
+
+        tensileProblem.resizeTensor(Tensile::ContractionProblemGemm::TENSOR::RESHAPE,
+                                    &prob.reshape[0],
+                                    &prob.reshape[prob.dim_of_reshape_and_permute]);
+        std::vector<size_t> tensile_permute(&prob.permute[0], &prob.permute[prob.dim_of_reshape_and_permute]);
+        tensileProblem.setPermute(std::vector<size_t>(&prob.permute[0], &prob.permute[prob.dim_of_reshape_and_permute]));
+        tensileProblem.setUseReshapeAndPermute(prob.dim_of_reshape_and_permute);
 
         tensileProblem.setAlphaType(Tensile_Tc);
         tensileProblem.setBetaType(Tensile_Tc);
@@ -1102,6 +1115,10 @@ RocblasltContractionProblem<Ti, To, Tc>
     int64_t n = num_cols_d;
     int64_t k = (opA == HIPBLAS_OP_N) ? num_cols_a : num_rows_a;
 
+    uint32_t  dim_of_reshape_and_permute = matmul_descr->dim_of_reshape_and_permute;
+    const uint64_t* reshape = matmul_descr->reshape;
+    const uint32_t* permute = matmul_descr->permute;
+
     int8_t      dummy;
     const void* dummy_ptr = &dummy;
     auto        validArgs = validateMatmulArgs(m,
@@ -1159,6 +1176,9 @@ RocblasltContractionProblem<Ti, To, Tc>
                                                     epilogue,
                                                     nullptr,
                                                     maxWorkSpaceBytes,
+                                                    dim_of_reshape_and_permute,
+                                                    reshape,
+                                                    permute,
                                                     nullptr};
     return problem;
 }

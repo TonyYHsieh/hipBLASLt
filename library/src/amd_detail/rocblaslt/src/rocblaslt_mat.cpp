@@ -106,6 +106,10 @@ rocblaslt_status rocblaslt_matmul_impl(const rocblaslt_handle       handle,
     int64_t n = num_cols_d;
     int64_t k = (opA == HIPBLAS_OP_N) ? num_cols_a : num_rows_a;
 
+    const uint32_t  dim_of_reshape_and_permute = matmul_descr->dim_of_reshape_and_permute;
+    const uint64_t* reshape = matmul_descr->reshape;
+    const uint32_t* permute = matmul_descr->permute;
+
     auto validArgs = validateMatmulArgs(m,
                                         n,
                                         k,
@@ -133,7 +137,8 @@ rocblaslt_status rocblaslt_matmul_impl(const rocblaslt_handle       handle,
     handle, opA, opB, m, n, k, alpha, A, type_a, lda, batch_stride_a, B, type_b, ldb, \
         batch_stride_b, beta, C, type_c, ldc, batch_stride_c, D, type_d, ldd,      \
         batch_stride_d, num_batches_a, strided_batch, grouped_gemm, compute_type, algo, workspace,           \
-        workspaceSizeInBytes, bias, scaleD, bias_type, epilogue, stream
+        workspaceSizeInBytes, bias, scaleD, bias_type, epilogue, \
+        dim_of_reshape_and_permute, reshape, permute, stream
 
     return rocblaslt_matmul_template(EX_PARM);
 }
@@ -170,6 +175,9 @@ rocblaslt_status rocblaslt_groupedgemm_create_impl(rocblaslt_groupedgemm        
     std::vector<int64_t> ldb_vec, batch_stride_b_vec, num_batches_b_vec;
     std::vector<int64_t> ldc_vec, batch_stride_c_vec, num_batches_c_vec;
     std::vector<int64_t> ldd_vec, batch_stride_d_vec, num_batches_d_vec;
+    std::vector<uint32_t> dim_of_reshape_and_permute;
+    std::vector<const uint64_t*> reshape;
+    std::vector<const uint32_t*> permute;
 
     for(int i = 0; i < matmul_descr.size(); i++){
         const void*            bias         = nullptr;
@@ -276,6 +284,9 @@ rocblaslt_status rocblaslt_groupedgemm_create_impl(rocblaslt_groupedgemm        
         D_vec.push_back(D[i]);
         alpha_vec.push_back(alpha[i]);
         beta_vec.push_back(beta[i]);
+        dim_of_reshape_and_permute.push_back(matmul_descr[i]->dim_of_reshape_and_permute);
+        reshape.push_back(matmul_descr[i]->reshape);
+        permute.push_back(matmul_descr[i]->permute);
     }
 
     bool strided_batch = true;
@@ -285,7 +296,7 @@ rocblaslt_status rocblaslt_groupedgemm_create_impl(rocblaslt_groupedgemm        
         groupedgemm, opA, opB, m_vec, n_vec, k_vec, alpha_vec, A_vec, type_a, lda_vec, batch_stride_a_vec, B_vec, type_b, ldb_vec, \
         batch_stride_b_vec, beta_vec, C_vec, type_c, ldc_vec, batch_stride_c_vec, D_vec, type_d, ldd_vec,      \
         batch_stride_d_vec, num_batches_a_vec, strided_batch, grouped_gemm, compute_type,           \
-        bias_vec, scaleD_vec, bias_type_vec, epilogue_vec
+        bias_vec, scaleD_vec, bias_type_vec, epilogue_vec, dim_of_reshape_and_permute, reshape, permute
 
     return rocblaslt_groupedgemm_create_template(EX_PARM_GroupedGemm);
 }

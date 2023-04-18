@@ -577,4 +577,19 @@ Tests:
   beta: [ 0.0, 2.0 ]
   unit_check: 1
 
+- name: matmul_3d_reshape_and_permute
+  category: quick
+  function:
+    matmul: *hpa_half_precision
+  matrix_size: *3d_reshape_and_permute_one_matrix_size_range
+  transA_transB: *transA_transB_range
+  alpha: [ 1.0 ]
+  beta: [ 0.0]
+  activation_type: relu
+  bias_vector: [1]
+  bias_type: [default]
+  scaleD_vector: 1
+  unit_check: 1
+  norm_check: 1
+
 ...

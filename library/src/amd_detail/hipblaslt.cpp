@@ -171,11 +171,14 @@ catch(...)
 
 hipblasStatus_t hipblasLtMatmulDescCreate(hipblasLtMatmulDesc_t* matmulDesc,
                                           hipblasLtComputeType_t computeType,
-                                          hipblasDatatype_t      scaleType)
+                                          hipblasDatatype_t      scaleType,
+                                          uint32_t               dimOfReshapeAndPermute,
+                                          const uint64_t*        reshape,
+                                          const uint32_t*        permute)
 try
 {
     return RocBlasLtStatusToHIPStatus(rocblaslt_matmul_desc_create(
-        (rocblaslt_matmul_desc*)matmulDesc, (rocblaslt_compute_type)computeType, scaleType));
+        (rocblaslt_matmul_desc*)matmulDesc, (rocblaslt_compute_type)computeType, scaleType, dimOfReshapeAndPermute, reshape, permute));
 }
 catch(...)
 {

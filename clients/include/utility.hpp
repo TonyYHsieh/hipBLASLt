@@ -194,9 +194,12 @@ public:
     hipblaslt_local_matmul_descr(hipblasOperation_t     opA,
                                  hipblasOperation_t     opB,
                                  hipblasLtComputeType_t compute_type,
-                                 hipblasDatatype_t      scale_type)
+                                 hipblasDatatype_t      scale_type,
+                                 uint32_t               dim_of_reshape_and_permute=0,
+                                 const uint64_t*        reshape=nullptr,
+                                 const uint32_t*        permute=nullptr)
     {
-        this->m_status = hipblasLtMatmulDescCreate(&this->m_descr, compute_type, scale_type);
+        this->m_status = hipblasLtMatmulDescCreate(&this->m_descr, compute_type, scale_type, dim_of_reshape_and_permute, reshape, permute);
 
         hipblasLtMatmulDescSetAttribute(
             this->m_descr, HIPBLASLT_MATMUL_DESC_TRANSA, &opA, sizeof(int32_t));
