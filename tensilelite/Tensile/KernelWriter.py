@@ -3350,9 +3350,8 @@ class KernelWriter(metaclass=abc.ABCMeta):
       self.defineSgpr("AddressDbg", self.states.numSgprAddressDbg)
       self.defineSgpr("DebugKernelItems", 1)
 
-    if self.states.doShadowInit and kernel["BufferStore"]:
-      self.defineSgpr("SrdD", 4, 4)
-      self.defineSgpr("SrdC", 4, 4)
+    self.defineSgpr("SrdD", 4, 4)
+    self.defineSgpr("SrdC", 4, 4)
 
     if kernel["ProblemType"]["UseScaleD"] and (kernel["GlobalSplitU"] == 1):
       self.defineSgpr("SrdScaleD", 4, 4)# asm input interface
