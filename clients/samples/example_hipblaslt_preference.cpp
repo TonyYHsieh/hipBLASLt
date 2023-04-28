@@ -35,6 +35,7 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 #ifndef CHECK_HIP_ERROR
 #define CHECK_HIP_ERROR(error)                    \
@@ -187,7 +188,9 @@ void mat_mul_bias_activation(Tc             alpha,
                              int            Ds3,
                              To*            bias,
                              Tc*            scaleD,
-                             ActivationType actType)
+                             ActivationType actType,
+                             std::vector<uint64_t>& reshape,
+                             std::vector<uint32_t>& permute)
 {
     std::function<Tc(Tc)> actFunc;
     if(actType == ActivationType::RELU)
@@ -212,7 +215,27 @@ void mat_mul_bias_activation(Tc             alpha,
                 if(actType != ActivationType::NONE)
                     t = actFunc(t);
                 t                                    = t * (scaleD == nullptr ? 1.0 : scaleD[i1]);
-                D[i1 * Ds1 + i2 * Ds2 + batch * Ds3] = static_cast<To>(t);
+
+                uint32_t index = i1 * Ds1 + i2 * Ds2 + batch * Ds3;
+                if (reshape.size() > 0)
+                {
+                    uint32_t dim = reshape.size();
+                    std::vector<uint32_t> coord(dim);
+                    for(int i=0; i<dim; i++)
+                    {
+                        coord[i] = index % reshape[i];
+                        index    = index / reshape[i];
+                    }
+
+                    index = 0;
+                    int ldd = 1;
+                    for(int i=0; i<dim; i++)
+                    {
+                        index += coord[permute[i]] * ldd;
+                        ldd *= reshape[permute[i]];
+                    }
+                }
+                D[index] = static_cast<To>(t);
             }
         }
     }
@@ -272,38 +295,67 @@ static void show_usage(char* argv[])
                  "(default is 3)\n"
               << "\t--cold_iters \t\tcold_iters \tCold Iterations to run "
                  "before entering the timing loop (default is 0)\n"
+              << "\t--reshape\t\treshape \tconvert shape of D t new shape\n"
+              << "\t--permute\t\tpermute \tpermute D's new shape\n"
               << std::endl;
 }
 
-static int parse_arguments(int                 argc,
-                           char*               argv[],
-                           hipblasDatatype_t&  in_out_datatype,
-                           int64_t&            m,
-                           int64_t&            n,
-                           int64_t&            k,
-                           int64_t&            lda,
-                           int64_t&            ldb,
-                           int64_t&            ldc,
-                           int64_t&            ldd,
-                           int64_t&            stride_a,
-                           int64_t&            stride_b,
-                           int64_t&            stride_c,
-                           int64_t&            stride_d,
-                           int32_t&            batch_count,
-                           float&              alpha,
-                           float&              beta,
-                           hipblasOperation_t& trans_a,
-                           hipblasOperation_t& trans_b,
-                           bool&               enable_bias,
-                           bool&               enable_scaleD,
-                           ActivationType&     actType,
-                           bool&               header,
-                           bool&               verbose,
-                           bool&               validate,
-                           bool&               timing,
-                           int32_t&            request_solutions,
-                           int32_t&            bench_loop_count,
-                           int32_t&            cold_loop_count)
+template <typename T>
+uint32_t cstring_to_int_vector(std::vector<T>& dst, char* src)
+{
+    std::string value = src;
+
+    int count = 0;
+    int pos = 0;
+
+    while((pos = value.find(",")) != std::string::npos)
+    {
+        std::string result = value.substr(0, pos);
+        dst.push_back(std::stoi(result));
+        value.erase(0, pos+1);
+        count++;
+    }
+
+    if (value != "")
+    {
+        dst.push_back(std::stoi(value));
+        count++;
+    }
+
+    return count;
+}
+
+static int parse_arguments(int                    argc,
+                           char*                  argv[],
+                           hipblasDatatype_t&     in_out_datatype,
+                           int64_t&               m,
+                           int64_t&               n,
+                           int64_t&               k,
+                           int64_t&               lda,
+                           int64_t&               ldb,
+                           int64_t&               ldc,
+                           int64_t&               ldd,
+                           int64_t&               stride_a,
+                           int64_t&               stride_b,
+                           int64_t&               stride_c,
+                           int64_t&               stride_d,
+                           int32_t&               batch_count,
+                           float&                 alpha,
+                           float&                 beta,
+                           hipblasOperation_t&    trans_a,
+                           hipblasOperation_t&    trans_b,
+                           bool&                  enable_bias,
+                           bool&                  enable_scaleD,
+                           ActivationType&        actType,
+                           bool&                  header,
+                           bool&                  verbose,
+                           bool&                  validate,
+                           bool&                  timing,
+                           int32_t&               request_solutions,
+                           int32_t&               bench_loop_count,
+                           int32_t&               cold_loop_count,
+                           std::vector<uint64_t>& reshape,
+                           std::vector<uint32_t>& permute)
 {
     if(argc >= 2)
     {
@@ -487,6 +539,14 @@ static int parse_arguments(int                 argc,
                 {
                     cold_loop_count = atoi(argv[++i]);
                 }
+		else if((arg == "--reshape") && (i + 1 < argc))
+		{
+                    cstring_to_int_vector(reshape, argv[++i]);
+		}
+		else if((arg == "--permute") && (i + 1 < argc))
+		{
+                    cstring_to_int_vector(permute, argv[++i]);
+		}
                 else
                 {
                     std::cerr << "error with " << arg << std::endl;
@@ -505,20 +565,22 @@ static int parse_arguments(int                 argc,
     return EXIT_SUCCESS;
 }
 
-bool bad_argument(hipblasOperation_t trans_a,
-                  hipblasOperation_t trans_b,
-                  int64_t            m,
-                  int64_t            n,
-                  int64_t            k,
-                  int64_t            lda,
-                  int64_t            ldb,
-                  int64_t            ldc,
-                  int64_t            ldd,
-                  int64_t            stride_a,
-                  int64_t            stride_b,
-                  int64_t            stride_c,
-                  int64_t            stride_d,
-                  int32_t            batch_count)
+bool bad_argument(hipblasOperation_t     trans_a,
+                  hipblasOperation_t     trans_b,
+                  int64_t                m,
+                  int64_t                n,
+                  int64_t                k,
+                  int64_t                lda,
+                  int64_t                ldb,
+                  int64_t                ldc,
+                  int64_t                ldd,
+                  int64_t                stride_a,
+                  int64_t                stride_b,
+                  int64_t                stride_c,
+                  int64_t                stride_d,
+                  int32_t                batch_count,
+                  std::vector<uint64_t>& reshape,
+                  std::vector<uint32_t>& permute)
 {
     bool argument_error = false;
     if((trans_a == HIPBLAS_OP_N) && (lda < m))
@@ -575,6 +637,37 @@ bool bad_argument(hipblasOperation_t trans_a,
     {
         argument_error = true;
         std::cerr << "ERROR: bad argument batch_count = " << batch_count << std::endl;
+    }
+    if(reshape.size() != permute.size())
+    {
+        argument_error = true;
+        std::cerr << "ERROR: bad argument reshape and permute = " << batch_count << std::endl;
+    }
+
+    // check reshape
+    if (reshape.size() > 0)
+    {
+        uint64_t total = 1;
+        for(int i=0; i<reshape.size(); i++)
+            total *= reshape[i];
+        if (total != (m * n * batch_count))
+        {
+            argument_error = true;
+            std::cerr << "ERROR: bad argument reshape = " << batch_count << std::endl;
+        }
+    }
+
+    // check permute
+    std::vector<uint32_t> tmp = permute;
+    std::sort(tmp.begin(), tmp.end());
+    for(int i=0; i<tmp.size(); i++)
+    {
+        if (i != tmp[i])
+        {
+            argument_error = true;
+            std::cerr << "ERROR: bad argument permute = " << batch_count << std::endl;
+            break;
+        }
     }
 
     return argument_error;
@@ -641,7 +734,9 @@ void test_hipblaslt(hipblasDatatype_t  in_out_datatype,
                     bool               timing,
                     int32_t            request_solutions,
                     int32_t            bench_loop_count,
-                    int32_t            cold_loop_count)
+                    int32_t            cold_loop_count,
+                    std::vector<uint64_t>& reshape,
+                    std::vector<uint32_t>& permute)
 {
     int64_t     a_stride_1, a_stride_2, b_stride_1, b_stride_2;
     int64_t     row_a, col_a, row_b, col_b, row_c, col_c;
@@ -763,7 +858,7 @@ void test_hipblaslt(hipblasDatatype_t  in_out_datatype,
             matD, HIPBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, &stride_d, sizeof(stride_d)));
     }
 
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&matmul, HIPBLASLT_COMPUTE_F32, HIPBLAS_R_32F));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&matmul, HIPBLASLT_COMPUTE_F32, HIPBLAS_R_32F, reshape.size(), reshape.data(), permute.data()));
 
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(
         matmul, HIPBLASLT_MATMUL_DESC_TRANSA, &trans_a, sizeof(int32_t)));
@@ -1006,7 +1101,9 @@ void test_hipblaslt(hipblasDatatype_t  in_out_datatype,
                                              stride_d,
                                              bias_ptr,
                                              scaleD_ptr,
-                                             actType);
+                                             actType,
+                                             reshape,
+                                             permute);
 
         bool passed = true;
         for(int i = 0; i < size_c; i++)
@@ -1118,6 +1215,9 @@ int main(int argc, char* argv[])
     bool validate = false;
     bool timing   = true;
 
+    std::vector<uint64_t> reshape;
+    std::vector<uint32_t> permute;
+
     if(parse_arguments(argc,
                        argv,
                        in_out_datatype,
@@ -1146,7 +1246,15 @@ int main(int argc, char* argv[])
                        timing,
                        request_solutions,
                        bench_loop_count,
-                       cold_loop_count))
+                       cold_loop_count,
+                       reshape,
+                       permute))
+    {
+        show_usage(argv);
+        return EXIT_FAILURE;
+    }
+
+    if (reshape.size() != permute.size())
     {
         show_usage(argv);
         return EXIT_FAILURE;
@@ -1195,7 +1303,9 @@ int main(int argc, char* argv[])
                     stride_b,
                     stride_c,
                     stride_d,
-                    batch_count))
+                    batch_count,
+                    reshape,
+                    permute))
     {
         show_usage(argv);
         return EXIT_FAILURE;
@@ -1238,7 +1348,9 @@ int main(int argc, char* argv[])
                                        timing,
                                        request_solutions,
                                        bench_loop_count,
-                                       cold_loop_count);
+                                       cold_loop_count,
+                                       reshape,
+                                       permute);
     else if(in_out_datatype == HIPBLAS_R_16F)
         test_hipblaslt<hipblasLtHalf>(in_out_datatype,
                                       trans_a,
@@ -1265,7 +1377,9 @@ int main(int argc, char* argv[])
                                       timing,
                                       request_solutions,
                                       bench_loop_count,
-                                      cold_loop_count);
+                                      cold_loop_count,
+                                      reshape,
+                                      permute);
     else if(in_out_datatype == HIPBLAS_R_16B)
         test_hipblaslt<hipblasLtBfloat16>(in_out_datatype,
                                           trans_a,
@@ -1292,7 +1406,9 @@ int main(int argc, char* argv[])
                                           timing,
                                           request_solutions,
                                           bench_loop_count,
-                                          cold_loop_count);
+                                          cold_loop_count,
+                                          reshape,
+                                          permute);
 
     return EXIT_SUCCESS;
 }

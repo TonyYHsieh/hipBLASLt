@@ -183,7 +183,9 @@ void mat_mul_bias_activation(Tc             alpha,
                              int            Ds3,
                              To*            bias,
                              Tc*            scaleD,
-                             ActivationType actType)
+                             ActivationType actType,
+                             std::vector<uint64_t>& reshape,
+                             std::vector<uint32_t>& permute)
 {
     std::function<Tc(Tc)> actFunc;
     if(actType == ActivationType::RELU)
@@ -208,7 +210,26 @@ void mat_mul_bias_activation(Tc             alpha,
                 if(actType != ActivationType::NONE)
                     t = actFunc(t);
                 t                                    = t * (scaleD == nullptr ? 1.0 : scaleD[i1]);
-                D[i1 * Ds1 + i2 * Ds2 + batch * Ds3] = static_cast<To>(t);
+                uint32_t index = i1 * Ds1 + i2 * Ds2 + batch * Ds3;
+                if (reshape.size() > 0)
+                {
+                    uint32_t dim = reshape.size();
+                    std::vector<uint32_t> coord(dim);
+                    for(int i=0; i<dim; i++)
+                    {
+                        coord[i] = index % reshape[i];
+                        index    = index / reshape[i];
+                    }
+
+                    index = 0;
+                    int ldd = 1;
+                    for(int i=0; i<dim; i++)
+                    {
+                        index += coord[permute[i]] * ldd;
+                        ldd *= reshape[permute[i]];
+                    }
+                }
+                D[index] = static_cast<To>(t);
             }
         }
     }
@@ -272,40 +293,114 @@ static void show_usage(char* argv[])
               << "\t--act \t\t\tact \t\tGEMM_STRIDED set activation type: relu, gelu, none (default is none)\n"
               << "\t--bias \t\t\tbias \t\tGEMM_STRIDED set bias: 0 or 1 (default is 0)\n"
               << "\t--scaleD \t\tscaleD \t\tGEMM_STRIDED enable scaleD: 0 or 1 (default is 0)\n"
+              << "\t--reshape\t\treshape \tconvert shape of D t new shape\n"
+              << "\t--permute\t\tpermute \tpermute D's new shape\n"
               << "\t--cpu_time \t\tcpu_time \tBechmark timing using cpu time: 0 or 1 (default is 0)\n"
               << std::endl;
 }
 
-static int parse_arguments(int                 argc,
-                           char*               argv[],
-                           hipblasDatatype_t&  in_out_datatype,
-                           std::vector<int64_t>&            m,
-                           std::vector<int64_t>&            n,
-                           std::vector<int64_t>&            k,
-                           std::vector<int64_t>&            lda,
-                           std::vector<int64_t>&            ldb,
-                           std::vector<int64_t>&            ldc,
-                           std::vector<int64_t>&            ldd,
-                           std::vector<int64_t>&            stride_a,
-                           std::vector<int64_t>&            stride_b,
-                           std::vector<int64_t>&            stride_c,
-                           std::vector<int64_t>&            stride_d,
-                           std::vector<int32_t>&            batch_count,
-                           std::vector<float>&              alpha,
-                           std::vector<float>&              beta,
-                           hipblasOperation_t& trans_a,
-                           hipblasOperation_t& trans_b,
-                           std::vector<bool>&               enable_bias,
-                           std::vector<bool>&               enable_scaleD,
-                           std::vector<ActivationType>&     actType,
-                           int32_t&            grouped_gemm,
-                           int32_t&            bench_count,
-                           int32_t&            sync_count,
-                           int32_t&            request_solutions,
-                           int32_t&            num_streams,
-                           bool&               verbose,
-                           bool&               validate,
-                           bool&               cpu_time)
+template <typename T>
+uint32_t cstring_to_int_vector(std::vector<T>& dst, char* src)
+{
+    std::string value = src;
+
+    int count = 0;
+    int pos = 0;
+
+    while((pos = value.find(",")) != std::string::npos)
+    {
+        std::string result = value.substr(0, pos);
+        dst.push_back(std::stoi(result));
+        value.erase(0, pos+1);
+        count++;
+    }
+
+    if (value != "")
+    {
+        dst.push_back(std::stoi(value));
+        count++;
+    }
+
+    return count;
+}
+
+template <typename T>
+uint64_t multiplication_of_vector(const std::vector<T>& vector)
+{
+    if (vector.size() == 0)
+        return 0;
+
+    uint64_t size = 1;
+    for(int i=0; i<vector.size(); i++)
+        size *= vector[i];
+
+    return size;
+}
+
+template <typename T>
+bool verify_permute(std::vector<T> permute)
+{
+    std::sort(permute.begin(), permute.end());
+    for(int i=0; i<permute.size(); i++)
+    {
+        if(i != permute[i])
+            return false;
+    }
+
+    return true;
+}
+
+bool check_reshape_and_permute(std::vector<std::vector<uint64_t>>& reshape, std::vector<std::vector<uint32_t>>& permute)
+{
+    size_t dim = reshape.size() ? reshape[0].size() : 0;
+
+    for (size_t i=0; i<reshape.size(); i++)
+    {
+        if (dim != reshape[i].size())
+            return false;
+    }
+
+    for (size_t i=0; i<permute.size(); i++)
+    {
+        if (dim != permute[i].size())
+            return false;
+    }
+
+    return true;
+}
+
+static int parse_arguments(int                                 argc,
+                           char*                               argv[],
+                           hipblasDatatype_t&                  in_out_datatype,
+                           std::vector<int64_t>&               m,
+                           std::vector<int64_t>&               n,
+                           std::vector<int64_t>&               k,
+                           std::vector<int64_t>&               lda,
+                           std::vector<int64_t>&               ldb,
+                           std::vector<int64_t>&               ldc,
+                           std::vector<int64_t>&               ldd,
+                           std::vector<int64_t>&               stride_a,
+                           std::vector<int64_t>&               stride_b,
+                           std::vector<int64_t>&               stride_c,
+                           std::vector<int64_t>&               stride_d,
+                           std::vector<int32_t>&               batch_count,
+                           std::vector<float>&                 alpha,
+                           std::vector<float>&                 beta,
+                           hipblasOperation_t&                 trans_a,
+                           hipblasOperation_t&                 trans_b,
+                           std::vector<bool>&                  enable_bias,
+                           std::vector<bool>&                  enable_scaleD,
+                           std::vector<ActivationType>&        actType,
+                           std::vector<std::vector<uint64_t>>& reshape,
+                           std::vector<std::vector<uint32_t>>& permute,
+                           int32_t&                            grouped_gemm,
+                           int32_t&                            bench_count,
+                           int32_t&                            sync_count,
+                           int32_t&                            request_solutions,
+                           int32_t&                            num_streams,
+                           bool&                               verbose,
+                           bool&                               validate,
+                           bool&                               cpu_time)
 {
     if(argc >= 2)
     {
@@ -431,6 +526,18 @@ static int parse_arguments(int                 argc,
                         return EXIT_FAILURE;
                     }
                 }
+                else if((arg == "--reshape") && (i + 1 < argc))
+                {
+                    std::vector<uint64_t> tmp;
+                    cstring_to_int_vector(tmp, argv[++i]);
+                    reshape.push_back(tmp);
+                }
+                else if((arg == "--permute") && (i + 1 < argc))
+                {
+                    std::vector<uint32_t> tmp;
+                    cstring_to_int_vector(tmp, argv[++i]);
+                    permute.push_back(tmp);
+                }
                 else if((arg == "--trans_a") && (i + 1 < argc))
                 {
                     ++i;
@@ -507,20 +614,22 @@ static int parse_arguments(int                 argc,
     return EXIT_SUCCESS;
 }
 
-bool bad_argument(hipblasOperation_t trans_a,
-                  hipblasOperation_t trans_b,
-                  int64_t            m,
-                  int64_t            n,
-                  int64_t            k,
-                  int64_t            lda,
-                  int64_t            ldb,
-                  int64_t            ldc,
-                  int64_t            ldd,
-                  int64_t            stride_a,
-                  int64_t            stride_b,
-                  int64_t            stride_c,
-                  int64_t            stride_d,
-                  int32_t            batch_count)
+bool bad_argument(hipblasOperation_t    trans_a,
+                  hipblasOperation_t    trans_b,
+                  int64_t               m,
+                  int64_t               n,
+                  int64_t               k,
+                  int64_t               lda,
+                  int64_t               ldb,
+                  int64_t               ldc,
+                  int64_t               ldd,
+                  int64_t               stride_a,
+                  int64_t               stride_b,
+                  int64_t               stride_c,
+                  int64_t               stride_d,
+                  int32_t               batch_count,
+                  std::vector<uint64_t>& reshape,
+                  std::vector<uint32_t>& permute)
 {
     bool argument_error = false;
     if((trans_a == HIPBLAS_OP_N) && (lda < m))
@@ -578,6 +687,16 @@ bool bad_argument(hipblasOperation_t trans_a,
         argument_error = true;
         std::cerr << "ERROR: bad argument batch_count = " << batch_count << std::endl;
     }
+    if((reshape.size() != 0) && (m * n * batch_count != multiplication_of_vector(reshape)))
+    {
+        argument_error = true;
+        std::cerr << "ERROR: bad argument size of reshape != size of D" << std::endl;
+    }
+    if(!verify_permute(permute))
+    {
+        argument_error = true;
+        std::cerr << "ERROR: bad argument permute" << std::endl;
+    }
 
     return argument_error;
 }
@@ -618,35 +737,37 @@ void initialize_a_b_c_bias(std::vector<T>&     ha,
 }
 
 template <typename T>
-void test_hipblaslt(hipblasDatatype_t  in_out_datatype,
-                    hipblasOperation_t trans_a,
-                    hipblasOperation_t trans_b,
-                    std::vector<int64_t>            m,
-                    std::vector<int64_t>            n,
-                    std::vector<int64_t>            k,
-                    std::vector<int64_t>            lda,
-                    std::vector<int64_t>            ldb,
-                    std::vector<int64_t>            ldc,
-                    std::vector<int64_t>            ldd,
-                    std::vector<int64_t>            stride_a,
-                    std::vector<int64_t>            stride_b,
-                    std::vector<int64_t>            stride_c,
-                    std::vector<int64_t>            stride_d,
-                    std::vector<int32_t>            batch_count,
-                    std::vector<float>              alpha,
-                    std::vector<float>              beta,
-                    std::vector<bool>               enable_bias,
-                    std::vector<bool>               enable_scaleD,
-                    std::vector<ActivationType>     actType,
-                    int32_t            gemm_count,
-                    int32_t            grouped_gemm,
-                    int32_t            bench_count,
-                    int32_t            sync_count,
-                    int32_t            request_solutions,
-                    int32_t            num_streams,
-                    bool               validate,
-                    bool               verbose,
-                    bool               cpu_time)
+void test_hipblaslt(hipblasDatatype_t                  in_out_datatype,
+                    hipblasOperation_t                 trans_a,
+                    hipblasOperation_t                 trans_b,
+                    std::vector<int64_t>               m,
+                    std::vector<int64_t>               n,
+                    std::vector<int64_t>               k,
+                    std::vector<int64_t>               lda,
+                    std::vector<int64_t>               ldb,
+                    std::vector<int64_t>               ldc,
+                    std::vector<int64_t>               ldd,
+                    std::vector<int64_t>               stride_a,
+                    std::vector<int64_t>               stride_b,
+                    std::vector<int64_t>               stride_c,
+                    std::vector<int64_t>               stride_d,
+                    std::vector<int32_t>               batch_count,
+                    std::vector<float>                 alpha,
+                    std::vector<float>                 beta,
+                    std::vector<bool>                  enable_bias,
+                    std::vector<bool>                  enable_scaleD,
+                    std::vector<ActivationType>        actType,
+                    std::vector<std::vector<uint64_t>> reshape,
+                    std::vector<std::vector<uint32_t>> permute,
+                    int32_t                            gemm_count,
+                    int32_t                            grouped_gemm,
+                    int32_t                            bench_count,
+                    int32_t                            sync_count,
+                    int32_t                            request_solutions,
+                    int32_t                            num_streams,
+                    bool                               validate,
+                    bool                               verbose,
+                    bool                               cpu_time)
 {
     std::vector<int64_t>     a_stride_1(gemm_count), a_stride_2(gemm_count), b_stride_1(gemm_count), b_stride_2(gemm_count);
     std::vector<int64_t>     row_a(gemm_count), col_a(gemm_count);
@@ -766,7 +887,7 @@ void test_hipblaslt(hipblasDatatype_t  in_out_datatype,
                 matD[i], HIPBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, &stride_d[i], sizeof(stride_d[i])));
         }
 
-        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&matmul[i], HIPBLASLT_COMPUTE_F32, HIPBLAS_R_32F));
+        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&matmul[i], HIPBLASLT_COMPUTE_F32, HIPBLAS_R_32F, reshape[i].size(), reshape[i].data(), permute[i].data()));
 
         CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(
             matmul[i], HIPBLASLT_MATMUL_DESC_TRANSA, &trans_a, sizeof(int32_t)));
@@ -1166,7 +1287,9 @@ void test_hipblaslt(hipblasDatatype_t  in_out_datatype,
                                                  stride_d[i],
                                                  bias_ptr,
                                                  scaleD_ptr,
-                                                 actType[i]);
+                                                 actType[i],
+                                                 reshape[i],
+                                                 permute[i]);
 
             bool passed = true;
             for(int j = 0; j < size_c[i]; j++)
@@ -1236,6 +1359,9 @@ int main(int argc, char* argv[])
     std::vector<bool>           enable_scaleD;
     std::vector<ActivationType> actType;
 
+    std::vector<std::vector<uint64_t>> reshape;
+    std::vector<std::vector<uint32_t>> permute;
+
     int32_t grouped_gemm      = 0;
     bool verbose              = false;
     bool validate             = false;
@@ -1267,6 +1393,8 @@ int main(int argc, char* argv[])
                        enable_bias,
                        enable_scaleD,
                        actType,
+                       reshape,
+                       permute,
                        grouped_gemm,
                        bench_count,
                        sync_count,
@@ -1316,6 +1444,10 @@ int main(int argc, char* argv[])
             enable_scaleD.push_back(0);
         if(i == actType.size())
             actType.push_back(ActivationType::NONE);
+        if(i == reshape.size())
+            reshape.push_back(std::vector<uint64_t>());
+        if(i == permute.size())
+            permute.push_back(std::vector<uint32_t>());
 
         if(bad_argument(trans_a,
                         trans_b,
@@ -1330,12 +1462,21 @@ int main(int argc, char* argv[])
                         stride_b[i],
                         stride_c[i],
                         stride_d[i],
-                        batch_count[i]))
+                        batch_count[i],
+                        reshape[i],
+                        permute[i]))
         {
             std::cerr << "GEMM idx: " << i << std::endl;
             show_usage(argv);
             return EXIT_FAILURE;
         }
+    }
+
+    if (!check_reshape_and_permute(reshape, permute))
+    {
+        std::cerr << "ERROR: bad reshape and permute dimension" << std::endl;
+        show_usage(argv);
+        return EXIT_FAILURE;
     }
 
     if(in_out_datatype == HIPBLAS_R_32F)
@@ -1359,6 +1500,8 @@ int main(int argc, char* argv[])
                                        enable_bias,
                                        enable_scaleD,
                                        actType,
+                                       reshape,
+                                       permute,
                                        gemm_count,
                                        grouped_gemm,
                                        bench_count,
@@ -1389,6 +1532,8 @@ int main(int argc, char* argv[])
                                       enable_bias,
                                       enable_scaleD,
                                       actType,
+                                      reshape,
+                                      permute,
                                       gemm_count,
                                       grouped_gemm,
                                       bench_count,
@@ -1419,6 +1564,8 @@ int main(int argc, char* argv[])
                                           enable_bias,
                                           enable_scaleD,
                                           actType,
+                                          reshape,
+                                          permute,
                                           gemm_count,
                                           grouped_gemm,
                                           bench_count,
