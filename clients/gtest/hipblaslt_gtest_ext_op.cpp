@@ -7,6 +7,7 @@
 #include <hip/hip_runtime_api.h>
 #include "../include/hipblaslt_random.hpp"
 #include <hipblaslt/hipblaslt-ext-op.h>
+#include <hipblaslt_init.hpp>
 
 namespace {
     template<typename DType>
@@ -94,28 +95,46 @@ TEST_P(ExtOpSoftmaxTest, softmaxSuccess) {
 TEST_P(ExtOpLayerNormTest, layernormSuccess) {
     uint32_t m = GetParam();
     uint32_t n = 16;
+
     std::vector<float> output(m * n, 0.f);
     std::vector<float> mean(m, 0.f);
     std::vector<float> invvar(m, 0.f);
     std::vector<float> input(m * n, 0.f);
-    hipblaslt_uniform_int_1_10_run_float(input.data(), input.size());
+    std::vector<float> gamma(n, 1.f);
+    std::vector<float> beta(n, 0.f);
+
+    hipblaslt_init_hpl(input, n, m, n);
+    hipblaslt_init_hpl(gamma, n, 1, n);
+    hipblaslt_init_hpl(beta, n, 1, n);
+
     float *gpuOutput{};
     float *gpuMean{};
     float *gpuInvvar{};
     float *gpuInput{};
-    auto err = hipMalloc(&gpuInput, m * n * sizeof(float));
-    err = hipMalloc(&gpuOutput, m * n * sizeof(float));
+    float *gpuGamma{};
+    float *gpuBeta{};
+
+    auto err = hipMalloc(&gpuOutput, m * n * sizeof(float));
     err = hipMalloc(&gpuMean, m * sizeof(float));
     err = hipMalloc(&gpuInvvar, m * sizeof(float));
+    err = hipMalloc(&gpuInput, m * n * sizeof(float));
+    err = hipMalloc(&gpuGamma, n * sizeof(float));
+    err = hipMalloc(&gpuBeta, n * sizeof(float));
+
     err = hipMemcpyHtoD(gpuInput, input.data(), m * n * sizeof(float));
-    auto hipblasltErr = hipblasltExtLayerNorm(HIPBLASLT_R_32F, gpuOutput, gpuMean, gpuInvvar, gpuInput, m, n, 1e-05, nullptr, nullptr, nullptr);
+    err = hipMemcpyHtoD(gpuGamma, gamma.data(), n * sizeof(float));
+    err = hipMemcpyHtoD(gpuBeta,  beta.data(),  n * sizeof(float));
+
+    auto hipblasltErr = hipblasltExtLayerNorm(HIPBLASLT_R_32F, gpuOutput, gpuMean, gpuInvvar, gpuInput, m, n, 1e-05, gpuGamma, gpuBeta, nullptr);
     EXPECT_EQ(hipblasltErr, HIPBLAS_STATUS_SUCCESS);
     err = hipDeviceSynchronize();
     EXPECT_EQ(err, hipSuccess);
+
     std::vector<float> cpuRef(m * n, 0.0f);
     std::vector<float> cpuMean(m, 0.0f);
     std::vector<float> cpuInvvar(m, 0.0f);
-    cpuLayerNorm<float>(cpuRef.data(), cpuMean.data(), cpuInvvar.data(), input.data(), m, n, 1e-05, nullptr, nullptr);
+    cpuLayerNorm<float>(cpuRef.data(), cpuMean.data(), cpuInvvar.data(), input.data(), m, n, 1e-05, gamma.data(), beta.data());
+
     err = hipMemcpyDtoH(output.data(), gpuOutput, m * n * sizeof(float));
     err = hipMemcpyDtoH(mean.data(), gpuMean, m * sizeof(float));
     err = hipMemcpyDtoH(invvar.data(), gpuInvvar, m * sizeof(float));
