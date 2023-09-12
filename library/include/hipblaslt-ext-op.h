@@ -80,10 +80,10 @@ extern "C" {
 
 
 /*! \ingroup library_module
- *  \brief Perform softmax on given tensor.
+ *  \brief Perform layernorm on given tensor.
  *
  *  \details
- *  This function computes layernorm on given 2D-tensor along specified dimension.
+ *  This function computes layernorm on given 2D-tensor.
  *
  *  @param[in]
  *  datatype Datatype of input/output tensor, currently support HIPBLASLT_R_32F only.
