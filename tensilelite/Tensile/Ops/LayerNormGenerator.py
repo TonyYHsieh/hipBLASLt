@@ -125,7 +125,9 @@ class LayerNormKernelGenerator:
 
     @property
     def lds_usage_byte(self) -> int:
-        return 32
+        # used in reduce inter wave mean and invvar
+        # 4 data * half_wave_num * bpe
+        return 4 * (self.num_workitems // 64 // 2) * self.bpe
 
     @property
     def func_name(self):
@@ -835,19 +837,6 @@ class LayerNormKernelGenerator:
                 mod.add(self.layernorm_in_some_thread())
             mod.add(self.output_mean_and_invvar())
         return mod
-
-def kernel_rodata(name: str):
-    return f'''
-.rodata
-.p2align 6
-.amdhsa_kernel {name}
-.amdhsa_user_sgpr_kernarg_segment_ptr 1
-.amdhsa_system_sgpr_workgroup_id_x 1
-.amdhsa_accum_offset 8
-.amdhsa_next_free_vgpr .amdgcn.next_free_vgpr
-.amdhsa_next_free_sgpr .amdgcn.next_free_sgpr
-.end_amdhsa_kernel
-'''
 
 @dataclass
 class KernelArgument:
