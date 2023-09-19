@@ -48,6 +48,13 @@ for arch in "${archs[@]}"; do
         python3 ./SoftmaxGenerator.py -o $s -m $1 -n $2 --arch $arch &
         objs+=($o)
     done
+    for i in "S 256 4" "H 256 4"; do
+        set -- $i
+        s=$dst/A_$1_$2_$3_$arch.s
+        o=$dst/A_$1_$2_$3_$arch.o
+        python3 ./AMaxGenerator.py -o $s -t $1 -w $2 -c $3 --arch $arch &
+        objs+=($o)
+    done
     wait
     /opt/rocm/llvm/bin/clang++ -target amdgcn-amdhsa -o $dst/extop_$arch.co ${objs[@]}
     python3 ./ExtOpCreateLibrary.py --src=$dst --co=$dst/extop_$arch.co --output=$dst --arch=$arch
