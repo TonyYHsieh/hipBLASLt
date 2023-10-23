@@ -1,0 +1,13 @@
+diff --git a/tensilelite/Tensile/TensileInstructions/Instructions.py b/tensilelite/Tensile/TensileInstructions/Instructions.py
+index 115d574..2e44b47 100644
+--- a/tensilelite/Tensile/TensileInstructions/Instructions.py
++++ b/tensilelite/Tensile/TensileInstructions/Instructions.py
+@@ -748,7 +748,7 @@ class DSStoreInstruction(LocalWriteInstruction):
+         self.preStr()
+         kStr = self.instStr + " " + self.getArgStr()
+         kStr += str(self.ds) if self.ds else ""
+-        return self.formatWithComment(kStr)
++        return " " # self.formatWithComment(kStr)
+ 
+ ################################################################################
+ ################################################################################

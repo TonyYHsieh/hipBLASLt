@@ -1,0 +1,13 @@
+diff --git a/tensilelite/Tensile/TensileInstructions/Instructions.py b/tensilelite/Tensile/TensileInstructions/Instructions.py
+index 115d574..c4f8db6 100644
+--- a/tensilelite/Tensile/TensileInstructions/Instructions.py
++++ b/tensilelite/Tensile/TensileInstructions/Instructions.py
+@@ -345,7 +345,7 @@ class MFMAInstruction(Instruction):
+     def __str__(self) -> str:
+         self.preStr()
+         kStr = self.instStr + " " + self.getArgStr()
+-        return self.formatWithComment(kStr)
++        return "" #self.formatWithComment(kStr)
+ 
+ class SMFMAInstruction(Instruction):
+     def __init__(self, instType: InstType, accType: InstType, variant: List[int], mfma1k, \

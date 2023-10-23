@@ -1,0 +1,13 @@
+diff --git a/tensilelite/Tensile/TensileInstructions/Instructions.py b/tensilelite/Tensile/TensileInstructions/Instructions.py
+index 115d574..fce2fb3 100644
+--- a/tensilelite/Tensile/TensileInstructions/Instructions.py
++++ b/tensilelite/Tensile/TensileInstructions/Instructions.py
+@@ -549,7 +549,7 @@ class MUBUFReadInstruction(GlobalReadInstruction):
+         self.preStr()
+         kStr = self.instStr + " " + self.getArgStr()
+         kStr += str(self.mubuf) if self.mubuf else ""
+-        return self.formatWithComment(kStr)
++        return " " # self.formatWithComment(kStr)
+ 
+ class SMemLoadInstruction(GlobalReadInstruction):
+     def __init__(self, instType: InstType, dst, base, soffset,

@@ -1,0 +1,13 @@
+diff --git a/tensilelite/Tensile/TensileInstructions/Instructions.py b/tensilelite/Tensile/TensileInstructions/Instructions.py
+index 115d574..6be9336 100644
+--- a/tensilelite/Tensile/TensileInstructions/Instructions.py
++++ b/tensilelite/Tensile/TensileInstructions/Instructions.py
+@@ -706,7 +706,7 @@ class DSLoadInstruction(LocalReadInstruction):
+         self.preStr()
+         kStr = self.instStr + " " + self.getArgStr()
+         kStr += str(self.ds) if self.ds else ""
+-        return self.formatWithComment(kStr)
++        return "" # iself.formatWithComment(kStr)
+ 
+ class LocalWriteInstruction(ReadWriteInstruction):
+     def __init__(self, instType: InstType, dstAddr, src0, src1, \

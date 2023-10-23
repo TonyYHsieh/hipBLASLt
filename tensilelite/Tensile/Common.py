@@ -682,7 +682,7 @@ validParameters = {
     #   (since C matrix is always coalesced in Free0 index direction and this assertion guarantees the index element multiple)
     #
     # 1 indicates no assertion (since all sizes are multiples of 1)
-    "AssertFree0ElementMultiple" : [1,2,4,8],
+    "AssertFree0ElementMultiple" : [1,2,4,8,16],
 
     # Kernel generator will assume that the FreeIndex[1] size is some multiple of the element size
     # and uses this to optimize the kernel.
@@ -693,7 +693,7 @@ validParameters = {
     #  - See above AssertFree0ElementMultiple "Load optimizations"
 
     # 1 indicates no assertion (since all sizes are multiples of 1)
-    "AssertFree1ElementMultiple" : [1,2,4,8],
+    "AssertFree1ElementMultiple" : [1,2,4,8,16],
 
     # Stagger the start summation position of the tiles.
     # Elements from the summation dimension are loaded at offsets rather than all starting at 0.
