@@ -262,9 +262,9 @@ class KernelWriterAssembly(KernelWriter):
     # localWrite instruction
     # for local, tile->para, unroll->perp
     # wtc = writeTileDimComponents
-    localWriteWidth = tP["nwcv"]*tP["bpe"]//bpr
+    localWriteWidth = tP["nwcv"]*tP["bpeDS"]//bpr
     if localWriteWidth < 1:
-      localWriteWidth = (1.0*tP["nwcv"]*tP["bpe"])/bpr
+      localWriteWidth = (1.0*tP["nwcv"]*tP["bpeDS"])/bpr
     localWrite2Coalesced = tP["nrc"]>1 or tP["wtc"]
     localWrite2Perpendicular = tP["nrp"]>1
     # localWrite stride tile
@@ -275,7 +275,7 @@ class KernelWriterAssembly(KernelWriter):
         localWriteStrideTile = kernel[tP["lsc"]]
     else:
       localWriteStrideTile = kernel[tP["lsp"]]
-    localWriteStrideTile = localWriteStrideTile*tP["bpe"]//bpr
+    localWriteStrideTile = localWriteStrideTile*tP["bpeDS"]//bpr
     # localWrite stride unroll
     if tP["tlu"]:
       localWriteStrideUnroll = kernel[tP["lsc"]]*kernel[tP["mt"]]
@@ -285,7 +285,7 @@ class KernelWriterAssembly(KernelWriter):
       else:
         localWriteStrideUnroll = kernel[tP["lsc"]]*kernel[tP["mt"]]
     localWriteStrideUnroll = \
-        (localWriteStrideUnroll*tP["bpe"])//bpr
+        (localWriteStrideUnroll*tP["bpeDS"])//bpr
     localWriteInstructionIdx = self.selectMemoryInstruction("LocalWrite", localWriteWidth, \
                                 False, \
                                 localWrite2Coalesced, localWrite2Perpendicular,
@@ -302,18 +302,18 @@ class KernelWriterAssembly(KernelWriter):
     tChar = "A" if tP["isA"] else "B" if tP["isB"] else "Metadata"
     if kernel["UnrollMajorLDS%s"%tChar]:
       if tChar == "A":
-        localReadWidth = (self.states.lrvwUnrollA * tP["bpe"]) / bpr
+        localReadWidth = (self.states.lrvwUnrollA * tP["bpeDS"]) / bpr
       if tChar == "B":
-        localReadWidth = (self.states.lrvwUnrollB * tP["bpe"]) / bpr
+        localReadWidth = (self.states.lrvwUnrollB * tP["bpeDS"]) / bpr
       if tChar == "Metadata":
-        localReadWidth = (self.states.lrvwUnrollMetadata * tP["bpe"]) / bpr
+        localReadWidth = (self.states.lrvwUnrollMetadata * tP["bpeDS"]) / bpr
     else:
       if tChar == "A":
-        localReadWidth = (self.states.lrvwTileA * tP["bpe"]) / bpr
+        localReadWidth = (self.states.lrvwTileA * tP["bpeDS"]) / bpr
       if tChar == "B":
-        localReadWidth = (self.states.lrvwTileB * tP["bpe"]) / bpr
+        localReadWidth = (self.states.lrvwTileB * tP["bpeDS"]) / bpr
       if tChar == "Metadata":
-        localReadWidth = (self.states.lrvwTileMetadata * tP["bpe"]) / bpr
+        localReadWidth = (self.states.lrvwTileMetadata * tP["bpeDS"]) / bpr
 
     # for directToLds x2/x4 support
     if kernel["DirectToLds%s"%tChar]:
@@ -322,7 +322,7 @@ class KernelWriterAssembly(KernelWriter):
     #localReadStridePerpendicular = 0
     localRead2Perpendicular = False
     localReadStrideCoalesced = \
-        kernel[tP["tt"]] * tP["bpe"]//bpr
+        kernel[tP["tt"]] * tP["bpeDS"]//bpr
     localRead2Coalesced = False
     localReadInstructionIdx = self.selectMemoryInstruction("LocalRead", localReadWidth, \
                               False, \
@@ -6225,10 +6225,10 @@ class KernelWriterAssembly(KernelWriter):
     # print("2lscaOffset", lscaOffset)
     offsetElements = (lspaOffset + lscaOffset)
     # print("offsetElements", offsetElements)
-    offsetBytes   = offsetElements*tP["bpe"]
+    offsetBytes   = offsetElements*tP["bpeDS"]
 
     if kernel["LdsBlockSizePerPad%s"%tc] != 0 and kernel["LdsPad%s"%tc] != 0:
-      offsetBytes   = offsetBytes + (offsetBytes // kernel["LdsBlockSizePerPad%s"%tc]) * kernel["LdsPad%s"%tc] * tP["bpe"]
+      offsetBytes   = offsetBytes + (offsetBytes // kernel["LdsBlockSizePerPad%s"%tc]) * kernel["LdsPad%s"%tc] * tP["bpeDS"]
 
     offsetBytes += tP["localWriteSwapByteOffset"]
 
@@ -6551,7 +6551,7 @@ class KernelWriterAssembly(KernelWriter):
               #   isHigh16Bits = True
 
             # Need cvt
-            if tP["bpe"] != tP["bpeGR"]:
+            if tP["bpeDS"] != tP["bpeGR"]:
               assert numBlocks == 1
               if (kernel["ProblemType"]["DataType%s"%tc].isSingle() and kernel["ProblemType"]["DataType"].isHalf()):
                 newBlockWidth = (tP["bpeGR"] / tP["bpe"]) * blockWidth
