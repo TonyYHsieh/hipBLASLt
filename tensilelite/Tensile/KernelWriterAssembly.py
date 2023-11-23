@@ -126,7 +126,7 @@ class KernelWriterAssembly(KernelWriter):
 
   @staticmethod
   def getLdsSize(kernel):
-    ldsSize = kernel["LdsNumElements"] * kernel["ProblemType"]["DataType"].numBytes()
+    ldsSize = kernel["LdsNumElements"]
     return ldsSize
 
   ########################################
@@ -598,6 +598,10 @@ class KernelWriterAssembly(KernelWriter):
                 module.add(RegSet("v", "vgprValuB_X%u_I%u_D%u"%(bi,iui,data), self.states.b.startVgprValuPack+ri))
                 ri += self.states.b.numVgprValuPerBlock
 
+    cvtTemp = max(self.states.a.startVgprValuCvtTemp, self.states.b.startVgprValuCvtTemp)
+    if kernel["ConvertAfterDS"] and (cvtTemp != -1):
+       module.add(RegSet("v", "vgprCvtTemp", cvtTemp))
+
     if kernel["ProblemType"]["Gradient"] and kernel["ProblemType"]["UseBias"] and (kernel["ProblemType"]["BiasSrc"] == "A" or kernel["ProblemType"]["BiasSrc"] == "B"):
       module.add(RegSet("v", "vgprValuSum", self.states.bias.startVgprValu))
 
@@ -670,7 +674,6 @@ class KernelWriterAssembly(KernelWriter):
     if ((tPA["bpe"] < 4 and not kernel["UnrollMajorLDSA"]) or (tPB["bpe"] < 4 and not kernel["UnrollMajorLDSB"])) \
         and (kernel["ProblemType"]["DataType"].isInt8() or kernel["ProblemType"]["DataType"].is8bitFloat()):
       module.add(RegSet("v", "vgprPackTemp", self.states.a.startVgprValuPackTemp))
-
 
     if self.states.globalReadIncsUseVgpr:
       module.add(RegSet("v", "vgprGlobalReadIncsA", \
@@ -1200,8 +1203,8 @@ class KernelWriterAssembly(KernelWriter):
         moduleRegInit.addSpaceLine()
 
       # set m0
-      moduleRegInit.add(SMovB32(dst=mgpr(0), src=hex(kernel["LdsNumElements"] * self.states.bpeAB),
-          comment="LDS clamp at %u bytes"%(kernel["LdsNumElements"] * self.states.bpeAB)))
+      moduleRegInit.add(SMovB32(dst=mgpr(0), src=hex(kernel["LdsNumElements"]),
+          comment="LDS clamp at %u bytes"%(kernel["LdsNumElements"])))
 
       # set Serial id vgpr
       moduleRegInit.add(VMovB32(dst=vgpr("Serial"), src=vgpr(0), comment="thread serial id"))
@@ -1852,9 +1855,8 @@ class KernelWriterAssembly(KernelWriter):
 
     if self.db["InitLds"]:
       tmp = RegisterPoolResource(idx=self.vgprPool.checkOut(2), size=2)
-      numBytesPerElement = kernel["ProblemType"]["DataType"].numBytes()
       module.add(DSInit(tmp, kernel["NumThreads"], kernel["LdsNumElements"], \
-        numBytesPerElement, self.consts.initLdsValue))
+        self.consts.initLdsValue))
       self.vgprPool.checkIn(tmp.idx)
 
     return module
@@ -3201,7 +3203,7 @@ class KernelWriterAssembly(KernelWriter):
         module.add(VAddCOU32(
             dst=vgpr(destVgpr), \
             dst1=VCC(), \
-            src0=hex(kernel["LdsOffsetB"]*tP["bpe"]), \
+            src0=hex(kernel["LdsOffsetB"]), \
             src1=vgpr(destVgpr), \
             comment="lwFOB = lwB%s + lwB%s*MT%s + LDS_OFFSET_B=%u*%u" % (tP["tileChar"], \
             self.states.unrollChar, tP["tileChar"], kernel["LdsOffsetB"], self.states.bpeAB) ))
@@ -3210,7 +3212,7 @@ class KernelWriterAssembly(KernelWriter):
         module.add(VAddCOU32(
             dst=vgpr(destVgpr), \
             dst1=VCC(), \
-            src0=hex(kernel["LdsOffsetMetadata"]*self.states.bpeAB), \
+            src0=hex(kernel["LdsOffsetMetadata"]), \
             src1=vgpr(destVgpr), \
             comment="lwFOB = lwB%s + lwB%s*MT%s + LDS_OFFSET_METADATA=%u*%u" % (tP["tileChar"], \
             self.states.unrollChar, tP["tileChar"], kernel["LdsOffsetMetadata"], self.states.bpeAB)))
@@ -3464,11 +3466,10 @@ class KernelWriterAssembly(KernelWriter):
       if kernel["LdsOffset%s"%tP["tensorChar"]] == 0:
         module = Module("lraDeclareAddresses (Empty)")
       else:
-        bpe = self.states.bpeAB if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"] and tP["isM"] else tP["bpe"]
         module.add(VAddCOU32(
             dst=vgpr("LocalReadAddr%s+0"%tP["tensorChar"]), \
             dst1=VCC(), \
-            src0=hex(kernel["LdsOffset%s"%tP["tensorChar"]]*bpe), \
+            src0=hex(kernel["LdsOffset%s"%tP["tensorChar"]]), \
             src1=vgpr("LocalReadAddr%s+0"%tP["tensorChar"]), \
             comment=" += LdsOffset%s (lower)"%tP["tensorChar"]))
     return module
@@ -5769,8 +5770,8 @@ class KernelWriterAssembly(KernelWriter):
 
     # TODO - can remove one of these m0 restores if A and B both TLU
     if kernel["DirectToLds%s"%tP["tensorChar"]]:
-      module.add(SMovB32(dst=mgpr(0), src=hex(kernel["LdsNumElements"] * tP["bpe"]), \
-          comment="Restore LDS clamp at %u bytes"%(kernel["LdsNumElements"] * tP["bpe"])))
+      module.add(SMovB32(dst=mgpr(0), src=hex(kernel["LdsNumElements"]), \
+          comment="Restore LDS clamp at %u bytes"%(kernel["LdsNumElements"])))
 
     if not kernel["BufferLoad"]:
       self.vgprPool.checkIn(maxAddrVgpr)
@@ -6024,8 +6025,8 @@ class KernelWriterAssembly(KernelWriter):
     # TODO - can remove one of these m0 restores if A and B both TLU
     if kernel["DirectToLds%s"%tP["tensorChar"]] and not (mode == 1 and kernel["PrefetchGlobalRead"]==2):
       dst = mgpr(0)
-      src = hex(kernel["LdsNumElements"] * tP["bpe"])
-      comment = "Restore LDS clamp at %u bytes"%(kernel["LdsNumElements"] * tP["bpe"])
+      src = hex(kernel["LdsNumElements"])
+      comment = "Restore LDS clamp at %u bytes"%(kernel["LdsNumElements"])
       # PGR=2 case, footer is located before global read. To avoid setting clamp before global read, store lds clamp code in middle
       if kernel["PrefetchGlobalRead"] == 2:
         imod.middle.add(SMovB32(dst=dst, src=src, comment=comment))

@@ -118,7 +118,7 @@ class SignatureCOV3(Signature):
             kernArgReg += writer.states.rpga # debug buffer
         # kernArgBytes = kernArgReg * 4 # bytes/reg
 
-        group_segment_size = kernel["LdsNumElements"] * writer.states.bpeAB
+        group_segment_size = kernel["LdsNumElements"]
 
         sgprWgZ = 1 if kernel["ProblemType"]["NumIndicesC"] > 2 else 0
         signature = SignatureBase(kernelName=writer.states.kernelName,

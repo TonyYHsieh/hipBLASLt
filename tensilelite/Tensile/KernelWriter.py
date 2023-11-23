@@ -3068,10 +3068,8 @@ class KernelWriter(metaclass=abc.ABCMeta):
       if self.states.archCaps["HasEccHalf"]:
         tpA      = self.states.bpr if bpeMax * vwa < self.states.bpr else bpeMax * vwa
         tpALocal = self.states.bpr if tensorParametersA["bpe"] * vwa < self.states.bpr else tensorParametersA["bpe"] * vwa
-        self.states.a.numVgprG2LAllocated = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * \
-          tpA) / (float)(self.states.bpr))
-        numVgprG2LAllocatedLocal = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * \
-          tpALocal) / (float)(self.states.bpr))
+        self.states.a.numVgprG2LAllocated = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * tpA) / (float)(self.states.bpr))
+        numVgprG2LAllocatedLocal = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * tpALocal) / (float)(self.states.bpr))
       else:
         self.states.a.numVgprG2LAllocated = self.states.a.numVgprG2L
     # using _ds_store_b8: need one more vgpr space to do lshr
@@ -3091,10 +3089,8 @@ class KernelWriter(metaclass=abc.ABCMeta):
       if self.states.archCaps["HasEccHalf"]:
         tpB      = self.states.bpr if bpeMax * vwb < self.states.bpr else bpeMax * vwb
         tpBLocal = self.states.bpr if tensorParametersB["bpe"] * vwb < self.states.bpr else tensorParametersB["bpe"] * vwb
-        self.states.b.numVgprG2LAllocated = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * \
-          tpB) / (float)(self.states.bpr))
-        numVgprG2LAllocatedLocal = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * \
-          tpBLocal) / (float)(self.states.bpr))
+        self.states.b.numVgprG2LAllocated = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * tpB) / (float)(self.states.bpr))
+        numVgprG2LAllocatedLocal = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * tpBLocal) / (float)(self.states.bpr))
       else:
         self.states.b.numVgprG2LAllocated = self.states.b.numVgprG2L
     # using _ds_store_b8: need one more vgpr space to do lshr
@@ -3281,6 +3277,14 @@ class KernelWriter(metaclass=abc.ABCMeta):
       self.states.a.startVgprValuPackTemp = vgprIdx
       self.states.b.startVgprValuPackTemp = vgprIdx
       vgprIdx += 1
+
+    self.states.a.startVgprValuCvtTemp = -1
+    self.states.b.startVgprValuCvtTemp = -1
+    if ((tensorParametersA["bpe"] > tensorParametersA["bpeDS"]) and kernel["ProblemType"]["DataTypeA"].is8bitFloat()):
+      self.states.a.startVgprValuCvtTemp = vgprIdx
+    if ((tensorParametersB["bpe"] > tensorParametersB["bpeDS"]) and kernel["ProblemType"]["DataTypeB"].is8bitFloat()):
+      self.states.b.startVgprValuCvtTemp = vgprIdx
+    vgprIdx += 2
 
     if kernel["ProblemType"]["Sparse"]:
       if kernel["DirectToVgprSparseMetadata"]:
@@ -3807,11 +3811,17 @@ class KernelWriter(metaclass=abc.ABCMeta):
       tP["tileChar"] = self.states.tileChar0 if (kernel["ProblemType"]["Tensor0"]==1) \
         else self.states.tileChar1
 
+    bpe = int(4*kernel["ProblemType"]["DataType"].numRegisters())
+    bpetc = int(4*kernel["ProblemType"]["DataType%s"%cM].numRegisters())
+    bpeA = int(4*kernel["ProblemType"]["DataTypeA"].numRegisters())
+
     tP["isA"] = (cM == "A")                                      # is this tensor A
     tP["isB"] = (cM == "B")                                      # is this tensor B
     tP["isM"] = (cM == "Metadata")                               # is this tensor Metadata
-    tP["bpe"] = int(4*kernel["ProblemType"]["DataType"].numRegisters()) if not tP["isM"] else 1
-    tP["bpeGR"] = int(4*kernel["ProblemType"]["DataType%s"%cM].numRegisters()) if not tP["isM"] else 1
+    tP["bpe"] = bpe if not tP["isM"] else 1
+    tP["bpeA"]  = (bpeA if kernel["ConvertAfterDS"] else bpe) if not tP["isM"] else 1
+    tP["bpeGR"] = bpetc if not tP["isM"] else 1
+    tP["bpeDS"] = (bpetc if kernel["ConvertAfterDS"] else bpe) if not tP["isM"] else 1
     tP["tensorChar"] = cM                                        # tensor character A/B
     tP["tileIdx"] = kernel["ProblemType"]["Index01%s"%cM]        # is the tile dimension of A the 0th or 1th index, i.e. Aki, tileIdx=0
     tP["tile01Idx"] = 1 if tP["tileIdx"] else 0
@@ -3838,7 +3848,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     tP["wtc"] = itP[cM].writeTileDimComponents                   # write vector components along tile dimension
     tP["idx"] = kernel["ProblemType"]["Index%d"%tP["tensorIdx"]] # index 0 is tile dimension belonging to A. Note 'idx' may not be in tP['ia'].
     tP["NonTemporal"] = kernel["NonTemporal%s"%cM]               # non-temporal read type
-    tP["shiftGR"] = 0 if (tP["bpeGR"] >= tP["bpe"]) else int(tP["glvw"] // 2 * (tP["bpe"] / self.states.bpr))  # Shift global read register for cvt spaces
+    tP["shiftGR"] = 0 if ((tP["bpeGR"] >= tP["bpe"])) else int(tP["glvw"] // 2 * (tP["bpe"] / self.states.bpr))  # Shift global read register for cvt spaces
     tP["bpeRatio"] = tP["bpe"] // tP["bpeGR"] if tP["bpeGR"] < tP["bpe"] else 1                                # g2lIdx multiplier
 
     tP["is_sparse"] = (kernel["ProblemType"]["Sparse"] == 2 and tP["isB"]) or (kernel["ProblemType"]["Sparse"] == 1 and tP["isA"])
