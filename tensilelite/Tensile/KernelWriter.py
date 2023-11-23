@@ -3284,7 +3284,8 @@ class KernelWriter(metaclass=abc.ABCMeta):
       self.states.a.startVgprValuCvtTemp = vgprIdx
     if ((tensorParametersB["bpe"] > tensorParametersB["bpeDS"]) and kernel["ProblemType"]["DataTypeB"].is8bitFloat()):
       self.states.b.startVgprValuCvtTemp = vgprIdx
-    vgprIdx += 2
+    if self.states.a.startVgprValuCvtTemp != -1 or self.states.b.startVgprValuCvtTemp != -1:
+        vgprIdx += 2
 
     if kernel["ProblemType"]["Sparse"]:
       if kernel["DirectToVgprSparseMetadata"]:

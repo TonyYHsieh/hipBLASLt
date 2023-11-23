@@ -2807,7 +2807,7 @@ class Solution(collections.abc.Mapping):
       ldsNumElementsA = state["_DepthUA"] * (state["MacroTileA"] + state["LdsPadA"]) * bpeA
     padInterval = state["LdsBlockSizePerPadA"]
     if padInterval != 0:
-      ldsNumElementsA = int((state["_DepthUA"] * state["MacroTileA"] * bpeA) / padInterval * (padInterval + state["LdsPadA"]))
+      ldsNumElementsA = int((state["_DepthUA"] * state["MacroTileA"] * bpeA) / padInterval * (padInterval + state["LdsPadA"] * bpeA))
     ldsNumElementsAlignedA = roundUpToNearestMultiple(ldsNumElementsA, ldsAlign)
 
     if state["UnrollMajorLDSB"]:
@@ -2816,7 +2816,7 @@ class Solution(collections.abc.Mapping):
       ldsNumElementsB = state["_DepthUB"] * (state["MacroTileB"] + state["LdsPadB"]) * bpeB
     padInterval = state["LdsBlockSizePerPadB"]
     if padInterval != 0:
-      ldsNumElementsB = int((state["_DepthUB"] * state["MacroTileB"] * bpeB) / padInterval * (padInterval + state["LdsPadB"]))
+      ldsNumElementsB = int((state["_DepthUB"] * state["MacroTileB"] * bpeB) / padInterval * (padInterval + state["LdsPadB"] * bpeB))
     ldsNumElementsAlignedB = roundUpToNearestMultiple(ldsNumElementsB, ldsAlign)
 
     if state["ProblemType"]["Sparse"] and not state["DirectToVgprSparseMetadata"]:
