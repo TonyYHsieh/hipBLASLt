@@ -3060,14 +3060,14 @@ class KernelWriter(metaclass=abc.ABCMeta):
     numVgprG2Local = 0
     numVgprG2LAllocatedLocal = 0
     if not kernel["DirectToLdsA"] or self.do["KeepDirectToLdsAlloc"]:
-      bpeMax = max(tensorParametersA["bpeGR"], tensorParametersA["bpe"])
+      bpeDS = tensorParametersA["bpeDS"]
       self.states.a.numVgprG2L = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * \
-        kernel["GlobalReadVectorWidthA"] * bpeMax) / (float)(self.states.bpr))
+        kernel["GlobalReadVectorWidthA"] * bpeDS) / (float)(self.states.bpr))
       numVgprG2Local = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * \
         kernel["GlobalReadVectorWidthA"] * tensorParametersA["bpe"]) / (float)(self.states.bpr))
       if self.states.archCaps["HasEccHalf"]:
-        tpA      = self.states.bpr if bpeMax * vwa < self.states.bpr else bpeMax * vwa
-        tpALocal = self.states.bpr if tensorParametersA["bpe"] * vwa < self.states.bpr else tensorParametersA["bpe"] * vwa
+        tpA      = self.states.bpr if bpeDS * vwa < self.states.bpr else bpeDS * vwa
+        tpALocal = self.states.bpr if bpeDS * vwa < self.states.bpr else bpeDS * vwa
         self.states.a.numVgprG2LAllocated = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * tpA) / (float)(self.states.bpr))
         numVgprG2LAllocatedLocal = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * tpALocal) / (float)(self.states.bpr))
       else:
@@ -3081,14 +3081,14 @@ class KernelWriter(metaclass=abc.ABCMeta):
     numVgprG2Local = 0
     numVgprG2LAllocatedLocal = 0
     if not kernel["DirectToLdsB"] or self.do["KeepDirectToLdsAlloc"]:
-      bpeMax = max(tensorParametersB["bpeGR"], tensorParametersB["bpe"])
+      bpeDS = tensorParametersB["bpeDS"]
       self.states.b.numVgprG2L = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * \
-        kernel["GlobalReadVectorWidthB"] * bpeMax) / (float)(self.states.bpr))
+        kernel["GlobalReadVectorWidthB"] * bpeDS) / (float)(self.states.bpr))
       numVgprG2Local = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * \
         kernel["GlobalReadVectorWidthB"] * tensorParametersB["bpe"]) / (float)(self.states.bpr))
       if self.states.archCaps["HasEccHalf"]:
-        tpB      = self.states.bpr if bpeMax * vwb < self.states.bpr else bpeMax * vwb
-        tpBLocal = self.states.bpr if tensorParametersB["bpe"] * vwb < self.states.bpr else tensorParametersB["bpe"] * vwb
+        tpB      = self.states.bpr if bpeDS * vwb < self.states.bpr else bpeDS * vwb
+        tpBLocal = self.states.bpr if bpeDS * vwb < self.states.bpr else bpeDS * vwb
         self.states.b.numVgprG2LAllocated = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * tpB) / (float)(self.states.bpr))
         numVgprG2LAllocatedLocal = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * tpBLocal) / (float)(self.states.bpr))
       else:
@@ -3102,9 +3102,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
     if kernel["ProblemType"]["Sparse"]:
       if not kernel["DirectToVgprSparseMetadata"]:
         self.states.m.numVgprG2L = roundUp((kernel["NumLoadsCoalescedMetadata"] * kernel["NumLoadsPerpendicularMetadata"] * \
-          kernel["GlobalReadVectorWidthMetadata"] * tensorParametersM["bpe"]) / (float)(self.states.bpr))
+          kernel["GlobalReadVectorWidthMetadata"] * tensorParametersM["bpeDS"]) / (float)(self.states.bpr))
         if self.states.archCaps["HasEccHalf"]:
-          tpM = self.states.bpr if tensorParametersM["bpe"] * vwm < self.states.bpr else tensorParametersM["bpe"] * vwm
+          tpM = self.states.bpr if tensorParametersM["bpeDS"] * vwm < self.states.bpr else tensorParametersM["bpeDS"] * vwm
           self.states.m.numVgprG2LAllocated = roundUp((kernel["NumLoadsCoalescedMetadata"] * kernel["NumLoadsPerpendicularMetadata"] * \
             tpM) / (float)(self.states.bpr))
         # using _ds_store_b8: need one more vgpr space to do lshr
