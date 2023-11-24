@@ -5887,8 +5887,7 @@ class KernelWriterAssembly(KernelWriter):
 
               if self.states.archCaps["HasEccHalf"] and not tP["isM"]:
                 numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc =='B' else self.states.m.numVgprG2L
-                eccOffset = _getEccOffset(loadWidth, bpr=self.states.bpr, bpe=max(tP["bpe"], tP["bpeGR"]), \
-                  glvw=tP["glvw"], idx=i, numVgprG2L=numVgprG2L)
+                eccOffset = _getEccOffset(loadWidth, bpr=self.states.bpr, bpe=tP["bpeGR"], glvw=tP["glvw"], idx=i, numVgprG2L=numVgprG2L)
               else:
                 eccOffset = 0
 
@@ -6461,7 +6460,7 @@ class KernelWriterAssembly(KernelWriter):
               # FIXME: Workaround, unique pattern in 8bit + glvw == 2...
               if tP["bpe"] == tP["bpeGR"] and (tP["globalReadInstruction"].totalWidth) == 0.5 and (blockWidth == 0.25) and not tP["isM"]:
                 eccinstHi = i // 2
-              eccOffset = _getEccOffset(tP["globalReadInstruction"].totalWidth, bpr=self.states.bpr, bpe=max(tP["bpeGR"], tP["bpe"]), \
+              eccOffset = _getEccOffset(tP["globalReadInstruction"].totalWidth, bpr=self.states.bpr, bpe=tP["bpeDS"], \
                 glvw=tP["glvw"], idx=eccinstHi, numVgprG2L=numVgprG2L)
             else:
               eccOffset = 0
