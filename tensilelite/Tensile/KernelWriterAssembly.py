@@ -6061,7 +6061,7 @@ class KernelWriterAssembly(KernelWriter):
         if kernel["LocalWriteUseSgpr%s"%tc]:
           module.add(SXorB32(
               dst=sgpr("LocalWriteAddr%s"%tP["tensorChar"]), \
-              src0=hex(kernel["LdsOffsetA_Blk"]*tP["bpe"]), \
+              src0=hex(kernel["LdsOffsetA_Blk"]), \
               src1=sgpr("LocalWriteAddr%s"%tP["tensorChar"]), \
               comment="swap Red Blk SGPR"))
         else:
@@ -6069,7 +6069,7 @@ class KernelWriterAssembly(KernelWriter):
           for i in range(0,numLwa):
             module.add(VXorB32(
                 dst=vgpr("LocalWriteAddr%s+%u"%(tc,i)), \
-                src0=hex(kernel["LdsOffsetA_Blk"]*tP["bpe"]), \
+                src0=hex(kernel["LdsOffsetA_Blk"]), \
                 src1=vgpr("LocalWriteAddr%s+%u"%(tc,i)), \
                 comment="swap Red Blk"))
     # This used to control where to store the metadata
@@ -6087,7 +6087,7 @@ class KernelWriterAssembly(KernelWriter):
           if kernel["LocalWriteUseSgpr%s"%tc]:
             module.add(SXorB32(
                 dst=sgpr("LocalWriteAddr%s"%tPM["tensorChar"]), \
-                src0=hex(kernel["LdsOffsetA_Blk"]*tP["bpe"]), \
+                src0=hex(kernel["LdsOffsetA_Blk"]), \
                 src1=sgpr("LocalWriteAddr%s"%tPM["tensorChar"]), \
                 comment="swap Red Blk SGPR"))
           else:
@@ -6095,7 +6095,7 @@ class KernelWriterAssembly(KernelWriter):
             for i in range(0,numLwa):
               module.add(VXorB32(
                   dst=vgpr("LocalWriteAddr%s+%u"%(tc,i)), \
-                  src0=hex(kernel["LdsOffsetA_Blk"]*tP["bpe"]), \
+                  src0=hex(kernel["LdsOffsetA_Blk"]), \
                   src1=vgpr("LocalWriteAddr%s+%u"%(tc,i)), \
                   comment="swap Red Blk"))
     return module
@@ -6118,7 +6118,7 @@ class KernelWriterAssembly(KernelWriter):
       return Module("localWriteResetOffsets (Empty)")
     module = Module("localWriteResetOffsets")
     if needReset:
-      resetMask = hex(kernel["LdsOffsetA_Blk"]*tP["bpe"]-1 | self.consts.ldsOOB)
+      resetMask = hex(kernel["LdsOffsetA_Blk"]-1 | self.consts.ldsOOB)
       if internalPointerSwap:
         tP["localWriteSwapByteOffset"] = 0
       else:
@@ -6751,10 +6751,9 @@ class KernelWriterAssembly(KernelWriter):
       module.addComment1("localReadResetOffsets")
       tP["localReadOffset"] = 0
       module.addComment0("handled internally")
-    bpe = self.states.bpeAB if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"] and tP["isM"] else tP["bpe"]
     module.add(VAndB32(
         dst=vgpr("LocalReadAddr%s"%tP["tensorChar"]), \
-        src0=hex(kernel["LdsOffsetA_Blk"]*bpe-1), \
+        src0=hex(kernel["LdsOffsetA_Blk"]-1), \
         src1=vgpr("LocalReadAddr%s"%tP["tensorChar"]), \
         comment="reset Red,Blk -> Red"))
     return module
