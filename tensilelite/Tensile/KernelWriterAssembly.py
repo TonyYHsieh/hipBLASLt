@@ -6055,7 +6055,7 @@ class KernelWriterAssembly(KernelWriter):
       tc = tP["tensorChar"]
       #fixme-iui  need to use wrapping increment for double or triple buffering:
       if internalPointerSwap:
-        tP["localWriteSwapByteOffset"] = 0 if tP["localWriteSwapByteOffset"] else kernel["LdsOffsetA_Blk"]*tP["bpe"]
+        tP["localWriteSwapByteOffset"] = 0 if tP["localWriteSwapByteOffset"] else kernel["LdsOffsetA_Blk"]
         module.addComment1("(EPS=1) local write swap internal offset -> %u" % tP["localWriteSwapByteOffset"])
       else:
         if kernel["LocalWriteUseSgpr%s"%tc]:
@@ -6081,7 +6081,7 @@ class KernelWriterAssembly(KernelWriter):
         tc = "Metadata"
         tPM = tP["tpsMetadata"]
         if internalPointerSwap:
-          tPM["localWriteSwapByteOffset"] = 0 if tPM["localWriteSwapByteOffset"] else kernel["LdsOffsetA_Blk"]*tP["bpe"]
+          tPM["localWriteSwapByteOffset"] = 0 if tPM["localWriteSwapByteOffset"] else kernel["LdsOffsetA_Blk"]
           module.addComment1("(EPS=1) local write swap internal offset -> %u" % tPM["localWriteSwapByteOffset"])
         else:
           if kernel["LocalWriteUseSgpr%s"%tc]:
@@ -6723,14 +6723,13 @@ class KernelWriterAssembly(KernelWriter):
     if kernel["1LDSBuffer"]:
       return Module("localReadSwapOffsets (Empty)")
     module = Module("localReadSwapOffsets")
-    bpe = self.states.bpeAB if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"] and tP["isM"] else tP["bpe"]
     if internalPointerSwap:
-      tP["localReadSwapByteOffset"] = 0 if tP["localReadSwapByteOffset"] else kernel["LdsOffsetA_Blk"]*bpe
+      tP["localReadSwapByteOffset"] = 0 if tP["localReadSwapByteOffset"] else kernel["LdsOffsetA_Blk"]
       module.addComment1("local read swap internal offset -> %u" % tP["localReadSwapByteOffset"])
     else:
       module.add(VXorB32(
           dst=vgpr("LocalReadAddr%s"%tP["tensorChar"]), \
-          src0=hex(kernel["LdsOffsetA_Blk"]*bpe), \
+          src0=hex(kernel["LdsOffsetA_Blk"]), \
           src1=vgpr("LocalReadAddr%s"%tP["tensorChar"]), \
           comment="swap Red Blk"))
     return module
