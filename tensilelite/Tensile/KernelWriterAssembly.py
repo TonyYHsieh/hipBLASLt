@@ -5887,7 +5887,7 @@ class KernelWriterAssembly(KernelWriter):
 
               if self.states.archCaps["HasEccHalf"] and not tP["isM"]:
                 numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc =='B' else self.states.m.numVgprG2L
-                eccOffset = _getEccOffset(loadWidth, bpr=self.states.bpr, bpe=tP["bpeGR"], glvw=tP["glvw"], idx=i, numVgprG2L=numVgprG2L)
+                eccOffset = _getEccOffset(loadWidth, bpr=self.states.bpr, bpe=tP["bpeDS"], glvw=tP["glvw"], idx=i, numVgprG2L=numVgprG2L)
               else:
                 eccOffset = 0
 
