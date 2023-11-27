@@ -545,168 +545,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     isBarrier = kernel["LoopIters"] - self.states.numItersPLR
     hasLocalRead = localReadCode.countType(LocalReadInstruction)
     # Default schedule is other, local reads, then local writes:
-    if self.states.scheduleIterAlg==0:
-      # simple schedule, just add the modules in-order
-      iterCode.add(globalReadCode)
-      iterCode.add(waitLWCode)
-      iterCode.add(syncCode)
-      iterCode.add(localReadCode)
-      iterCode.add(localWriteCode)
-      iterCode.add(pointerLWCode)
-      iterCode.add(pointerLRCode)
-      iterCode.add(waitCode)
-      iterCode.add(packCode)
-      iterCode.add(macIterCode)
-    elif self.states.scheduleIterAlg == 1:
-      iterCode.add(waitLWCode)
-      iterCode.add(syncCode)
-      #import pdb
-      #pdb.set_trace()
-      # simple algorithm - do half the reads first:
-      readsToSchedule = localReadCode.countType(LocalReadInstruction) / 2
-      #localReadCode.prettyPrint()
-      readItems = localReadCode.flatitems()
-      while readItems:
-        item = readItems.pop(0)
-        #print "readsToSchedule=", readsToSchedule, "item=", item
-        iterCode.add(item)
-        readsThisItem = item.countType(LocalReadInstruction)
-        if readsThisItem:
-          assert readsThisItem==1, "Scheduler assumes 1 read per item"
-          readsToSchedule = readsToSchedule - 1
-          if readsToSchedule == 0:
-            break
-
-      iterCode.add(globalReadCode)
-
-      # add rest of the reads here
-      for item in readItems:
-        iterCode.add(item)
-
-      #move down write to be the last
-      iterCode.add(localWriteCode)
-      # tack on the pointer and mac code:
-      iterCode.add(pointerLWCode)
-      iterCode.add(pointerLRCode)
-      iterCode.add(waitCode)
-      iterCode.add(packCode)
-      iterCode.add(macIterCode)
-    elif self.states.scheduleIterAlg == 2:
-    # SIA2 use only 1 iteration and separate compute and fetch by raising compute priority
-    # 2 workgroup interleave, while WG0/WG1 doing compute, WG1/WG0 doing fetch
-    # EPS need to be 1, or valu instruction will break interleave
-      iterCode.add(globalReadCode)
-      iterCode.add(waitLWCode)
-      iterCode.add(syncCode)
-      iterCode.add(localReadCode)
-      iterCode.add(waitCode)
-
-      # interleave pack code
-      # BF16 or FP16: each packCode is for one 32-bit reg,  1 packing inst: half-to-single x1
-      # INT8        : each packCode is for one 32-bit regs, 3 packing inst: byte-to-half x2 + half-to-single x1
-      if self.states.archCaps["HasEccHalf"]:
-        instPerRegPack = 1 / kernel["ProblemType"]["DataType"].numRegisters() - 1
-      else:
-        instPerRegPack = 1 if (kernel["ProblemType"]["DataType"].numRegisters() == 0.25) else 0
-      instPerPack    = int(kernel["MIInputPerThread"] * kernel["ProblemType"]["DataType"].numRegisters() * instPerRegPack)
-      packItems = []
-      for iui in range(kernel["InnerUnroll"]):
-        packINtems = [ [] for j in range(max(self.states.numReadsIterCoalescedA,self.states.numReadsIterCoalescedB)) ]
-        packA = packCode.findNamedItem("packA_I%s"%(iui))
-        packB = packCode.findNamedItem("packB_I%s"%(iui))
-        # In case localReadDo not generate pack Module
-        # and findNamedItem will return None type
-        # TODO: let all type have pack Module
-        if not packA:
-          packA = Module()
-        packAItems = packA.flatitems()
-        if not packB:
-          packB = Module()
-        packBItems = packB.flatitems()
-        if packAItems:
-          for j in range(self.states.numReadsIterCoalescedA):
-            for n in range(instPerPack):
-              packINtems[j].append(packAItems.pop(0))
-        if packBItems:
-          for j in range(self.states.numReadsIterCoalescedB):
-            for n in range(instPerPack):
-              packINtems[j].append(packBItems.pop(0))
-        while packAItems:
-          for j in range(self.states.numReadsIterCoalescedA):
-            for n in range(instPerPack):
-              packINtems[j].append(packAItems.pop(0))
-        while packBItems:
-          for j in range(self.states.numReadsIterCoalescedB):
-            for n in range(instPerPack):
-              packINtems[j].append(packBItems.pop(0))
-        for j in range(max(self.states.numReadsIterCoalescedA,self.states.numReadsIterCoalescedB)):
-          packItems += packINtems.pop(0)
-
-      macIterItems = macIterCode.flatitems()
-      # pop the first code which is s_nop 1 for packing
-      item = macIterItems.pop(0) if isinstance(macIterItems[0], SNop) else None
-
-      numMfmaPerIter = self.states.numMfmaPerIter
-      curPackIdx = 0
-      packAIdx = 0
-      packBIdx = 0
-
-      for i in range(numMfmaPerIter):
-        if packItems:
-          # how many pack have to be done
-          # calculate the data index of this mfma used for A and B
-          # if i // kernel["MIWaveTile"][0]==0, mfma will use new A (need to take iu into account)
-          # if i % kernel["MIWaveTile"][0]==0, mfma will use new B
-          packAIdx += instPerPack if i//(kernel["MIWaveTileA"]+kernel["MIWaveTileA"]*kernel["MIWaveTileB"]*(i//(kernel["MIWaveTileA"]*kernel["MIWaveTileB"]))) == 0 else 0
-          packBIdx += instPerPack if i % kernel["MIWaveTileA"] == 0 else 0
-          # blockWidth < 1, means 0.5 or 0.25 (BF,H,Int8)
-          packAIdx = packAIdx if tPA["bpe"] < 4 and not kernel["UnrollMajorLDSA"] else 0
-          packBIdx = packBIdx if tPB["bpe"] < 4 and not kernel["UnrollMajorLDSB"] else 0
-          numPack = (packAIdx + packBIdx)
-          iterCode.addComment0("pack scheduling: packAIdx:%u, packBIdx:%u" %(packAIdx,packBIdx))
-          # we put 2 pack in each mfma, "2" means A & B
-          if packItems:
-            for j in range(instPerPack):
-              iterCode.add(packItems.pop(0))
-              curPackIdx += 1
-          if packItems:
-            for j in range(instPerPack):
-              iterCode.add(packItems.pop(0))
-              curPackIdx += 1
-          # since packed register need to wait 2 quad cycle to finish packing
-          # we insert pack instruction if we can, or s_nop
-          while curPackIdx < numPack+2:
-            if packItems:
-              for j in range(instPerPack):
-                iterCode.add(packItems.pop(0))
-                curPackIdx += 1
-            else:
-              iterCode.add(SNop(waitState=0, comment="VALU packing writes to be consumed by matrix instruction"))
-              curPackIdx += 1
-        if i == 0:
-          if not packItems:
-            tmpVgpr = self.vgprPool.checkOut(1)
-            iterCode.add(VMovB32(dst="v%u"%(tmpVgpr), src="0x0", comment="valu operation to have different priority"))
-            self.vgprPool.checkIn(tmpVgpr)
-          iterCode.add(SSetPrior(prior=3, comment="Raise priority while processing macs"))
-        item = macIterItems.pop(0)
-        iterCode.add(item)
-      while macIterItems:
-        iterCode.add(macIterItems.pop(0))
-
-      iterCode.add(SSetPrior(prior=1, comment="Raise priority while processing macs"))
-      if kernel["1LDSBuffer"]:
-        barrier = Module()
-        barrier.addComment0("1 LDS buffer: read-sync-write")
-        barrier.add(SWaitCnt(lgkmcnt=0, comment=""))
-        barrier.add(SBarrier())
-        iterCode.add(barrier)
-      iterCode.add(localWriteCode)
-      iterCode.add(pointerLWCode)
-      iterCode.add(pointerLRCode)
-      iterCode.add(SSetPrior(prior=2, comment="Raise priority while processing macs"))
-      pass
-    elif self.states.scheduleIterAlg == 3:
+    if self.states.scheduleIterAlg == 3:
       iterCode.addComment0(" grEndMfmaIndex:%u, lwStartMfmaIndex:%u, lwEndMfmaIndex:%u "\
                           %(self.states.grEndMfmaIndex, self.states.lwStartMfmaIndex, self.states.lwEndMfmaIndex))
       iterCode.addComment0(" numMfmaForLR:%u, syncPlrMfmaIndex:%u "\
@@ -774,7 +613,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       else:
         instPerRegPack = 1 if (kernel["ProblemType"]["DataType"].numRegisters() == 0.25) else 0
       instPerPackA    = int(kernel["MIInputPerThreadA"] * kernel["ProblemType"]["DataType"].numRegisters() * instPerRegPack)
-      instPerPackB    = int(kernel["MIInputPerThreadB"] * kernel["ProblemType"]["DataType"].numRegisters() * instPerRegPack)
+      instPerPackB    = 6 #int(kernel["MIInputPerThreadB"] * kernel["ProblemType"]["DataType"].numRegisters() * instPerRegPack)
       instPerPackM    = 1 #int(kernel["MIInputPerThreadMetadata"])
       packItems = []
       for iui in range(kernel["InnerUnroll"]):
@@ -1130,6 +969,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
         ####
         # scheduled mfma
         ####
+        iterCode.add(SNop(waitState=1, comment="Tony"))
         iterCode.add(macIterItems.pop(0) if macIterItems else Module())
 
         if kernel["StorePriorityOpt"]:
