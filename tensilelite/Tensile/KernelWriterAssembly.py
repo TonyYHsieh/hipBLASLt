@@ -6369,7 +6369,7 @@ class KernelWriterAssembly(KernelWriter):
 
     tc = tP["tensorChar"]
     imod = Module()
-    isBpeInputLarger = True if tP["bpeGR"] > tP["bpe"] else False
+    isBpeInputLarger = True if tP["bpeGR"] > tP["bpeDS"] else False
 
     def localWriteBody(tP):
       tc = tP["tensorChar"]
@@ -6432,12 +6432,12 @@ class KernelWriterAssembly(KernelWriter):
             if tP["glvw"] <= 2:
               g2lIdx = i * blockWidth
               if isBpeInputLarger:
-                g2lIdx *= (tP["bpeGR"]// tP["bpe"])
+                g2lIdx *= (tP["bpeGR"]// tP["bpeDS"])
               g2lIdx = int(g2lIdx)
             else:
               g2lIdx = int(i * blockWidth)
               if isBpeInputLarger:
-                g2lIdx *= (tP["bpeGR"]// tP["bpe"])
+                g2lIdx *= (tP["bpeGR"]// tP["bpeDS"])
 
             graIdx = i * self.states.rpgo if kernel["BufferLoad"] else i * self.states.rpga
 
@@ -6458,7 +6458,7 @@ class KernelWriterAssembly(KernelWriter):
               numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc == 'B' else self.states.m.numVgprG2L
               eccinstHi = instHi
               # FIXME: Workaround, unique pattern in 8bit + glvw == 2...
-              if tP["bpe"] == tP["bpeGR"] and (tP["globalReadInstruction"].totalWidth) == 0.5 and (blockWidth == 0.25) and not tP["isM"]:
+              if tP["bpeDS"] == tP["bpeGR"] and (tP["globalReadInstruction"].totalWidth) == 0.5 and (blockWidth == 0.25) and not tP["isM"]:
                 eccinstHi = i // 2
               eccOffset = _getEccOffset(tP["globalReadInstruction"].totalWidth, bpr=self.states.bpr, bpe=tP["bpeDS"], \
                 glvw=tP["glvw"], idx=eccinstHi, numVgprG2L=numVgprG2L)
@@ -6469,7 +6469,7 @@ class KernelWriterAssembly(KernelWriter):
             if (blockWidth == 0.25) and ((s % 4) == 0) and (not tP["isM"] or needToSplitMetadata):
                 src = "G2L%s+%u" % (tc, g2lIdx + eccOffset)
                 dst = "G2L%s+%u+%u" % (tc, tmpVgprOffset, g2lIdx)
-                if tP["bpe"] != tP["bpeGR"]:
+                if tP["bpeDS"] != tP["bpeGR"]:
                   if kernel["ProblemType"]["DataType%s"%tc].isHalf():
                     if tP["glvw"] > 1:
                       dst = "G2L%s+%u+%u" % (tc, tmpVgprOffset, g2lIdx // 2)
@@ -6494,7 +6494,7 @@ class KernelWriterAssembly(KernelWriter):
                 paramList.append(vgpr("G2L%s+%u"%(tc, g2lIdx)))
                 numsOfRegister.append(1)
               elif blockWidth == 0.25 and ((s % 2) == 1): # Int8, s = 1 or 3 (high8Bits)
-                if tP["bpe"] != tP["bpeGR"] and tmpVgprOffset != 0:
+                if tP["bpeDS"] != tP["bpeGR"] and tmpVgprOffset != 0:
                   paramList.append(vgpr("G2L%s+%u+%u"%(tc, tmpVgprOffset, g2lIdx // 2)))
                 else:
                   paramList.append(vgpr("G2L%s+%u+%u"%(tc, tmpVgprOffset, g2lIdx)))
@@ -6531,7 +6531,7 @@ class KernelWriterAssembly(KernelWriter):
             if (kernel["ProblemType"]["DataType"].isHalf() or kernel["ProblemType"]["DataType"].isBFloat16()) and not tP["isM"]:
               if s%2==1:
                 isHigh16Bits = True
-              if tP["glvw"]==1 and instHi%2==1:
+              if blockWidth == 0.5 and instHi%2==1:
                 isHigh16Bits = True
               if kernel["ProblemType"]["DataType%s"%tc].isFloat8():
                 if g2lIdx%2 == 1:

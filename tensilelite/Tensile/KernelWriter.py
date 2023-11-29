@@ -563,9 +563,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
       macIterItems = macIterCode.flatitems()
       skipLocalWriteWaitcnt = 0
       localReadsWaitcnt = 0
-      curPackIdx = 0
-      packAIdx = 0
-      packBIdx = 0
+      curPackInst = 0
+      packAIdx = (2 if (kernel["MIWaveTileA"] > 1) else 1) if kernel["ConvertAfterDS"] else 0
+      packBIdx = ((2 if (kernel["MIWaveTileB"] > 1) else 1) if (kernel["MIWaveTileA"] == 1) else 1) if kernel["ConvertAfterDS"] else 0
 
       #####
       # Prepare localReadCode
@@ -618,7 +618,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
       packItems = []
       for iui in range(kernel["InnerUnroll"]):
-        packINtems = [ [] for j in range(max(self.states.numReadsIterCoalescedA,self.states.numReadsIterCoalescedB,self.states.numReadsIterCoalescedMetadata)) ]
+        packINtems = [ [] for j in range(max(self.states.numReadsIterCoalescedA, self.states.numReadsIterCoalescedB, self.states.numReadsIterCoalescedMetadata)) ]
         packA = packCode.findNamedItem("packA_I%s"%(iui))
         packB = packCode.findNamedItem("packB_I%s"%(iui))
         packM = packCode.findNamedItem("packMetadata_I%s"%(iui))
@@ -660,8 +660,10 @@ class KernelWriter(metaclass=abc.ABCMeta):
             for j in range(self.states.numReadsIterCoalescedMetadata):
               for n in range(instPerPackM):
                 packINtems[j].append(packMItems.pop(0))
-        for j in range(max(self.states.numReadsIterCoalescedA,self.states.numReadsIterCoalescedB)):
+
+        for j in range(max(self.states.numReadsIterCoalescedA, self.states.numReadsIterCoalescedB)):
           packItems += packINtems.pop(0)
+
 
       # remove s_nop for packing
       # we will add s_nop if needed
@@ -912,53 +914,79 @@ class KernelWriter(metaclass=abc.ABCMeta):
         # scheduled pack
         ####
         if packItems:
-          # how many pack have to be done
-          # calculate the data index of this mfma used for A and B
-          # if i // kernel["MIWaveTile"][0]==0, mfma will use new A (need to take iu into account)
-          # if i % kernel["MIWaveTile"][0]==0, mfma will use new B
-          packAIdx += instPerPackA if i // (kernel["MIWaveTileA"] + kernel["MIWaveTileA"]*kernel["MIWaveTileB"]*(i//(kernel["MIWaveTileA"]*kernel["MIWaveTileB"]))) == 0 else 0
-          packBIdx += instPerPackB if i % kernel["MIWaveTileA"] == 0 else 0
-          packMIdx = 0
-          if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
-            if kernel["ProblemType"]["Sparse"] == 2:
-              packMIdx += instPerPackM if i % kernel["MIWaveTileA"] == 0 else 0
-            else:
-              packMIdx += instPerPackM if i//(kernel["MIWaveTileA"]+kernel["MIWaveTileA"]*kernel["MIWaveTileB"]*(i//(kernel["MIWaveTileA"]*kernel["MIWaveTileB"]))) == 0 else 0
-          # blockWidth < 1, means 0.5 or 0.25 (BF,H,Int8)
-          packAIdx = packAIdx if tPA["bpe"] < 4 and (not kernel["UnrollMajorLDSA"] or kernel["ConvertAfterDS"]) else 0
-          packBIdx = packBIdx if tPB["bpe"] < 4 and (not kernel["UnrollMajorLDSB"] or kernel["ConvertAfterDS"]) else 0
-          packMIdx = packMIdx if not kernel["UnrollMajorLDSMetadata"] else 0
-          numPack = (packAIdx + packBIdx+ packMIdx)
-          if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
-            iterCode.addComment0("pack scheduling: packAIdx:%u, packBIdx:%u, packMIdx:%u" %(packAIdx,packBIdx,packMIdx))
-          else:
-            iterCode.addComment0("pack scheduling: packAIdx:%u, packBIdx:%u" %(packAIdx,packBIdx))
+          if kernel["ConvertAfterDS"]:
+            mfmaPackIter = i
 
-          # we put 2 pack in each mfma
-          for j in range(instPerPackA):
-            if packItems:
-              iterCode.add(packItems.pop(0))
-              curPackIdx += 1
-          for j in range(instPerPackM):
-            if packItems:
-              iterCode.add(packItems.pop(0))
-              curPackIdx += 1
-          for j in range(instPerPackB):
-            if packItems:
-              iterCode.add(packItems.pop(0))
-              curPackIdx += 1
-          # since packed register need to wait 2 quad cycle to finish packing
-          # we insert pack instruction if we can, or s_nop
-          while curPackIdx < numPack+2:
-            if packItems:
-              iterCode.add(packItems.pop(0))
-              curPackIdx += 1
+            need = packBIdx * instPerPackB + packAIdx * instPerPackA
+
+            if packBIdx == 1:
+              targetIdxInCurIter = packAIdx - 2
             else:
-              iterCode.add(SNop(waitState=0, comment="VALU packing writes to be consumed by matrix instruction"))
-              curPackIdx += 1
-        if i == numMfmaPerIter - 1:
-          while packItems:
-            iterCode.add(packItems.pop(0))
+              targetIdxInCurIter = (packBIdx-1) * kernel["MIWaveTileA"] - 1
+
+            divide = (targetIdxInCurIter - i) if (targetIdxInCurIter - i > 0) else 1
+            popNum = int(max(ceil((need - curPackInst) / (divide)), 2))
+
+            for j in range(popNum):
+              if packItems:
+                iterCode.add(packItems.pop(0))
+                curPackInst += 1
+
+            if (kernel["MIWaveTileA"] == 1 and kernel["MIWaveTileB"] == 1):
+                iterCode.add(SNop(waitState=1, comment="VALU packing writes to be consumed by matrix instruction"))
+
+            nextPackInst = curPackInst + 2
+            packAIdx = int(ceil((nextPackInst - instPerPackB) / instPerPackA)) if instPerPackA else kernel["MIWaveTileA"] 
+            packAIdx = kernel["MIWaveTileA"] if packAIdx >= kernel["MIWaveTileA"] else packAIdx
+            packBIdx = int(ceil((nextPackInst - packAIdx * instPerPackA) / instPerPackB)) if instPerPackB else kernel["MIWaveTileB"]
+          else:
+            # how many pack have to be done
+            # calculate the data index of this mfma used for A and B
+            # if i // kernel["MIWaveTile"][0]==0, mfma will use new A (need to take iu into account)
+            # if i % kernel["MIWaveTile"][0]==0, mfma will use new B
+            packAIdx += instPerPackA if i // (kernel["MIWaveTileA"] + kernel["MIWaveTileA"]*kernel["MIWaveTileB"]*(i//(kernel["MIWaveTileA"]*kernel["MIWaveTileB"]))) == 0 else 0
+            packBIdx += instPerPackB if i % kernel["MIWaveTileA"] == 0 else 0
+            packMIdx = 0
+            if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
+              if kernel["ProblemType"]["Sparse"] == 2:
+                packMIdx += instPerPackM if i % kernel["MIWaveTileA"] == 0 else 0
+              else:
+                packMIdx += instPerPackM if i//(kernel["MIWaveTileA"]+kernel["MIWaveTileA"]*kernel["MIWaveTileB"]*(i//(kernel["MIWaveTileA"]*kernel["MIWaveTileB"]))) == 0 else 0
+            # blockWidth < 1, means 0.5 or 0.25 (BF,H,Int8)
+            packAIdx = packAIdx if tPA["bpe"] < 4 and (not kernel["UnrollMajorLDSA"] or kernel["ConvertAfterDS"]) else 0
+            packBIdx = packBIdx if tPB["bpe"] < 4 and (not kernel["UnrollMajorLDSB"] or kernel["ConvertAfterDS"]) else 0
+            packMIdx = packMIdx if not kernel["UnrollMajorLDSMetadata"] else 0
+            numPack = (packAIdx + packBIdx+ packMIdx)
+            if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
+              iterCode.addComment0("pack scheduling: packAIdx:%u, packBIdx:%u, packMIdx:%u" %(packAIdx,packBIdx,packMIdx))
+            else:
+              iterCode.addComment0("pack scheduling: packAIdx:%u, packBIdx:%u" %(packAIdx,packBIdx))
+
+            # we put 2 pack in each mfma
+            for j in range(instPerPackA):
+              if packItems:
+                iterCode.add(packItems.pop(0))
+                curPackIdx += 1
+            for j in range(instPerPackM):
+              if packItems:
+                iterCode.add(packItems.pop(0))
+                curPackIdx += 1
+            for j in range(instPerPackB):
+              if packItems:
+                iterCode.add(packItems.pop(0))
+                curPackIdx += 1
+            # since packed register need to wait 2 quad cycle to finish packing
+            # we insert pack instruction if we can, or s_nop
+            while curPackIdx < numPack+2:
+              if packItems:
+                iterCode.add(packItems.pop(0))
+                curPackIdx += 1
+              else:
+                iterCode.add(SNop(waitState=0, comment="VALU packing writes to be consumed by matrix instruction"))
+                curPackIdx += 1
+          if i == numMfmaPerIter - 1:
+            while packItems:
+              iterCode.add(packItems.pop(0))
 
         ####
         # scheduled mfma dependency
