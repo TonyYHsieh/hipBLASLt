@@ -2644,25 +2644,27 @@ class Solution(collections.abc.Mapping):
     if state["ProblemType"]["Sparse"] and not state["DirectToVgprSparseMetadata"]:
       state["UnrollMajorLDSMetadata"] = state["TransposeLDSMetadata"] and (not state["ProblemType"]["TLUMetadata"])
 
+    tmpBpe = state["ProblemType"]["DataTypeA"].numBytes() if state["ConvertAfterDS"] else state["ProblemType"]["DataType"].numBytes()
     if state["LdsBlockSizePerPadA"] == -1:
       if state["UnrollMajorLDSA"]:
-        state["LdsBlockSizePerPadA"] = roundUpToNearestMultiple(state["_DepthUA"] * state["ProblemType"]["DataType"].numBytes(), 128)
-        if state["SourceSwap"] and state["_DepthUA"] * state["ProblemType"]["DataType"].numBytes() * state["VectorWidthA"] > 128:
-          state["LdsBlockSizePerPadA"] = roundUpToNearestMultiple(state["_DepthUA"] * state["ProblemType"]["DataType"].numBytes() * state["VectorWidthA"], 128)
+        state["LdsBlockSizePerPadA"] = roundUpToNearestMultiple(state["_DepthUA"] * tmpBpe, 128)
+        if state["SourceSwap"] and state["_DepthUA"] * tmpBpe * state["VectorWidthA"] > 128:
+          state["LdsBlockSizePerPadA"] = roundUpToNearestMultiple(state["_DepthUA"] * tmpBpe * state["VectorWidthA"], 128)
       else:
         if state["MatrixInstB"] == 1 and state["MatrixInstM"] == 16:
-          state["LdsBlockSizePerPadA"] = state["MacroTile0"] * state["ProblemType"]["DataType"].numBytes() * state["LocalReadVectorWidth"]
+          state["LdsBlockSizePerPadA"] = state["MacroTile0"] * tmpBpe * state["LocalReadVectorWidth"]
         else:
           state["LdsBlockSizePerPadA"] = 0
 
+    tmpBpe = state["ProblemType"]["DataTypeB"].numBytes() if state["ConvertAfterDS"] else state["ProblemType"]["DataType"].numBytes()
     if state["LdsBlockSizePerPadB"] == -1:
       if state["UnrollMajorLDSB"]:
-        state["LdsBlockSizePerPadB"] = roundUpToNearestMultiple(state["_DepthUB"] * state["ProblemType"]["DataType"].numBytes(), 128)
-        if state["SourceSwap"] and state["_DepthUB"] * state["ProblemType"]["DataType"].numBytes() * state["VectorWidthB"] > 128:
-          state["LdsBlockSizePerPadB"] = roundUpToNearestMultiple(state["_DepthUB"] * state["ProblemType"]["DataType"].numBytes() * state["VectorWidthB"], 128)
+        state["LdsBlockSizePerPadB"] = roundUpToNearestMultiple(state["_DepthUB"] * tmpBpe, 128)
+        if state["SourceSwap"] and state["_DepthUB"] * tmpBpe * state["VectorWidthB"] > 128:
+          state["LdsBlockSizePerPadB"] = roundUpToNearestMultiple(state["_DepthUB"] * tmpBpe * state["VectorWidthB"], 128)
       else:
         if state["MatrixInstB"] == 1 and state["MatrixInstM"] == 16:
-          state["LdsBlockSizePerPadB"] = state["MacroTile1"] * state["ProblemType"]["DataType"].numBytes() * state["LocalReadVectorWidth"]
+          state["LdsBlockSizePerPadB"] = state["MacroTile1"] * tmpBpe * state["LocalReadVectorWidth"]
         else:
           state["LdsBlockSizePerPadB"] = 0
 
