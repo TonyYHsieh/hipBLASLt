@@ -563,6 +563,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       macIterItems = macIterCode.flatitems()
       skipLocalWriteWaitcnt = 0
       localReadsWaitcnt = 0
+      curPackIdx = 0
       curPackInst = 0
       packAIdx = (2 if (kernel["MIWaveTileA"] > 1) else 1) if kernel["ConvertAfterDS"] else 0
       packBIdx = ((2 if (kernel["MIWaveTileB"] > 1) else 1) if (kernel["MIWaveTileA"] == 1) else 1) if kernel["ConvertAfterDS"] else 0
