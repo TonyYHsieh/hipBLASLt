@@ -1,0 +1,189 @@
+GlobalParameters:
+  MinimumRequiredVersion: 4.14.0
+  SleepPercent: 100
+  NumWarmups: 100
+  EnqueuesPerSync: 1000
+  NumElementsToValidate: 0
+  DataInitTypeBeta: 0
+  DataInitTypeAB: 12
+  DataInitTypeAlpha: 1
+  NewClient: 2
+  CSVExportWinner: 1
+  CSVMergeSameProblemID: 1
+  Device: 0
+  # PrintWinnersOnly: 1
+  PrintSolutionRejectionReason: True
+  # MinKForGSU: 32
+  RotatingBufferSize: 512
+
+BenchmarkProblems:
+  ########################################
+  # NN - standard
+  ########################################
+  -
+    - # ProblemType
+      OperationType: GEMM
+      DataType: h
+      DataTypeA: F8
+      DataTypeB: h
+      DestDataType: h
+      ComputeDataType: s
+      HighPrecisionAccumulate: True
+      TransposeA: 0
+      TransposeB: 0
+      UseBeta: True
+      Batched: True
+        #Activation: True
+        #ActivationHPA: True
+        #UseBias: True
+        #UseScaleAB: True
+        #UseScaleAlphaVec: True
+    - # BenchmarkProblemSizeGroup - Standard - All problem
+      InitialSolutionParameters:
+      BenchmarkCommonParameters:
+        - KernelLanguage: ["Assembly"]
+      ForkParameters:
+        - MatrixInstruction:
+          #- [32, 32, 8, 1,  1,   4, 1,  1,4 ]
+          #- [32, 32, 8, 1,  1,   2, 2,  2,2 ]
+          #- [32, 32, 8, 1,  1,   2, 2,  2,2 ]
+          #- [32, 32, 8, 1,  1,   4, 2,  2,2 ]
+          #- [32, 32, 8, 1,  1,   2, 4,  4,1 ]
+          #- [32, 32, 8, 1,  1,   4, 4,  2,2 ]
+          #- [16, 16, 16, 1,  1,   2, 1,  4,1 ]
+          # - [16, 16, 16, 1,  1,   1, 1,  1,1 ] #
+          # - [16, 16, 16, 1,  1,   1, 1,  1,2 ]
+          # - [16, 16, 16, 1,  1,   1, 1,  1,4 ]
+          # # - [16, 16, 16, 1,  1,   1, 2,  1,1 ]
+          # # - [16, 16, 16, 1,  1,   1, 2,  1,2 ]
+          # - [16, 16, 16, 1,  1,   1, 2,  1,4 ]
+          # # - [16, 16, 16, 1,  1,   1, 3,  1,1 ]
+          # - [16, 16, 16, 1,  1,   1, 3,  1,2 ]
+          # - [16, 16, 16, 1,  1,   1, 3,  1,4 ]
+          # # - [16, 16, 16, 1,  1,   1, 4,  1,1 ]
+          # # - [16, 16, 16, 1,  1,   1, 4,  1,2 ]
+          # - [16, 16, 16, 1,  1,   1, 4,  1,4 ]
+          # - [16, 16, 16, 1,  1,   1, 3,  2,2 ]
+          # - [32, 32, 8, 1,  1,   1, 1,  1,1 ] #
+          # - [32, 32, 8, 1,  1,   1, 1,  1,2 ]
+          # - [32, 32, 8, 1,  1,   1, 1,  1,4 ]
+          # # - [32, 32, 8, 1,  1,   1, 2,  1,1 ]
+          # # - [32, 32, 8, 1,  1,   1, 2,  1,2 ]
+          # - [32, 32, 8, 1,  1,   1, 2,  1,4 ]
+          # # - [32, 32, 8, 1,  1,   1, 3,  1,1 ]
+          # - [32, 32, 8, 1,  1,   1, 3,  1,2 ]
+          # - [32, 32, 8, 1,  1,   1, 3,  1,4 ]
+          # # - [32, 32, 8, 1,  1,   1, 4,  1,1 ]
+          # # - [32, 32, 8, 1,  1,   1, 4,  1,2 ]
+          # - [32, 32, 8, 1,  1,   1, 4,  1,4 ]
+          - [16, 16, 16, 1,  1,   1, 1,  1,1 ] #16
+          - [16, 16, 16, 1,  1,   1, 1,  2,1 ] #32
+          - [16, 16, 16, 1,  1,   1, 1,  4,1 ] #64
+          # # - [16, 16, 16, 1,  1,   1, 2,  1,1 ]
+          # # - [16, 16, 16, 1,  1,   1, 2,  1,2 ]
+          - [16, 16, 16, 1,  1,   2, 1,  4,1 ] #128
+          - [16, 16, 16, 1,  1,   2, 1,  2,2 ] #128
+          - [16, 16, 16, 1,  1,   1, 2,  4,1 ] #128
+          # # - [16, 16, 16, 1,  1,   1, 3,  1,1 ]
+          - [16, 16, 16, 1,  1,   3, 1,  2,1 ] #96
+          - [16, 16, 16, 1,  1,   3, 1,  2,2 ] #96
+          # - [16, 16, 16, 1,  1,   5, 1,  2,1 ] #160
+          - [16, 16, 16, 1,  1,   3, 1,  4,1 ] #192
+          # - [16, 16, 16, 1,  1,   7, 1,  2,1 ] #224
+          # # - [16, 16, 16, 1,  1,   1, 4,  1,1 ]
+          # # - [16, 16, 16, 1,  1,   1, 4,  1,2 ]
+          - [16, 16, 16, 1,  1,   4, 1,  4,1 ] #256
+          - [16, 16, 16, 1,  1,   4, 1,  2,2 ] #256
+          # - [16, 16, 16, 1,  1,   9, 1,  2,1 ] #288
+          # - [16, 16, 16, 1,  1,   5, 1,  4,1 ] #320
+          # - [16, 16, 16, 1,  1,   11, 1,  2,1 ] #352
+          - [16, 16, 16, 1,  1,   6, 1,  4,1 ] #384
+          - [16, 16, 16, 1,  1,   6, 1,  2,2 ] #384
+          # - [16, 16, 16, 1,  1,   13, 1,  2,1 ] #416
+          # - [16, 16, 16, 1,  1,   7, 1,  4,1 ] #448
+          # - [16, 16, 16, 1,  1,   15, 1,  2,1 ] #480
+          - [16, 16, 16, 1,  1,   8, 1,  4,1 ] #512
+          - [16, 16, 16, 1,  1,   8, 1,  2,2 ] #512
+          - [16, 16, 16, 1,  1,   4, 2,  4,1 ] #512
+          # - [16, 16, 16, 1,  1,   3, 1,  2,2 ]
+          # - [32, 32, 8, 1,  1,   1, 1,  1,1 ] #
+          # - [32, 32, 8, 1,  1,   1, 1,  2,1 ]
+          # - [32, 32, 8, 1,  1,   1, 1,  4,1 ]
+          # # # - [32, 32, 8, 1,  1,   1, 2,  1,1 ]
+          # # # - [32, 32, 8, 1,  1,   1, 2,  1,2 ]
+          # - [32, 32, 8, 1,  1,   2, 1,  4,1 ]
+          # # # - [32, 32, 8, 1,  1,   1, 3,  1,1 ]
+          # - [32, 32, 8, 1,  1,   3, 1,  2,1 ]
+          # - [32, 32, 8, 1,  1,   3, 1,  4,1 ]
+          # # # - [32, 32, 8, 1,  1,   1, 4,  1,1 ]
+          # # # - [32, 32, 8, 1,  1,   1, 4,  1,2 ]
+          # - [32, 32, 8, 1,  1,   4, 1,  4,1 ]
+        - AssertFree0ElementMultiple: [8]
+        - AssertFree1ElementMultiple: [8]
+        - AssertSummationElementMultiple: [32]
+        - GlobalReadVectorWidthA: [8,16]
+        - GlobalReadVectorWidthB: [2,4,8]
+        - PrefetchGlobalRead: [2]
+        - PrefetchLocalRead: [1]
+        - ClusterLocalRead: [1]
+        # - NumElementsPerBatchStore: [0,16]
+        - DepthU: [32,64,128]
+        - VectorWidthA: [-1]
+        - VectorWidthB: [-1]
+        - WaveSeparateGlobalReadA: [2]
+        - WaveSeparateGlobalReadB: [1]
+        - MIArchVgpr: [0]
+        #- BufferStore: [0]
+        # - LocalWritePerMfma: [-1,0.4]
+        #- LocalWritePerMfma: [0.4]
+        - StaggerU: [4,32]
+        - StaggerUStride: [512]
+        - StaggerUMapping: [1]
+        - WorkGroupMapping: [1,8]
+        - LocalReadVectorWidth: [-1]
+        - ScheduleIterAlg: [3]
+        - ExpandPointerSwap: [0]
+        - TransposeLDS: [1]
+        - LdsBlockSizePerPadA: [-1]
+        - LdsBlockSizePerPadB: [-1]
+        # - StorePriorityOpt: [0,1]
+        - VectorStore: [-1]
+        - StoreSyncOpt: [0]
+        - LdsPadA: [-1]
+        - LdsPadB: [-1]
+        - 1LDSBuffer: [-1]
+          #- GroupLoadStore: [False, True]
+        - GlobalSplitU: [1,2,4,6,8,9,13,17,19]
+        - GlobalSplitUAlgorithm: ["MultipleBufferSingleKernel", "MultipleBuffer"]
+        - SourceSwap: [1,0]
+        #- StoreRemapVectorWidth: [4]
+        - NonTemporalA: [1]
+        # - NonTemporalB: [0]
+        - NonTemporalD: [1]
+        # - PreloadKernArgs: [1]
+      BenchmarkJoinParameters:
+      BenchmarkFinalParameters:
+        - ProblemSizes:
+          - Exact: [ 2048,   32,  1, 16384]
+          - Exact: [ 2048,   16,  1, 16384]
+          - Exact: [ 4096,   32,  1, 16384]
+          - Exact: [ 4096,   16,  1, 16384]
+          - Exact: [16384,   32,  1, 2048]
+          - Exact: [16384,   16,  1, 2048]
+          - Exact: [16384,   32,  1, 4096]
+          - Exact: [16384,   16,  1, 4096]
+          - Exact: [ 2048, 16, 1, 1024]
+          - Exact: [ 2048, 16, 1, 8192]
+          - Exact: [ 8192, 16, 1, 1024]
+          - Exact: [ 8192, 16, 1, 8192]
+          - Exact: [ 8192, 16, 1, 65536]
+            #- BiasTypeArgs: ['h']
+            #- ActivationArgs:
+            #  - [Enum: none]
+
+LibraryLogic:
+    ScheduleName: "aquavanjaram"
+    DeviceNames: ["Device 0049", "Device 0050"]
+    ArchitectureName: "gfx942"
+
+# LibraryClient:
