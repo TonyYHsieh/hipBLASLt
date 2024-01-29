@@ -34,13 +34,14 @@ class AddrCalculation:
     #    packed index for the 0 coordinate of the C/D matrix.
     # coord1Vgpr : VGPR which tracks the last coord1 calculation.
     #          If this is new coord1, just overwrite it with latest calc.
-    def __init__(self, kernelWriter, ss, addrCVgpr, addrDVgpr, addrEVgpr, addrBiasVgpr, addrScaleAlphaVecVgpr, element, \
+    def __init__(self, kernelWriter, ss, addrCVgpr, addrDVgpr, addrGSUSYNCVgprs, addrEVgpr, addrBiasVgpr, addrScaleAlphaVecVgpr, element, \
         coordOffset0, coord1Vgpr, coordOffset1, rowInc, newCoord1):
         self.kernelWriter = kernelWriter
 
         # vgprs for address, could be more than one (for flat)
         self.addrEVgpr    = addrEVgpr
         self.addrDVgpr    = addrDVgpr
+        self.addrGSUSYNCVgprs    = addrGSUSYNCVgprs
         self.addrCVgpr    = addrCVgpr
         self.addrBiasVgpr = addrBiasVgpr
         self.addrScaleAlphaVecVgpr = addrScaleAlphaVecVgpr
@@ -155,6 +156,8 @@ class AddrCalculation:
             return self.addrEVgpr
         elif tc == 'Bias':
             return self.addrBiasVgpr
+        elif tc == 'TD':
+            return self.addrGSUSYNCVgprs
         else:
             return self.addrDVgpr
 
@@ -231,6 +234,8 @@ class AddrCalculation:
         rowPtr = self.getRowPtr(kw, tc)
         addrVgpr = self.getAddrVgpr(kw, tc)
         bpe = kw.states.bpeCinternal if (tc == 'Bias') else (kw.states.bpeE if (tc == 'E') else kw.states.bpeCexternal)
+        if (tc == 'C' or tc == 'TD'):
+            bpe = bpe if (kernel["_GlobalAccumulation"] != "MultipleBufferSingleKernel") else kw.states.bpr * kernel["ProblemType"]["DestDataType"].numRegisters()
         # set when we generate code that updates the address
         # optSingleColVgpr and optSharedColVgpr attempt to minimize these updates
         updatedAddr = False
@@ -260,6 +265,8 @@ class AddrCalculation:
                     singleColAddrUpdated = ss.singleColEAddrUpdated
                 elif tc == 'Bias':
                     singleColAddrUpdated = ss.singleColBiasAddrUpdated
+                elif tc == 'TD':
+                    singleColAddrUpdated = ss.singleColTDAddrUpdated
                 else:
                     singleColAddrUpdated = ss.singleColDAddrUpdated
                 if not singleColAddrUpdated or not ss.optSrdIncForRow:
@@ -276,7 +283,7 @@ class AddrCalculation:
                                              src1=vgpr(self.addrBiasVgpr), \
                                              comment="add bias lds offset"))
                         return module
-                    if tc == 'ScaleAlphaVec' and kernel["ProblemType"]["UseScaleAlphaVec"] and (kernel["GlobalSplitU"] == 1):
+                    if tc == 'ScaleAlphaVec' and kernel["ProblemType"]["UseScaleAlphaVec"] and ((kernel["GlobalSplitU"] == 1) or (kernel["GlobalSplitUAlgorithm"] == "MultipleBufferSingleKernel")):
                         module.add(VLShiftLeftB32(dst=vgpr(self.addrScaleAlphaVecVgpr), \
                                                  shiftHex=hex(log2(kw.states.bpeCinternal)), \
                                                  src=vgpr(self.coord0Vgpr), \
@@ -288,6 +295,8 @@ class AddrCalculation:
                         ss.singleColEAddrUpdated    = True
                     elif tc == 'Bias':
                         ss.singleColBiasAddrUpdated = True
+                    elif tc == 'TD':
+                        ss.singleColTDAddrUpdated    = True
                     else:
                         ss.singleColDAddrUpdated    = True
                     module.add(VAddLShiftLeftU32(dst=vgpr(addrVgpr), \
@@ -311,7 +320,7 @@ class AddrCalculation:
                                            src1=vgpr(self.addrBiasVgpr), \
                                            comment="add bias lds offset"))
                     return module
-                if tc == 'ScaleAlphaVec' and kernel["ProblemType"]["UseScaleAlphaVec"] and (kernel["GlobalSplitU"] == 1):
+                if tc == 'ScaleAlphaVec' and kernel["ProblemType"]["UseScaleAlphaVec"] and ((kernel["GlobalSplitU"] == 1) or (kernel["GlobalSplitUAlgorithm"] == "MultipleBufferSingleKernel")):
                     module.add(VLShiftLeftB32(dst=vgpr(self.addrScaleAlphaVecVgpr), \
                                              shiftHex=hex(log2(kw.states.bpeCinternal)), \
                                              src=vgpr(self.coord0Vgpr), \
@@ -346,7 +355,7 @@ class AddrCalculation:
                                        src1=vgpr(self.addrBiasVgpr), \
                                        comment="add bias lds offset"))
                 return module
-            if tc == 'ScaleAlphaVec' and kernel["ProblemType"]["UseScaleAlphaVec"] and (kernel["GlobalSplitU"] == 1):
+            if tc == 'ScaleAlphaVec' and kernel["ProblemType"]["UseScaleAlphaVec"] and ((kernel["GlobalSplitU"] == 1) or (kernel["GlobalSplitUAlgorithm"] == "MultipleBufferSingleKernel")):
                 module.add(VLShiftLeftB32(dst=vgpr(self.addrScaleAlphaVecVgpr), \
                                          shiftHex=hex(log2(kw.states.bpeCinternal)), \
                                          src=vgpr(self.coord0Vgpr), \
@@ -391,7 +400,7 @@ class AddrCalculation:
 
         # Now do the edge check and compute the address in bytes:
         if kernel["BufferStore"]:
-            if edge and (not kernel["StoreRemapVectorWidth"] or (kernel["StoreRemapVectorWidth"] and beta)):
+            if edge and (not kernel["StoreRemapVectorWidth"] or (kernel["StoreRemapVectorWidth"] and (beta or kernel["_GlobalAccumulation"] == "MultipleBufferSingleKernel"))):
                 # Set address to -1 if OOB on either dimension
                 # and only check the x/coord0 index here, save a couple inst
                 sizeBoundary = [0,0]
@@ -561,12 +570,12 @@ class AddrCalculation:
         module = Module("emitLdChange")
         if kernel["BufferStore"]:
             module.add(self.emitScaleToBpe(kernel, ss, tmpVgpr, tmpSgpr, singleUpdate, tc))
-            if edge and (not kernel["StoreRemapVectorWidth"] or (kernel["StoreRemapVectorWidth"] and beta)) and \
+            if edge and (not kernel["StoreRemapVectorWidth"] or (kernel["StoreRemapVectorWidth"] and (beta or kernel["_GlobalAccumulation"] == "MultipleBufferSingleKernel"))) and \
                 (tc != 'ScaleAlphaVec'):
                 module.add(VCndMaskB32(dst=vgpr(addrVgpr), src0=vgpr(bufferOOB), src1=vgpr(addrVgpr), \
                                src2=sgpr(mask,laneSGPRCount), comment="LD%s clip if OOB. offset" % tc ))
         else:
-            if tc == 'Bias' and kernel["ProblemType"]["UseBias"] and (kernel["GlobalSplitU"] == 1):
+            if tc == 'Bias' and kernel["ProblemType"]["UseBias"] and ((kernel["GlobalSplitU"] == 1) or (kernel["GlobalSplitUAlgorithm"] == "MultipleBufferSingleKernel")):
                 module.add(SMulI32(dst=sgpr(tmpSgpr), src0=kernel["MacroTile0"], src1=sgpr("WorkGroup0"), comment="wgp0 * MT0"))
                 module.add(VSubU32(dst=vgpr(self.addrBiasVgpr), src0=vgpr(self.coord0Vgpr), src1=sgpr(tmpSgpr)))
                 module.add(VLShiftLeftB32(dst=vgpr(self.addrBiasVgpr), \
@@ -578,7 +587,7 @@ class AddrCalculation:
                                        src0=(kernel["LdsOffsetBias"]*kernel["ProblemType"]["DataType"].numBytes()), \
                                        src1=vgpr(self.addrBiasVgpr), \
                                        comment="add bias lds offset"))
-            if tc == 'ScaleAlphaVec' and kernel["ProblemType"]["UseScaleAlphaVec"] and (kernel["GlobalSplitU"] == 1):
+            if tc == 'ScaleAlphaVec' and kernel["ProblemType"]["UseScaleAlphaVec"] and ((kernel["GlobalSplitU"] == 1) or (kernel["GlobalSplitUAlgorithm"] == "MultipleBufferSingleKernel")):
                 module.add(VLShiftLeftB32(dst=vgpr(self.addrScaleAlphaVecVgpr), \
                                         shiftHex=hex(log2(self.kernelWriter.states.bpeCinternal)), \
                                         src=vgpr(self.coord0Vgpr), \
@@ -592,7 +601,7 @@ class AddrCalculation:
                             src2=VCC(), comment="addrVgpr = C(D) + index*bytes (hi)"))
         return module
 
-    def incrementToNextRow(self, kernel, tc, ss, stmp, bpeType=None):
+    def incrementToNextRow(self, kernel, tc, ss, stmp, bpeType=None, dst=-1):
         """
         Generate code to move to the next row(s)
         If optSrdIncForRow, this will move the SRD forward
@@ -602,6 +611,8 @@ class AddrCalculation:
         module = Module("incrementToNextRow")
         numRows = self.rowInc
         tmpBpe = bpeType if bpeType else self.kernelWriter.states.bpeCexternal
+        if (tc == 'C' or tc == 'TD') and (kernel["_GlobalAccumulation"] == "MultipleBufferSingleKernel"):
+            tmpBpe = int(self.kernelWriter.states.bpr * kernel["ProblemType"]["DestDataType"].numRegisters())
         if ss.optSrdIncForRow:
             if numRows:
                 packedC1 = kernel["PackedC1IndicesX"]
@@ -610,36 +621,69 @@ class AddrCalculation:
                     index = packedC1[0] - 1
                     strideCD1 = "Size%s" % "I" if index == 0 else ("J" if index == 1 else (self.kernelWriter.states.indexChars[index]))
                 else:
-                    strideCD1 = "Stride%s%s"%(tc,self.kernelWriter.states.indexChars[packedC1[0]])
-                if numRows > 1 or numRows < 0:
-                    module.add(SMulI32(dst=sgpr(stmp), \
-                                src0=sgpr(strideCD1), \
-                                src1=numRows*tmpBpe, \
-                                comment="scale Stride%s *= numRows(%u) * bpe"%(tc,numRows)))
-                else:
-                    module.add(SLShiftLeftB32(dst=sgpr(stmp), \
-                                src=sgpr(strideCD1), \
-                                shiftHex=log2(tmpBpe), \
-                                comment="incToNextRow: Scale by BPE"))
+                    td = "D" if tc == 'TD' else tc
+                    strideCD1 = "Stride%s%s"%(td,self.kernelWriter.states.indexChars[packedC1[0]])
 
-                if numRows >= 0:
-                    module.add(SAddU32(dst=sgpr("Srd%s+0"%(tc)), \
-                                        src0=sgpr("Srd%s+0"%(tc)), \
-                                        src1=sgpr(stmp), \
-                                        comment="incToNextRow: gra SRD += inc(lower)" ))
-                    module.add(SAddCU32(dst=sgpr("Srd%s+1"%(tc)), \
-                                        src0=sgpr("Srd%s+1"%(tc)), \
-                                        src1=0, \
-                                        comment="incToNextRow: gra SRD += inc(upper)" ))
-                else: # numRows < 0
-                    module.add(SSubU32(dst=sgpr("Srd%s+0"%(tc)), \
-                                        src0=sgpr("Srd%s+0"%(tc)), \
-                                        src1=sgpr(stmp), \
-                                        comment="incToNextRow: gra SRD -= inc(lower)" ))
-                    module.add(SSubBU32(dst=sgpr("Srd%s+1"%(tc)), \
-                                        src0=sgpr("Srd%s+1"%(tc)), \
-                                        src1=0, \
-                                        comment="incToNextRow: gra SRD -= inc(upper)" ))
+                if dst!= -1:
+                    if numRows > 1 or numRows < 0:
+                        module.add(SMulI32(dst=sgpr(stmp), \
+                                    src0=sgpr(strideCD1), \
+                                    src1=numRows*tmpBpe, \
+                                    comment="scale Stride%s *= numRows(%u) * bpe"%(tc,numRows)))
+                    else:
+                        module.add(SLShiftLeftB32(dst=sgpr(stmp), \
+                                    src=sgpr(strideCD1), \
+                                    shiftHex=log2(tmpBpe), \
+                                    comment="incToNextRow: Scale by BPE"))
+
+                    if numRows >= 0:
+                        module.add(SAddU32(dst=sgpr(dst+0), \
+                                            src0=sgpr(dst+0), \
+                                            src1=sgpr(stmp), \
+                                            comment="incToNextRow: gra SRD += inc(lower)" ))
+                        module.add(SAddCU32(dst=sgpr(dst+1), \
+                                            src0=sgpr(dst+1), \
+                                            src1=0, \
+                                            comment="incToNextRow: gra SRD += inc(upper)" ))
+                    else: # numRows < 0
+                        module.add(SSubU32(dst=sgpr(dst+0), \
+                                            src0=sgpr(dst+0), \
+                                            src1=sgpr(stmp), \
+                                            comment="incToNextRow: gra SRD -= inc(lower)" ))
+                        module.add(SSubBU32(dst=sgpr(dst+1), \
+                                            src0=sgpr(dst+1), \
+                                            src1=0, \
+                                            comment="incToNextRow: gra SRD -= inc(upper)" ))
+                else:
+                    if numRows > 1 or numRows < 0:
+                        module.add(SMulI32(dst=sgpr(stmp), \
+                                    src0=sgpr(strideCD1), \
+                                    src1=numRows*tmpBpe, \
+                                    comment="scale Stride%s *= numRows(%u) * bpe"%(tc,numRows)))
+                    else:
+                        module.add(SLShiftLeftB32(dst=sgpr(stmp), \
+                                    src=sgpr(strideCD1), \
+                                    shiftHex=log2(tmpBpe), \
+                                    comment="incToNextRow: Scale by BPE"))
+
+                    if numRows >= 0:
+                        module.add(SAddU32(dst=sgpr("Srd%s+0"%(tc)), \
+                                            src0=sgpr("Srd%s+0"%(tc)), \
+                                            src1=sgpr(stmp), \
+                                            comment="incToNextRow: gra SRD += inc(lower)" ))
+                        module.add(SAddCU32(dst=sgpr("Srd%s+1"%(tc)), \
+                                            src0=sgpr("Srd%s+1"%(tc)), \
+                                            src1=0, \
+                                            comment="incToNextRow: gra SRD += inc(upper)" ))
+                    else: # numRows < 0
+                        module.add(SSubU32(dst=sgpr("Srd%s+0"%(tc)), \
+                                            src0=sgpr("Srd%s+0"%(tc)), \
+                                            src1=sgpr(stmp), \
+                                            comment="incToNextRow: gra SRD -= inc(lower)" ))
+                        module.add(SSubBU32(dst=sgpr("Srd%s+1"%(tc)), \
+                                            src0=sgpr("Srd%s+1"%(tc)), \
+                                            src1=0, \
+                                            comment="incToNextRow: gra SRD -= inc(upper)" ))
             None
 
         return module
