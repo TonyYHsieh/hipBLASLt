@@ -291,6 +291,7 @@ class GlobalWriteBatchWriter:
       GSUtotal = 16
       if (self.kernel["MIWaveTile"][0]*self.kernel["MIWaveTile"][1])*(self.kernel["MIWaveGroup"][0]*self.kernel["MIWaveGroup"][1]) > 8:
         GSUtotal = int(GSUtotal/int((self.kernel["MIWaveTile"][0]*self.kernel["MIWaveTile"][1])*(self.kernel["MIWaveGroup"][0]*self.kernel["MIWaveGroup"][1])/8))
+      GSUtotal = max(2,GSUtotal)
       SynchronizerAddEndlabel = [""] * GSUtotal
 
       for idx in range(0, GSUtotal):
@@ -485,7 +486,7 @@ class GlobalWriteBatchWriter:
                                for idx, element in enumerate(self.batchElements)])
     module.addComment2(commentStr)
 
-    self.ss.setupStoreElementsForBatch(self.kernel, self.gwvw, self.batchElements, self.batchElementSgprs, isOptNLL=False)
+    self.ss.setupStoreElementsForBatch(self.kernel, self.gwvw, self.batchElements, self.batchElementSgprs, isOptNLL=True)
 
     self.localLoadsBiasIssued = 0
     self.storesIssued    = 0
