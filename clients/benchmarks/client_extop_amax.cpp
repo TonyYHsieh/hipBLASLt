@@ -70,7 +70,7 @@ void cpuAMax(To* out, Ti* in, std::uint32_t length)
     {
         m = max(m, abs(in[j]));
     }
-    out[0] = To(m);
+    out[0] = To(240.0f) / To(m);
 }
 
 int parseArgs(int                       argc,
