@@ -536,8 +536,6 @@ hipDataType derive_unset_bias_type(const Arguments& arg)
 
     hipDataType real_bias_type = arg.bias_type;
 
-    char* case2 = getenv("CASE2");
-
     // when bias type is unset.
     if(arg.bias_type == HIPBLASLT_DATATYPE_INVALID)
     {
@@ -545,7 +543,7 @@ hipDataType derive_unset_bias_type(const Arguments& arg)
         {
             real_bias_type = HIP_R_32I;
         }
-        else if(arg.compute_type == HIPBLAS_COMPUTE_32F_FAST_TF32 && case2 == nullptr)
+        else if(arg.compute_type == HIPBLAS_COMPUTE_32F_FAST_TF32)
         {
             real_bias_type = HIP_R_32F;
         }
@@ -657,7 +655,6 @@ template <typename TiA,
           typename Tbias>
 void testing_matmul_with_bias(const Arguments& arg)
 {
-    char* case2 = getenv("CASE2");
     double gpu_time_used, cpu_time_used;
     gpu_time_used = cpu_time_used = 0.0;
     bool                   HMM    = arg.HMM;
@@ -672,8 +669,10 @@ void testing_matmul_with_bias(const Arguments& arg)
     hipblasOperation_t transA(char_to_hipblas_operation(arg.transA));
     hipblasOperation_t transB(char_to_hipblas_operation(arg.transB));
 
+    char* case2 = getenv("CASE2");
     hipDataType tciA = arg.compute_input_typeA;
     hipDataType tciB = arg.compute_input_typeB;
+    bool hardcode = (case2 && (arg.a_type == HIP_R_8F_E4M3_FNUZ) && (arg.b_type == HIP_R_16F) && (arg.compute_type == HIPBLAS_COMPUTE_32F_FAST_16F));
 
     using Talpha = Tc;
 
@@ -1036,7 +1035,7 @@ void testing_matmul_with_bias(const Arguments& arg)
 
         if(arg.scaleA)
             hScaleA[i] = new host_vector<Talpha>(1);
-        if(arg.scaleB || (case2 != nullptr))
+        if(arg.scaleB || hardcode)
             hScaleB[i] = new host_vector<Talpha>(1);
         if(arg.scaleC)
             hScaleC[i] = new host_vector<Talpha>(1);
@@ -1208,11 +1207,11 @@ void testing_matmul_with_bias(const Arguments& arg)
                 CHECK_HIP_ERROR(dScaleA[i]->transfer_from(*hScaleA[i]));
         }
 
-        if(arg.scaleB || (case2 != nullptr))
+        if(arg.scaleB || hardcode)
         {
-            bool  amaxScaleB          = (case2 != nullptr) ? true : arg.amaxScaleB;
-            bool  isScaleAmaxDivisorB = (case2 != nullptr) ? true : arg.isScaleAmaxDivisorB;
-            float amaxDividendB       = (case2 != nullptr) ? 240.0f : arg.amaxDividendB;
+            bool  amaxScaleB          = (hardcode) ? true : arg.amaxScaleB;
+            bool  isScaleAmaxDivisorB = (hardcode) ? true : arg.isScaleAmaxDivisorB;
+            float amaxDividendB       = (hardcode) ? 240.0f : arg.amaxDividendB;
 
             if(amaxScaleB && (arg.b_type == HIP_R_32F || arg.b_type == HIP_R_16F))
                 if (isScaleAmaxDivisorB) {
@@ -2144,7 +2143,7 @@ void testing_matmul_with_bias(const Arguments& arg)
                 delete hScaleA[i];
                 delete dScaleA[i];
             }
-            if(arg.scaleB || (case2 != nullptr))
+            if(arg.scaleB || hardcode)
             {
                 delete hScaleB[i];
             }
@@ -2255,7 +2254,7 @@ void testing_matmul_with_bias(const Arguments& arg)
             if(arg.scaleC)
                 betaTemp *= (*hScaleC[gemmIdx])[0];
             auto scaleAValue = arg.scaleA ? (*hScaleA[gemmIdx])[0] : 1;
-            auto scaleBValue = (arg.scaleB || (case2 != nullptr)) ? (*hScaleB[gemmIdx])[0] : 1;
+            auto scaleBValue = (arg.scaleB || hardcode) ? (*hScaleB[gemmIdx])[0] : 1;
             auto scaleDValue = arg.scaleD ? (*hScaleD[gemmIdx])[0] : 1;
             auto scaleEValue = arg.scaleE ? (*hScaleE[gemmIdx])[0] : 1;
 
@@ -2967,7 +2966,7 @@ void testing_matmul_with_bias(const Arguments& arg)
             delete hScaleA[i];
             delete dScaleA[i];
         }
-        if(arg.scaleB || (case2 != nullptr))
+        if(arg.scaleB || hardcode)
         {
             delete hScaleB[i];
         }

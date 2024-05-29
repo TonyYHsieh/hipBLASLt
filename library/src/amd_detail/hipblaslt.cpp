@@ -407,8 +407,12 @@ try
     bool isScaleAmaxDivisorB               = roc_matmul_desc->isScaleAmaxDivisorB;
     float amaxDividendB                    = roc_matmul_desc->amaxDividendB;
     void* scaleB                           = roc_matmul_desc->scaleB;
-    const char* case2                      = getenv("CASE2");
     void* new_workspace                    = workspace;
+
+    const char* case2                      = getenv("CASE2");
+    hipDataType typeA                      = ((rocblaslt_matrix_layout)matA)->type;
+    hipDataType typeB                      = ((rocblaslt_matrix_layout)matB)->type;
+    bool hardcode                          = (case2  && (typeA == HIP_R_8F_E4M3_FNUZ) && (typeB == HIP_R_16F) && (compute_type == rocblaslt_compute_f32_fast_f16));
 
     if (roc_matmul_desc->amaxScaleA)
     {
@@ -419,7 +423,7 @@ try
             hipblasltExtFastAMax(tmp_matA->type, HIP_R_32F, roc_matmul_desc->scaleA, A, workspace, ((rocblaslt_handle)handle)->Synchronizer, tmp_matA->m, tmp_matA->n, stream);
     }
 
-    if (case2 != nullptr)
+    if (hardcode)
     {
         if(roc_matmul_desc->scaleB != nullptr)
             throw rocblaslt_status_internal_error;
@@ -525,7 +529,7 @@ try
                                                   stream);
     }
 
-    if (case2 != nullptr)
+    if (hardcode)
     {
         roc_matmul_desc->compute_type        = compute_type;
         roc_matmul_desc->amaxScaleB          = amaxScaleB;

@@ -1434,13 +1434,14 @@ rocblaslt_status
         bool                   isScaleAmaxDivisorB = matmul_desc->isScaleAmaxDivisorB;
         float                  amaxDividendB       = matmul_desc->amaxDividendB;
         const char*            case2               = getenv("CASE2");
+        bool                   hardcode            = (case2  && (a_type == HIP_R_8F_E4M3_FNUZ) && (b_type == HIP_R_16F) && (compute_type == rocblaslt_compute_f32_fast_f16));
 
         log_api(__func__, "auxiliary compute_type ", matmul_desc->compute_type);
         log_api(__func__, "auxiliary amaxScaleB ", matmul_desc->amaxScaleB);
         log_api(__func__, "auxiliary isScaleAmaxDivisorB ", matmul_desc->isScaleAmaxDivisorB);
         log_api(__func__, "auxiliary amaxDividendB ", matmul_desc->amaxDividendB);
 
-        if (case2 != nullptr)
+        if (hardcode)
         {
             if(matmul_desc->scaleB != nullptr)
                 throw rocblaslt_status_internal_error;
@@ -1562,13 +1563,13 @@ rocblaslt_status
             for(int i = 0; i < *returnAlgoCount; i++)
             {
                 heuristicResultsArray[i].workspaceSize = max(heuristicResultsArray[i].workspaceSize, 4096);
-                heuristicResultsArray[i].workspaceSize = heuristicResultsArray[i].workspaceSize + ((case2 != nullptr) ? 4 : 0);
+                heuristicResultsArray[i].workspaceSize = heuristicResultsArray[i].workspaceSize + (hardcode ? 4 : 0);
                 log_api(__func__, "workspaceSize ", heuristicResultsArray[i].workspaceSize);
                 log_api(__func__, "max_workspace_bytes ", pref->max_workspace_bytes);
             }
         }
 
-        if (case2 != nullptr)
+        if (hardcode)
         {
             matmul_desc->scaleB = nullptr;
             matmul_desc->compute_type = compute_type;
