@@ -437,11 +437,6 @@ try
         workspaceSizeInBytes                 = workspaceSizeInBytes - 4;
     }
 
-    std::cout << "API amaxScaleB " << roc_matmul_desc->amaxScaleB << std::endl;
-    std::cout << "API isScaleAmaxDivisorB " << roc_matmul_desc->isScaleAmaxDivisorB << std::endl;
-    std::cout << "API amaxDividendB " << roc_matmul_desc->amaxDividendB << std::endl;
-    std::cout << "API compute_type " << roc_matmul_desc->compute_type << std::endl;
-
     if (roc_matmul_desc->amaxScaleB)
     {
         int* sync = ((int*)((rocblaslt_handle)handle)->Synchronizer);

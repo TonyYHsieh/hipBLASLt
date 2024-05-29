@@ -1436,11 +1436,6 @@ rocblaslt_status
         const char*            case2               = getenv("CASE2");
         bool                   hardcode            = (case2  && (a_type == HIP_R_8F_E4M3_FNUZ) && (b_type == HIP_R_16F) && (compute_type == rocblaslt_compute_f32_fast_f16));
 
-        log_api(__func__, "auxiliary compute_type ", matmul_desc->compute_type);
-        log_api(__func__, "auxiliary amaxScaleB ", matmul_desc->amaxScaleB);
-        log_api(__func__, "auxiliary isScaleAmaxDivisorB ", matmul_desc->isScaleAmaxDivisorB);
-        log_api(__func__, "auxiliary amaxDividendB ", matmul_desc->amaxDividendB);
-
         if (hardcode)
         {
             if(matmul_desc->scaleB != nullptr)
