@@ -178,60 +178,21 @@ void GemmExtWithAmaxScaleAB(int64_t    m,
     CHECK_HIP_ERROR(hipStreamCreate(&stream));
     CHECK_HIPBLASLT_ERROR(hipblasLtCreate(&handle));
 
-    // create device memory
-    CHECK_HIP_ERROR(hipMalloc(&d_a, m * k * batch_count * sizeof(InTypeA)));
-    CHECK_HIP_ERROR(hipMalloc(&d_b, n * k * batch_count * sizeof(InTypeB)));
-    CHECK_HIP_ERROR(hipMalloc(&d_c, m * n * batch_count * sizeof(OutType)));
-    CHECK_HIP_ERROR(hipMalloc(&d_d, m * n * batch_count * sizeof(OutType)));
-    CHECK_HIP_ERROR(hipMalloc(&d_scaleA, sizeof(float)));
-    CHECK_HIP_ERROR(hipMalloc(&d_scaleB, sizeof(float)));
-    if(max_workspace_size > 0)
-        CHECK_HIP_ERROR(hipMalloc(&d_workspace, max_workspace_size));
-    CHECK_HIP_ERROR(hipMalloc(&d_sync, sizeof(int32_t)));
-
-    // create host memory
-    CHECK_HIP_ERROR(hipHostMalloc(&a,   m * k * batch_count * sizeof(InTypeA)));
-    CHECK_HIP_ERROR(hipHostMalloc(&b,   n * k * batch_count * sizeof(InTypeB)));
-    CHECK_HIP_ERROR(hipHostMalloc(&c,   m * n * batch_count * sizeof(OutType)));
-    CHECK_HIP_ERROR(hipHostMalloc(&d,   m * n * batch_count * sizeof(OutType)));
-    CHECK_HIP_ERROR(hipHostMalloc(&ref, m * n * batch_count * sizeof(OutType)));
-
-    // initialize data
-    init_hpl<InTypeA>(reinterpret_cast<InTypeA*>(a), m * k * batch_count);
-    init_hpl<InTypeB>(reinterpret_cast<InTypeB*>(b), n * k * batch_count);
-    init_hpl<OutType>(reinterpret_cast<OutType*>(c), m * n * batch_count);
-
-    // copy data to device
-    CHECK_HIP_ERROR(hipMemset(d_sync, 0, sizeof(std::uint32_t)));
-    CHECK_HIP_ERROR(hipMemcpyAsync(d_a, a, m * k * batch_count * sizeof(InTypeA), hipMemcpyHostToDevice, stream));
-    CHECK_HIP_ERROR(hipMemcpyAsync(d_b, b, n * k * batch_count * sizeof(InTypeB), hipMemcpyHostToDevice, stream));
-    CHECK_HIP_ERROR(hipMemcpyAsync(d_c, c, m * n * batch_count * sizeof(OutType), hipMemcpyHostToDevice, stream));
+    // memory create and init ...
 
     // scale B is 240/AMax  and scaleA will be AMax/240
-    CHECK_HIPBLASLT_ERROR(hipblasltExtFastValueDevidedByAMaxWithRcp(HIP_R_16F, HIP_R_32F, d_scaleB, d_scaleA, d_b, d_workspace, d_sync, m, n, cvtMax, stream));
+    CHECK_HIPBLASLT_ERROR(hipblasltExtFastValueDividedByAMaxWithRcp(HIP_R_16F, HIP_R_32F, d_scaleB, d_scaleA, d_b, d_workspace, d_sync, m, n, cvtMax, stream));
 
     // hipblaslt setProblem API
-    hipblaslt_ext::Gemm gemm(handle,
-                             HIPBLAS_OP_N,
-                             HIPBLAS_OP_N,
-                             HIP_R_8F_E4M3_FNUZ,
-                             HIP_R_16F,
-                             HIP_R_16F,
-                             HIP_R_16F,
-                             HIPBLAS_COMPUTE_32F);
+    hipblaslt_ext::Gemm gemm(handle, HIPBLAS_OP_N, HIPBLAS_OP_N, HIP_R_8F_E4M3_FNUZ, HIP_R_16F, HIP_R_16F, HIP_R_16F, HIPBLAS_COMPUTE_32F);
 
     hipblaslt_ext::GemmInputs inputs;
     hipblaslt_ext::GemmEpilogue epilogue;
     hipblaslt_ext::GemmPreference gemmPref;
 
-    inputs.a      = d_a;
-    inputs.b      = d_b;
-    inputs.c      = d_c;
-    inputs.d      = d_d;
-    inputs.alpha  = &alpha;
-    inputs.beta   = &beta;
-    inputs.scaleA = d_scaleA;
-    inputs.scaleB = d_scaleB;
+    inputs.a = d_a; inputs.b = d_b; inputs.c = d_c; inputs.d = d_d;
+    inputs.alpha = &alpha; inputs.beta = &beta;
+    inputs.scaleA = d_scaleA; inputs.scaleB = d_scaleB;
 
     gemmPref.setMaxWorkspaceBytes(max_workspace_size);
 
@@ -242,19 +203,20 @@ void GemmExtWithAmaxScaleAB(int64_t    m,
     std::vector<hipblasLtMatmulHeuristicResult_t> heuristicResult;
     CHECK_HIPBLASLT_ERROR(gemm.algoGetHeuristic(request_solutions, gemmPref, heuristicResult));
 
-    if(!heuristicResult.empty())
-    {
-        // hipblaslt initialize, run and sync
-        CHECK_HIPBLASLT_ERROR(gemm.initialize(heuristicResult[0].algo, d_workspace));
-        CHECK_HIPBLASLT_ERROR(gemm.run(stream));
+    // hipblaslt initialize, run and sync
+    CHECK_HIPBLASLT_ERROR(gemm.initialize(heuristicResult[0].algo, d_workspace));
+    CHECK_HIPBLASLT_ERROR(gemm.run(stream));
+
+    // sync to get result to host
+    CHECK_HIP_ERROR(hipStreamSynchronize(stream));
+
+    // free memory staff
 
         // get device data back to host
         CHECK_HIP_ERROR(hipMemcpyAsync(&scaleA, d_scaleA, sizeof(float), hipMemcpyDeviceToHost, stream));
         CHECK_HIP_ERROR(hipMemcpyAsync(&scaleB, d_scaleB, sizeof(float), hipMemcpyDeviceToHost, stream));
         CHECK_HIP_ERROR(hipMemcpyAsync(d, d_d, m * n * batch_count * sizeof(OutType), hipMemcpyDeviceToHost, stream));
 
-        // sync to get result to host
-        CHECK_HIP_ERROR(hipStreamSynchronize(stream));
 
         // get ref result
         CpuGemmExtWithAmaxScaleAB<InTypeA, InTypeB, OutType, ComputeInputType, AlphaType, BetaType>(m, n, k, batch_count, a, b, c, ref, alpha, beta, scaleA, scaleB);
