@@ -180,11 +180,8 @@ void GemmExtWithAmaxScaleAB(int64_t    m,
 
     // memory create and init ...
 
-    // scale B is 240/AMax  and scaleA will be AMax/240
-    CHECK_HIPBLASLT_ERROR(hipblasltExtFastValueDividedByAMaxWithRcp(HIP_R_16F, HIP_R_32F, d_scaleB, d_scaleA, d_b, d_workspace, d_sync, m, n, cvtMax, stream));
-
     // hipblaslt setProblem API
-    hipblaslt_ext::Gemm gemm(handle, HIPBLAS_OP_N, HIPBLAS_OP_N, HIP_R_8F_E4M3_FNUZ, HIP_R_16F, HIP_R_16F, HIP_R_16F, HIPBLAS_COMPUTE_32F);
+    hipblaslt_ext::Gemm gemm(handle, HIPBLAS_OP_N, HIPBLAS_OP_N, HIP_R_8F_E4M3_FNUZ, HIP_R_16F, HIP_R_16F, HIP_R_16F, HIPBLAS_COMPUTE_32F_FAST_16F);
 
     hipblaslt_ext::GemmInputs inputs;
     hipblaslt_ext::GemmEpilogue epilogue;
@@ -192,7 +189,6 @@ void GemmExtWithAmaxScaleAB(int64_t    m,
 
     inputs.a = d_a; inputs.b = d_b; inputs.c = d_c; inputs.d = d_d;
     inputs.alpha = &alpha; inputs.beta = &beta;
-    inputs.scaleA = d_scaleA; inputs.scaleB = d_scaleB;
 
     gemmPref.setMaxWorkspaceBytes(max_workspace_size);
 
