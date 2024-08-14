@@ -78,6 +78,8 @@ class MatrixInfo:
 class ABMatrixInfo(MatrixInfo):
   numVgprValuPerBlock: int       = -1
   numVgprG2L: int                = -1
+  numVgprG2LForG: int            = -1
+  numVgprG2LForL: int            = -1
   numVgprG2LAllocated: int       = -1
   startVgprG2L: Optional[int]    = None
   numVgprLocalReadAddr:int       = -1
@@ -2729,10 +2731,10 @@ class KernelWriter(metaclass=abc.ABCMeta):
       self.states.numVgprBufferPackB = self.states.numItersPLR + 1
 
     # TODO load sub-vector
-    vwa = kernel["GlobalReadVectorWidthA"]
-    vwb = kernel["GlobalReadVectorWidthB"]
+    grvwa = kernel["GlobalReadVectorWidthA"]
+    grvwb = kernel["GlobalReadVectorWidthB"]
     if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
-      vwm = kernel["GlobalReadVectorWidthMetadata"]
+      grvwm = kernel["GlobalReadVectorWidthMetadata"]
 
     # force lrvwTile = 1 for numBytes >= 4 + MIInputPerThread > 1
     # TODO: implement extra logic to swap vgprs after local read to suport lrvwTile > 1 for umBytes >= 4 + MIInputPerThread > 1
@@ -2855,8 +2857,8 @@ class KernelWriter(metaclass=abc.ABCMeta):
         numReadsCoalVecComp, numReadsPerpVecComp)
 
     itP = dict()
-    itP["A"] = readWriteVectors("A", vwa, kernel)
-    itP["B"] = readWriteVectors("B", vwb, kernel)
+    itP["A"] = readWriteVectors("A", grvwa, kernel)
+    itP["B"] = readWriteVectors("B", grvwb, kernel)
 
     self.getTensorParameters(tensorParametersA, kernel, itP, "A")
     self.getTensorParameters(tensorParametersB, kernel, itP, "B")
@@ -2870,7 +2872,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
     if kernel["ProblemType"]["Sparse"]:
       if not kernel["DirectToVgprSparseMetadata"]:
-        itP["Metadata"] = readWriteVectors("Metadata", vwm, kernel)
+        itP["Metadata"] = readWriteVectors("Metadata", grvwm, kernel)
         tensorParametersM = {}
         self.getTensorParameters(tensorParametersM, kernel, itP, "Metadata")
         tensorParametersM["localReadOffset"] = 0
@@ -3169,64 +3171,74 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
     ####################################
     # num vgprs: global -> local elements
-    self.states.a.numVgprG2L = 0
-    numVgprG2Local = 0
-    numVgprG2LAllocatedLocal = 0
-
+    self.states.a.numVgprG2L     = 0
+    self.states.a.numVgprG2LForG = 0
+    self.states.a.numVgprG2LForL = 0
     if not kernel["DirectToLdsA"] or self.do["KeepDirectToLdsAlloc"]:
-      bpeMax = tensorParametersA["bpeDS"] if kernel["ConvertAfterDS"] else max(tensorParametersA["bpeGR"], tensorParametersA["bpe"])
-      self.states.a.numVgprG2L = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * \
-        kernel["GlobalReadVectorWidthA"] * bpeMax) / (float)(self.states.bpr))
-      numVgprG2Local = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * \
-        kernel["GlobalReadVectorWidthA"] * tensorParametersA["bpe"]) / (float)(self.states.bpr))
+      bpeMax = max(tensorParametersA["bpeGR"], tensorParametersA["bpeDS"])
+      self.states.a.numVgprG2L = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * grvwa * bpeMax) / (float)(self.states.bpr))
       if self.states.archCaps["HasEccHalf"]:
-        tpA      = self.states.bpr if bpeMax * vwa < self.states.bpr else bpeMax * vwa
-        tpALocal = self.states.bpr if tensorParametersA["bpe"] * vwa < self.states.bpr else tensorParametersA["bpe"] * vwa
-        self.states.a.numVgprG2LAllocated = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * tpA) / (float)(self.states.bpr))
-        numVgprG2LAllocatedLocal = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * tpALocal) / (float)(self.states.bpr))
+        tpA    = self.states.bpr if bpeMax * grvwa < self.states.bpr else bpeMax * grvwa
+        tpALds = self.states.bpr if tensorParametersA["bpeDS"] * grvwa < self.states.bpr else tensorParametersA["bpeDS"] * grvwa
       else:
-        self.states.a.numVgprG2LAllocated = self.states.a.numVgprG2L
+        tpA = bpeMax * grvwa
+        tpALds = tensorParametersA["bpeDS"] * grvwa
+      self.states.a.numVgprG2LForG = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * tpA   ) / (float)(self.states.bpr))
+      self.states.a.numVgprG2LForL = roundUp((kernel["NumLoadsCoalescedA"] * kernel["NumLoadsPerpendicularA"] * tpALds) / (float)(self.states.bpr))
+      self.states.a.numVgprG2LAllocated = max(self.states.a.numVgprG2LForG, self.states.a.numVgprG2LForL)
 
-    # using _ds_store_b8: need one more vgpr space to do lshr
-    if tensorParametersA["localWriteInstruction"].blockWidth == 0.25:
-      self.states.a.numVgprG2L = self.states.a.numVgprG2L * 2
-      self.states.a.numVgprG2LAllocated = self.states.a.numVgprG2LAllocated + numVgprG2LAllocatedLocal
+      # using _ds_store_b8: need one more vgpr space to do lshr
+      if tensorParametersA["localWriteInstruction"].blockWidth == 0.25:
+          self.states.a.numVgprG2LAllocated = self.states.a.numVgprG2LForG + self.states.a.numVgprG2LForL
 
-    self.states.b.numVgprG2L = 0
-    numVgprG2Local = 0
-    numVgprG2LAllocatedLocal = 0
+      if kernel["UnrollLoopSwapGlobalReadOrder"] and kernel["ULSGRODoubleG2L"] == 1:
+        self.states.a.numVgprG2LAllocated = self.states.a.numVgprG2LAllocated * 2
+
+    self.states.b.numVgprG2L     = 0
+    self.states.b.numVgprG2LForG = 0
+    self.states.b.numVgprG2LForL = 0
     if not kernel["DirectToLdsB"] or self.do["KeepDirectToLdsAlloc"]:
-      bpeMax = tensorParametersB["bpeDS"] if kernel["ConvertAfterDS"] else max(tensorParametersB["bpeGR"], tensorParametersB["bpe"])
-      self.states.b.numVgprG2L = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * \
-        kernel["GlobalReadVectorWidthB"] * bpeMax) / (float)(self.states.bpr))
-      numVgprG2Local = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * \
-        kernel["GlobalReadVectorWidthB"] * tensorParametersB["bpe"]) / (float)(self.states.bpr))
+      bpeMax = max(tensorParametersB["bpeGR"], tensorParametersB["bpeDS"])
+      self.states.b.numVgprG2L = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * grvwb * bpeMax) / (float)(self.states.bpr))
       if self.states.archCaps["HasEccHalf"]:
-        tpB      = self.states.bpr if bpeMax * vwb < self.states.bpr else bpeMax * vwb
-        tpBLocal = self.states.bpr if tensorParametersB["bpe"] * vwb < self.states.bpr else tensorParametersB["bpe"] * vwb
-        self.states.b.numVgprG2LAllocated = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * tpB) / (float)(self.states.bpr))
-        numVgprG2LAllocatedLocal = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * tpBLocal) / (float)(self.states.bpr))
+        tpB    = self.states.bpr if bpeMax * grvwb < self.states.bpr else bpeMax * grvwb
+        tpBLds = self.states.bpr if tensorParametersB["bpeDS"] * grvwb < self.states.bpr else tensorParametersB["bpeDS"] * grvwb
       else:
-        self.states.b.numVgprG2LAllocated = self.states.b.numVgprG2L
+        tpB = bpeMax * grvwb
+        tpBLds = tensorParametersB["bpeDS"] * grvwb
+      self.states.b.numVgprG2LForG = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * tpB   ) / (float)(self.states.bpr))
+      self.states.b.numVgprG2LForL = roundUp((kernel["NumLoadsCoalescedB"] * kernel["NumLoadsPerpendicularB"] * tpBLds) / (float)(self.states.bpr))
+      self.states.b.numVgprG2LAllocated = max(self.states.b.numVgprG2LForG, self.states.b.numVgprG2LForL)
 
-    # using _ds_store_b8: need one more vgpr space to do lshr
-    if tensorParametersB["localWriteInstruction"].blockWidth == 0.25:
-      self.states.b.numVgprG2L = self.states.b.numVgprG2L * 2
-      self.states.b.numVgprG2LAllocated = self.states.b.numVgprG2LAllocated + numVgprG2LAllocatedLocal
+      # using _ds_store_b8: need one more vgpr space to do lshr
+      if tensorParametersB["localWriteInstruction"].blockWidth == 0.25:
+          self.states.b.numVgprG2LAllocated = self.states.b.numVgprG2LForG + self.states.b.numVgprG2LForL
+
+      if kernel["UnrollLoopSwapGlobalReadOrder"] and kernel["ULSGRODoubleG2L"] == 1:
+        self.states.b.numVgprG2LAllocated = self.states.b.numVgprG2LAllocated * 2
 
     self.states.m.numVgprG2L = 0
+    self.states.m.numVgprG2LForG = 0
+    self.states.m.numVgprG2LForL = 0
     if kernel["ProblemType"]["Sparse"]:
       if not kernel["DirectToVgprSparseMetadata"]:
-        self.states.m.numVgprG2L = roundUp((kernel["NumLoadsCoalescedMetadata"] * kernel["NumLoadsPerpendicularMetadata"] * \
-          kernel["GlobalReadVectorWidthMetadata"] * tensorParametersM["bpeDS"]) / (float)(self.states.bpr))
+        bpeMax = max(tensorParametersM["bpeGR"], tensorParametersM["bpeDS"])
+        self.states.m.numVgprG2L = roundUp((kernel["NumLoadsCoalescedMetadata"] * kernel["NumLoadsPerpendicularMetadata"] * grvwm * bpeMax) / (float)(self.states.bpr))
         if self.states.archCaps["HasEccHalf"]:
-          tpM = self.states.bpr if tensorParametersM["bpeDS"] * vwm < self.states.bpr else tensorParametersM["bpeDS"] * vwm
-          self.states.m.numVgprG2LAllocated = roundUp((kernel["NumLoadsCoalescedMetadata"] * kernel["NumLoadsPerpendicularMetadata"] * \
-            tpM) / (float)(self.states.bpr))
+          tpM    = self.states.bpr if bpeMax * grvwm < self.states.bpr else bpeMax * grvwm
+          tpMLds = self.states.bpr if tensorParametersM["bpeDS"] * grvwm < self.states.bpr else tensorParametersM["bpeDS"] * grvwm
+        else:
+          tpM    = bpeMax * grvwm
+          tpMLds = tensorParametersM["bpeDS"] * grvwm
+        self.states.m.numVgprG2LForG = roundUp((kernel["NumLoadsCoalescedMetadata"] * kernel["NumLoadsPerpendicularMetadata"] * tpM   ) / (float)(self.states.bpr))
+        self.states.m.numVgprG2LForL = roundUp((kernel["NumLoadsCoalescedMetadata"] * kernel["NumLoadsPerpendicularMetadata"] * tpMLds) / (float)(self.states.bpr))
+        self.states.m.numVgprG2LAllocated = max(self.states.m.numVgprG2LForG, self.states.m.numVgprG2LForL)
+
         # using _ds_store_b8: need one more vgpr space to do lshr
         if tensorParametersM["localWriteInstruction"].blockWidth == 0.25:
-          self.states.m.numVgprG2L = self.states.m.numVgprG2L * 2
-          self.states.m.numVgprG2LAllocated = self.states.m.numVgprG2LAllocated * 2
+          self.states.m.numVgprG2LAllocated = self.states.m.numVgprG2LForG + self.states.m.numVgprG2LForL
+
+
     ####################################
     # num vgprs: local read addresses
     self.states.a.numVgprLocalReadAddr = 1 * self.states.rpla
@@ -3493,19 +3505,13 @@ class KernelWriter(metaclass=abc.ABCMeta):
       # TODO: alignment hack, figure out a better solution
       vgprIdx = ((vgprIdx+1)//2)*2
       self.states.a.startVgprG2L = vgprIdx;
-      if kernel["ULSGRODoubleG2L"] == 1:
-        vgprIdx += self.states.a.numVgprG2LAllocated*2
-      else:
-        vgprIdx += self.states.a.numVgprG2LAllocated
+      vgprIdx += self.states.a.numVgprG2LAllocated
 
     if self.states.b.startVgprG2L is None:
       # TODO: alignment hack, figure out a better solution
       vgprIdx = ((vgprIdx+1)//2)*2
       self.states.b.startVgprG2L = vgprIdx;
-      if kernel["ULSGRODoubleG2L"] == 1:
-        vgprIdx += self.states.b.numVgprG2LAllocated*2
-      else:
-        vgprIdx += self.states.b.numVgprG2LAllocated
+      vgprIdx += self.states.b.numVgprG2LAllocated
 
     if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
       if self.states.m.startVgprG2L is None:

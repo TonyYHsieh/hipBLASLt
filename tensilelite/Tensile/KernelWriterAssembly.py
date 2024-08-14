@@ -643,10 +643,10 @@ class KernelWriterAssembly(KernelWriter):
     if kernel["UnrollLoopSwapGlobalReadOrder"] and not kernel["DirectToLdsA"] and not kernel["DirectToLdsB"]:
       if kernel["ULSGRODoubleG2L"] == 0:
         module.add(RegSet("v", "vgprG2LB2", self.states.a.startVgprG2L))
-        module.add(RegSet("v", "vgprG2LA2", self.states.a.startVgprG2L + self.states.b.numVgprG2LAllocated))
+        module.add(RegSet("v", "vgprG2LA2", self.states.a.startVgprG2L + self.states.b.numVgprG2LForG))
       else:
-        module.add(RegSet("v", "vgprG2LA2", self.states.a.startVgprG2L + self.states.a.numVgprG2LAllocated))
-        module.add(RegSet("v", "vgprG2LB2", self.states.b.startVgprG2L + self.states.b.numVgprG2LAllocated))
+        module.add(RegSet("v", "vgprG2LA2", self.states.a.startVgprG2L + self.states.a.numVgprG2LForG))
+        module.add(RegSet("v", "vgprG2LB2", self.states.b.startVgprG2L + self.states.b.numVgprG2LForG))
 
     if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
       module.add(RegSet("v", "vgprG2LMetadata", self.states.m.startVgprG2L))
@@ -6751,7 +6751,7 @@ class KernelWriterAssembly(KernelWriter):
       tmpLocalWriteAddr = -1
 
       # using _ds_store_b8: need one more vgpr space to do lshr
-      tmpVgprOffset = ((self.states.a.numVgprG2L if (tP['tensorChar'] == 'A') else self.states.m.numVgprG2L if tP["isM"] else self.states.b.numVgprG2L) / 2) if (blockWidth == 0.25) else 0
+      tmpVgprOffset = (self.states.a.numVgprG2LForG if (tP['tensorChar'] == 'A') else (self.states.m.numVgprG2LForG if tP["isM"] else self.states.b.numVgprG2LForG)) if (blockWidth == 0.25) else 0
 
       # if transposing, positions of sPerp and sPara are transposed
       instructionCnt = 0
