@@ -614,41 +614,32 @@ class KernelWriterAssembly(KernelWriter):
                 ri += self.states.m.numVgprValuPerBlock
 
     if not kernel["LocalWriteUseSgprA"] and self.states.a.numVgprLocalWriteAddr > 0:
-      module.add(RegSet("v", "vgprLocalWriteAddrA", \
-          self.states.a.startVgprLocalWriteAddr))
+      module.add(RegSet("v", "vgprLocalWriteAddrA", self.states.a.startVgprLocalWriteAddr))
       if self.states.a.numVgprLocalWriteAddr > 1:
-        module.add(RegSet("v", "vgprLocalWriteAddrOverhangA", \
-            self.states.a.startVgprLocalWriteAddr+1))
+        module.add(RegSet("v", "vgprLocalWriteAddrOverhangA", self.states.a.startVgprLocalWriteAddr+1))
     if not kernel["LocalWriteUseSgprB"] and self.states.b.numVgprLocalWriteAddr > 0:
-      module.add(RegSet("v", "vgprLocalWriteAddrB", \
-          self.states.b.startVgprLocalWriteAddr))
+      module.add(RegSet("v", "vgprLocalWriteAddrB", self.states.b.startVgprLocalWriteAddr))
       if self.states.b.numVgprLocalWriteAddr > 1:
-        module.add(RegSet("v", "vgprLocalWriteAddrOverhangB", \
-            self.states.b.startVgprLocalWriteAddr+1))
+        module.add(RegSet("v", "vgprLocalWriteAddrOverhangB", self.states.b.startVgprLocalWriteAddr+1))
     if self.states.m.numVgprLocalWriteAddr > 0:
-      module.add(RegSet("v", "vgprLocalWriteAddrMetadata", \
-          self.states.m.startVgprLocalWriteAddr))
+      module.add(RegSet("v", "vgprLocalWriteAddrMetadata", self.states.m.startVgprLocalWriteAddr))
       if self.states.m.numVgprLocalWriteAddr > 1:
-        module.add(RegSet("v", "vgprLocalWriteAddrOverhangMetadata", \
-            self.states.m.startVgprLocalWriteAddr+1))
+        module.add(RegSet("v", "vgprLocalWriteAddrOverhangMetadata", self.states.m.startVgprLocalWriteAddr+1))
+
     if kernel["BufferLoad"]:
-      module.add(RegSet("v", "vgprGlobalReadOffsetA", \
-          self.startVgprGlobalReadOffsetA))
-      module.add(RegSet("v", "vgprGlobalReadOffsetB", \
-          self.startVgprGlobalReadOffsetB))
+      module.add(RegSet("v", "vgprGlobalReadOffsetA", self.startVgprGlobalReadOffsetA))
+      module.add(RegSet("v", "vgprGlobalReadOffsetB", self.startVgprGlobalReadOffsetB))
       if kernel["ProblemType"]["Sparse"]:
-        module.add(RegSet("v", "vgprGlobalReadOffsetMetadata", \
-            self.startVgprGlobalReadOffsetMetadata))
+        module.add(RegSet("v", "vgprGlobalReadOffsetMetadata", self.startVgprGlobalReadOffsetMetadata))
     else:
-      module.add(RegSet("v", "vgprGlobalReadAddrA", \
-          self.startVgprGlobalReadAddressesA))
-      module.add(RegSet("v", "vgprGlobalReadAddrB", \
-          self.startVgprGlobalReadAddressesB))
+      module.add(RegSet("v", "vgprGlobalReadAddrA", self.startVgprGlobalReadAddressesA))
+      module.add(RegSet("v", "vgprGlobalReadAddrB", self.startVgprGlobalReadAddressesB))
 
     if not kernel["DirectToLdsA"] or self.do["KeepDirectToLdsAlloc"]:
       module.add(RegSet("v", "vgprG2LA", self.states.a.startVgprG2L))
     if not kernel["DirectToLdsB"] or self.do["KeepDirectToLdsAlloc"]:
       module.add(RegSet("v", "vgprG2LB", self.states.b.startVgprG2L))
+
     if kernel["UnrollLoopSwapGlobalReadOrder"] and not kernel["DirectToLdsA"] and not kernel["DirectToLdsB"]:
       if kernel["ULSGRODoubleG2L"] == 0:
         module.add(RegSet("v", "vgprG2LB2", self.states.a.startVgprG2L))
@@ -664,35 +655,28 @@ class KernelWriterAssembly(KernelWriter):
         and (kernel["ProblemType"]["DataType"].isInt8() or kernel["ProblemType"]["DataType"].is8bitFloat()):
       module.add(RegSet("v", "vgprPackTemp", self.states.a.startVgprValuPackTemp))
 
-
     if self.states.globalReadIncsUseVgpr:
-      module.add(RegSet("v", "vgprGlobalReadIncsA", \
-          self.startVgprGlobalReadIncsA))
-      module.add(RegSet("v", "vgprGlobalReadIncsB", \
-          self.startVgprGlobalReadIncsB))
+      module.add(RegSet("v", "vgprGlobalReadIncsA", self.startVgprGlobalReadIncsA))
+      module.add(RegSet("v", "vgprGlobalReadIncsB", self.startVgprGlobalReadIncsB))
       if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
-        module.add(RegSet("v", "vgprGlobalReadIncsMetadata", \
-            self.startVgprGlobalReadIncsMetadata))
+        module.add(RegSet("v", "vgprGlobalReadIncsMetadata", self.startVgprGlobalReadIncsMetadata))
+
     if self.states.a.numVgprLocalReadAddr > 0:
-      module.add(RegSet("v", "vgprLocalReadAddrA", \
-          self.states.a.startVgprLocalReadAddr))
+      module.add(RegSet("v", "vgprLocalReadAddrA", self.states.a.startVgprLocalReadAddr))
     if self.states.b.numVgprLocalReadAddr > 0:
-      module.add(RegSet("v", "vgprLocalReadAddrB", \
-          self.states.b.startVgprLocalReadAddr))
+      module.add(RegSet("v", "vgprLocalReadAddrB", self.states.b.startVgprLocalReadAddr))
     if self.states.m.numVgprLocalReadAddr > 0:
-      module.add(RegSet("v", "vgprLocalReadAddrMetadata", \
-          self.states.m.startVgprLocalReadAddr))
+      module.add(RegSet("v", "vgprLocalReadAddrMetadata", self.states.m.startVgprLocalReadAddr))
 
     if kernel["ProblemType"]["DataType"].isDoubleComplex() and kernel["MIArchVgpr"]:
-      module.add(RegSet("v", "vgprAlphaTmp", \
-          self.states.startVgprAlphaTmp))
+      module.add(RegSet("v", "vgprAlphaTmp", self.states.startVgprAlphaTmp))
 
     module.add(RegSet("v", "vgprSerial", self.states.startVgprSerial))
 
     if globalParameters["DebugKernel"]:
-      module.add(RegSet("v", "vgprAddressDbg", \
-          self.states.startVgprAddressDbg))
-    #module.addComment0("Occu: %u waves/simd" % self.numWavesPerSimd )
+      module.add(RegSet("v", "vgprAddressDbg",self.states.startVgprAddressDbg))
+
+    # module.addComment0("Occu: %u waves/simd" % self.numWavesPerSimd )
     # module.addComment0("Num VGPR=%u"%self.vgprPool.size())
     # module.addComment0("Num AccVGPR=%u"%self.agprPool.size())
 
