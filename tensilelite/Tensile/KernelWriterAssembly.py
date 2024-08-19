@@ -6209,7 +6209,7 @@ class KernelWriterAssembly(KernelWriter):
       graIdx = 0
       g2lIdx = 0
       loadWidth = tP["globalReadInstruction"].totalWidth # load width in elements?
-      bpe = tP["bpeGR"] if not tP["isM"] else tP["bpe"]
+      bpe = tP["bpeGR"]
       bpl = bpe * tP["glvw"]  # bytes per load
 
       isGlc = tP["NonTemporal"] & 0x1
@@ -6235,6 +6235,7 @@ class KernelWriterAssembly(KernelWriter):
               loopCnt += 1
               graIdx = i * self.states.rpgo if kernel["BufferLoad"] else i * self.states.rpga
               g2lIdx = i * loadWidth * tP["bpeRatio"]
+
               # Each load may contains a small bundle of instructions, package them together in loadModule:
               loadModule = Module("load%u"%loopCnt)
               imod.middle.add(loadModule)
@@ -6242,10 +6243,12 @@ class KernelWriterAssembly(KernelWriter):
               if self.states.archCaps["HasEccHalf"] and not tP["isM"]:
                 numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc =='B' else self.states.m.numVgprG2L
                 eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
-                eccOffset = _getEccOffset(loadWidth, bpr=self.states.bpr, bpe=eccBpe, \
-                  glvw=tP["glvw"], idx=i, numVgprG2L=numVgprG2L)
+                eccOffset = _getEccOffset(loadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=i, numVgprG2L=numVgprG2L)
               else:
                 eccOffset = 0
+
+              datatype = kernel["ProblemType"]["DataType%s"%tc] if kernel["ConvertAfterDS"] else kernel["ProblemType"]["DataType"]
+              isHigh16Bits = ((datatype.numBytes() == 2) and ((loopCnt % 2) == 1)) if (not tP["isM"]) else False
 
               if kernel["BufferLoad"]:
                 if kernel["_UseSgprForGRO"]:
@@ -6313,8 +6316,6 @@ class KernelWriterAssembly(KernelWriter):
                     assert(graIdx <= self.states.m.numVgprG2LAllocated)
 
                 # TODO: is it possible to load only hi16 when no in tail? (need to check INT8 too)
-                datatype = kernel["ProblemType"]["DataType%s"%tc] if kernel["ConvertAfterDS"] else kernel["ProblemType"]["DataType"]
-                isHigh16Bits = (datatype.isHalf() or datatype.isBFloat16()) and loopCnt%2==1 if not tP["isM"] else False
                 loadModule.add( self.chooseGlobalRead(kernel["BufferLoad"], \
                           bpl, destVgpr=destVgpr, \
                           addr0=vgpr(offsetVgpr), addr1=sgpr("Srd%s"%tc, 4), \
@@ -6530,7 +6531,6 @@ class KernelWriterAssembly(KernelWriter):
   def calculateLdsWriteOffset(self, perp, para, sPerp, sPara, kernel, tP):
     tc = tP["tensorChar"]
     mask = 0
-    #print "tc ", tc, " perp ", perp, " para ", para, " sPerp ", sPerp, " sPara ", sPara
     lscaOffset = para * kernel[tP["lsc"]]
     perp_masked = perp
     perp_rem = 0
@@ -6546,19 +6546,11 @@ class KernelWriterAssembly(KernelWriter):
       lscaOffset += sPara
       rem = (sPerp & ~mask)
       i = sPara + (tP["nrcv"]//tP["nrcvpi"]) * (para + tP["nrc"] * (sPerp + tP["nrpv"] * perp_masked))
-      #print "nrcv ", tP["nrcv"], " nrcvpi ", tP["nrcvpi"], " nrc ", tP["nrc"], " nrpv ", tP["nrpv"]
     else:
       lscaOffset += sPara
       lspaOffset += sPerp
       rem = 0
       i = sPara + (tP["nrcv"]//tP["nrcvpi"]) * (para * tP["glvw"] + tP["nrc"] * (sPerp + tP["glvw"] * tP["nrpv"] * perp ))
-
-    #if not tP["tlu"]:
-    #  tmp = sPara
-    #  sPara = sPerp
-    #  sPerp = tmp
-    # print("0lspaOffset", lspaOffset)
-    # print("0lscaOffset", lscaOffset)
 
     LdsPad = kernel["LdsPad%s"%tc] if kernel["LdsBlockSizePerPad%s"%tc] == 0 else 0
     lds_stride = (kernel["_DepthU%s"%tc] + LdsPad) if kernel["UnrollMajorLDS%s" % tP["tensorChar"]] \
@@ -6571,34 +6563,20 @@ class KernelWriterAssembly(KernelWriter):
       lscaOffset *= lds_stride
       lscaOffset += rem
 
-    # print("1lspaOffset", lspaOffset)
-    # print("1lscaOffset", lscaOffset)
-    #if tP["tlu"]:
-    #  lspaOffset *= tP["glvw"]
-    #  lscaOffset *= tP["glvw"]
-
-    # print("2lspaOffset", lspaOffset)
-    # print("2lscaOffset", lscaOffset)
-    offsetElements = (lspaOffset + lscaOffset)
-    # print("offsetElements", offsetElements)
-    offsetBytes   = offsetElements*tP["bpeDS"]
+    offsetElements = lspaOffset + lscaOffset
+    offsetBytes    = offsetElements * tP["bpeDS"]
 
     if kernel["LdsBlockSizePerPad%s"%tc] != 0 and kernel["LdsPad%s"%tc] != 0:
-      offsetBytes   = offsetBytes + (offsetBytes // kernel["LdsBlockSizePerPad%s"%tc]) * kernel["LdsPad%s"%tc] * tP["bpeDS"]
+      offsetBytes = offsetBytes + (offsetBytes // kernel["LdsBlockSizePerPad%s"%tc]) * kernel["LdsPad%s"%tc] * tP["bpeDS"]
 
     offsetBytes += tP["localWriteSwapByteOffset"]
 
-    #print("offsetBytes", offsetBytes)
-    #print "offset", offset
+    comment = "lwo%s_%u_%u_%u_%u = (%s%d*%s)" % (tP["tensorChar"], para, sPara, perp, sPerp, (("%u + "%sPara) if tP["wtc"] else ""), para, tP["lsc"] )
 
-    comment = "lwo%s_%u_%u_%u_%u = (%s%d*%s)" \
-        % (tP["tensorChar"], \
-        para, sPara, perp, sPerp, \
-        (("%u + "%sPara) if tP["wtc"] else ""), \
-        para, tP["lsc"] )
     if not tP["tlu"]:
       comment += "*(MT%s+PAD)" % (tP["tileChar"])
     comment += " + (%d*%s)" % (perp, tP["lsp"])
+
     if tP["tlu"]:
       comment += "(*MT%s+PAD)" % (tP["tileChar"])
     comment += " = %u" % (offsetBytes)
@@ -6732,9 +6710,8 @@ class KernelWriterAssembly(KernelWriter):
       numBlocks = instruction.numBlocks
       numOffsets = instruction.numOffsets
       blockWidth = instruction.blockWidth
-      #offsetMultiplier = instruction.offsetMultiplier
       g2lIdx = 0
-      #module.add(dump(vgpr("LocalWriteAddr%s"%tP["tensorChar"])))
+
       if 0:
         print("\nLocalWrite", tP["tensorChar"])
         print("tlu", tP["tlu"])
@@ -6763,6 +6740,7 @@ class KernelWriterAssembly(KernelWriter):
         destVgprPrefix = "G2L%s2"%(tc)
       else:
         destVgprPrefix = "G2L%s"%(tc)
+
       for perp in range(0, tP["nrp"]):
         localWriteCode = imod.add(Module("LocalWrite%u perp=%d"%(instructionCnt,perp)))
         lwa = "LocalWriteAddr%s"%tc  # default
@@ -6821,8 +6799,7 @@ class KernelWriterAssembly(KernelWriter):
               if tP["bpeDS"] == tP["bpeGR"] and (tP["globalReadInstruction"].totalWidth) == 0.5 and (blockWidth == 0.25) and not tP["isM"]:
                 eccinstHi = i // 2
               eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
-              eccOffset = _getEccOffset(tP["globalReadInstruction"].totalWidth, bpr=self.states.bpr, bpe=eccBpe, \
-                glvw=tP["glvw"], idx=eccinstHi, numVgprG2L=numVgprG2L)
+              eccOffset = _getEccOffset(tP["globalReadInstruction"].totalWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=eccinstHi, numVgprG2L=numVgprG2L)
             else:
               eccOffset = 0
 
@@ -6863,6 +6840,7 @@ class KernelWriterAssembly(KernelWriter):
               else:
                 paramList.append(vgpr(destVgprPrefix + "+%u"%(g2lIdx + eccOffset), blockWidth))
                 numsOfRegister.append(blockWidth)
+
               if self.db["ForceInputValue%s"%tc]:
                 localWriteCVTCode.add(VMovB32(dst=vgpr(destVgprPrefix + "+%u"%(g2lIdx)), src=self.db["ForceValue%s"], comment="ForceInputValue"))
               if (kernel["ProblemType"]["DataType"].isBFloat16() and kernel["ProblemType"]["DataType%s"%tc].isHalf()) and not tP["isM"]:
@@ -6891,13 +6869,13 @@ class KernelWriterAssembly(KernelWriter):
             isHigh16Bits = False
             isCvtHighBits = False
             datatype = kernel["ProblemType"]["DataType%s"%tc] if kernel["ConvertAfterDS"] else kernel["ProblemType"]["DataType"]
-            if (datatype.isHalf() or datatype.isBFloat16()) and not tP["isM"]:
-              if s%2==1:
+            if (datatype.numBytes() == 2) and not tP["isM"]:
+              if (s % 2) == 1:
                 isHigh16Bits = True
               if (blockWidth == 0.5) and (instHi % 2 == 1):
                 isHigh16Bits = True
               if kernel["ProblemType"]["DataType%s"%tc].isFloat8():
-                if g2lIdx%2 == 1:
+                if (g2lIdx % 2) == 1:
                   isCvtHighBits = True
 
 
@@ -6906,11 +6884,8 @@ class KernelWriterAssembly(KernelWriter):
             #############################################
             # VGPR: |---w4---|---w3---|---w2---|---w1---| -> b8_d16: get w1 / _b8_d16_hi: get w3
             # LSHR: |--------|---w4---|--------|---w2---| -> b8_d16: get w2 / _b8_d16_hi: get w4
-            elif datatype.isInt8() or datatype.is8bitFloat() or tP["isM"]:
+            elif (datatype.numBytes() == 1) or tP["isM"]:
               isHigh16Bits = (s % 4) > 1 # 2,3
-              # TODO
-              # if tP["glvw"]==1 and instructionCnt%2==1:
-              #   isHigh16Bits = True
 
             # Need cvt
             if tP["bpeDS"] != tP["bpeGR"]:
@@ -7088,8 +7063,10 @@ class KernelWriterAssembly(KernelWriter):
             else:
               ds        = DSModifiers(na=2, offset0=paramList[2], offset1=paramList[3])
               writeInst = LocalWriteX(dstAddr=vgpr(lwa), src0=paramList[0], src1=paramList[1], ds=ds, comment=comment)
+
             if self.do["LocalWriteCVT"]:
               localWriteCode.add(localWriteCVTCode)
+
             if self.do["LocalWrite%s"%tc]:
               localWriteCode.add(writeInst)
               instructionCnt += 1 if blockWidth < 8 else 2
