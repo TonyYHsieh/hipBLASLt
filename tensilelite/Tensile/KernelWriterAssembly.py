@@ -6786,8 +6786,8 @@ class KernelWriterAssembly(KernelWriter):
               numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc == 'B' else self.states.m.numVgprG2L
               eccinstHi = instHi
               # FIXME: Workaround, unique pattern in 8bit + glvw == 2...
-              if tP["bpeDS"] == tP["bpeGR"] and (bufferLoadWidth == 0.5) and (dsStoreWidth == 0.25) and (not tP["isM"]):
-                eccinstHi = instIdx // 2
+              if tP["bpeDS"] == tP["bpeGR"] and (not tP["isM"]):
+                eccinstHi = instIdx // roundUp(bufferLoadWidth / dsStoreWidth)
               eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
               eccOffset = _getEccOffset(bufferLoadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=eccinstHi, numVgprG2L=numVgprG2L)
             else:
@@ -6832,6 +6832,7 @@ class KernelWriterAssembly(KernelWriter):
 
               if self.db["ForceInputValue%s"%tc]:
                 localWriteCVTCode.add(VMovB32(dst=vgpr(destVgprPrefix + "+%u"%(g2lIdx)), src=self.db["ForceValue%s"], comment="ForceInputValue"))
+
               if (kernel["ProblemType"]["DataType"].isBFloat16() and kernel["ProblemType"]["DataType%s"%tc].isHalf()) and not tP["isM"]:
                 numIters = 1 if dsStoreWidth <= 1 else dsStoreWidth
                 vgprTmp = self.vgprPool.checkOut(2)
@@ -6855,23 +6856,9 @@ class KernelWriterAssembly(KernelWriter):
             isHigh16Bits = False
             isCvtHighBits = False
             datatype = kernel["ProblemType"]["DataType%s"%tc] if kernel["ConvertAfterDS"] else kernel["ProblemType"]["DataType"]
-            if (datatype.numBytes() == 2) and not tP["isM"]:
-              if (s % 2) == 1:
-                isHigh16Bits = True
-              if (dsStoreWidth == 0.5) and (instHi % 2 == 1):
-                isHigh16Bits = True
-              if kernel["ProblemType"]["DataType%s"%tc].isFloat8():
-                if (g2lIdx % 2) == 1:
-                  isCvtHighBits = True
-
-
-            #       |  hi16  |  hi16  |        |        |
-            #       |  hi8   |        |   hi8  |        |
-            #############################################
-            # VGPR: |---w4---|---w3---|---w2---|---w1---| -> b8_d16: get w1 / _b8_d16_hi: get w3
-            # LSHR: |--------|---w4---|--------|---w2---| -> b8_d16: get w2 / _b8_d16_hi: get w4
-            elif (datatype.numBytes() == 1) or tP["isM"]:
-              isHigh16Bits = (s % 4) > 1 # 2,3
+            mod = roundUp(1 / dsStoreWidth)
+            isHigh16Bits = (mod > 1) and ((instIdx % mod) > ((mod // 2) - 1)) # 2,3
+            isCvtHighBits = (tP["bpeDS"] == 2) and kernel["ProblemType"]["DataType%s"%tc].isFloat8() and ((g2lIdx % 2) == 1)
 
             # Need cvt
             if tP["bpeDS"] != tP["bpeGR"]:
