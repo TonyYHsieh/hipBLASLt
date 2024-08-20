@@ -6704,10 +6704,11 @@ class KernelWriterAssembly(KernelWriter):
     def localWriteBody(tP):
       tc = tP["tensorChar"]
 
-      instruction = tP["localWriteInstruction"]
-      numBlocks = instruction.numBlocks
-      numOffsets = instruction.numOffsets
-      blockWidth = instruction.blockWidth
+      instruction  = tP["localWriteInstruction"]
+      numBlocks    = instruction.numBlocks
+      numOffsets   = instruction.numOffsets
+      dsStoreWidth = instruction.blockWidth
+      bufferLoadWidth = tP["globalReadInstruction"].blockWidth
       g2lIdx = 0
 
       if 0:
@@ -6726,10 +6727,9 @@ class KernelWriterAssembly(KernelWriter):
       tmpLocalWriteAddr = -1
 
       # using _ds_store_b8: need one more vgpr space to do lshr
-      tmpVgprOffset = (self.states.a.numVgprG2LForG if (tP['tensorChar'] == 'A') else (self.states.m.numVgprG2LForG if tP["isM"] else self.states.b.numVgprG2LForG)) if (blockWidth == 0.25) else 0
+      tmpVgprOffset = (self.states.a.numVgprG2LForG if (tP['tensorChar'] == 'A') else (self.states.m.numVgprG2LForG if tP["isM"] else self.states.b.numVgprG2LForG)) if (dsStoreWidth == 0.25) else 0
 
       # if transposing, positions of sPerp and sPara are transposed
-      instructionCnt = 0
       Hcvt2BMap = {}
       g2lIdxDict = {}
       regTmpVgprBlock = None
@@ -6740,12 +6740,12 @@ class KernelWriterAssembly(KernelWriter):
         destVgprPrefix = "G2L%s" % (tc)
 
       for nrpIdx in range(0, tP["nrp"]):
-        localWriteCode = imod.add(Module("LocalWrite%u nrpIdx = %d" % (instructionCnt, nrpIdx)))
+        localWriteCode = imod.add(Module("LocalWrite nrpIdx = %d" % (nrpIdx)))
         lwa = "LocalWriteAddr%s"%tc  # default
 
         for nrcIdx in range(0, tP["nrc"]):
           if nrcIdx >= 1:
-            localWriteCode = imod.add(Module("LocalWrite%u nrpIdx = %d nrcIdx = %d" % (instructionCnt, nrpIdx, nrcIdx)))
+            localWriteCode = imod.add(Module("LocalWrite nrpIdx = %d nrcIdx = %d" % (nrpIdx, nrcIdx)))
 
           for s in range(0, max(tP["nwcv"], tP["nwpv"]) // tP["nwcvpi"]):
             localWriteCVTCode = Module()
@@ -6762,27 +6762,30 @@ class KernelWriterAssembly(KernelWriter):
                 needToSplitMetadata = tP["isM"]
 
             #print("nrpIdx:{}/{} nrcIdx:{}/{} nrpvIdx:{} nrcvIdx:{}".format(nrpIdx,tP["nrp"],nrcIdx,tP["nrc"],nrpvIdx,nrcvIdx))
-            (offset, i, comment) = self.calculateLdsWriteOffset(nrpIdx, nrcIdx, nrpvIdx, nrcvIdx, kernel, tP)
+            (offset, instIdx, comment) = self.calculateLdsWriteOffset(nrpIdx, nrcIdx, nrpvIdx, nrcvIdx, kernel, tP)
+            instIdx = instIdx if (dsStoreWidth < 8) else (instIdx * 2)
+
+            localWriteCode.addComment1("LocalWrite nrpIdx %d nrcIdx %d nrpvIdx %d nrcvIdx %d instIdx %d" % (nrpIdx, nrcIdx, nrpvIdx, nrcvIdx, instIdx))
 
             # Need refactor, the pattern < glvw in fp8 is not the same as the original.
             # Thus the offset calculation here does not match global read.
             if tP["glvw"] <= 2:
-              g2lIdx = i * blockWidth
+              g2lIdx = instIdx * dsStoreWidth
               if isBpeInputLarger:
                 g2lIdx *= (tP["bpeGR"]// tP["bpeDS"])
               g2lIdx = int(g2lIdx)
             else:
-              g2lIdx = int(i * blockWidth)
+              g2lIdx = int(instIdx * dsStoreWidth)
               if isBpeInputLarger:
                 g2lIdx *= (tP["bpeGR"]// tP["bpeDS"])
 
-            graIdx = i * self.states.rpgo if kernel["BufferLoad"] else i * self.states.rpga
+            graIdx = instIdx * self.states.rpgo if kernel["BufferLoad"] else instIdx * self.states.rpga
 
             if tP["isM"]:
               if not needToSplitMetadata:
                 g2lIdx = graIdx
 
-            # If g2lIdx is already in the dict and blockWidth < 1, the data may
+            # If g2lIdx is already in the dict and dsStoreWidth < 1, the data may
             # be packed into one register.
             instHi = 0
             if g2lIdx in g2lIdxDict:
@@ -6795,15 +6798,15 @@ class KernelWriterAssembly(KernelWriter):
               numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc == 'B' else self.states.m.numVgprG2L
               eccinstHi = instHi
               # FIXME: Workaround, unique pattern in 8bit + glvw == 2...
-              if tP["bpeDS"] == tP["bpeGR"] and (tP["globalReadInstruction"].totalWidth == 0.5) and (blockWidth == 0.25) and (not tP["isM"]):
+              if tP["bpeDS"] == tP["bpeGR"] and (bufferLoadWidth == 0.5) and (dsStoreWidth == 0.25) and (not tP["isM"]):
                 eccinstHi = i // 2
               eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
-              eccOffset = _getEccOffset(tP["globalReadInstruction"].totalWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=eccinstHi, numVgprG2L=numVgprG2L)
+              eccOffset = _getEccOffset(bufferLoadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=eccinstHi, numVgprG2L=numVgprG2L)
             else:
               eccOffset = 0
 
             # TODO- INT8: check uDu
-            if (blockWidth == 0.25) and ((s % 4) == 0) and (not tP["isM"] or needToSplitMetadata):
+            if (dsStoreWidth == 0.25) and ((s % 4) == 0) and (not tP["isM"] or needToSplitMetadata):
                 src = destVgprPrefix + "+%u" % (g2lIdx + eccOffset)
                 dst = destVgprPrefix + "+%u+%u" % (tmpVgprOffset, g2lIdx)
                 if tP["bpeDS"] != tP["bpeGR"]:
@@ -6822,28 +6825,27 @@ class KernelWriterAssembly(KernelWriter):
 
             paramList = []
             numsOfRegister = []
-            globalBlockWidth = tP["globalReadInstruction"].totalWidth
             for _ in range(0, numBlocks):
               # FIXME: In the future all registers should pass from global read instead of recalculate them
-              if globalBlockWidth == blockWidth and tP["glvw"] == 1:
-                paramList.append(vgpr(destVgprPrefix + "+%u"%(self.vgprs.globalReadRegisters[tc][i]), blockWidth))
-              elif blockWidth == 1:
+              if bufferLoadWidth == dsStoreWidth and tP["glvw"] == 1:
+                paramList.append(vgpr(destVgprPrefix + "+%u"%(self.vgprs.globalReadRegisters[tc][instIdx]), dsStoreWidth))
+              elif dsStoreWidth == 1:
                 paramList.append(vgpr(destVgprPrefix + "+%u"%(g2lIdx)))
                 numsOfRegister.append(1)
-              elif blockWidth == 0.25 and ((s % 2) == 1): # Int8, s = 1 or 3 (high8Bits)
+              elif dsStoreWidth == 0.25 and ((s % 2) == 1): # Int8, s = 1 or 3 (high8Bits)
                 if tP["bpeDS"] != tP["bpeGR"] and tmpVgprOffset != 0:
                   paramList.append(vgpr(destVgprPrefix + "+%u+%u"%(tmpVgprOffset, g2lIdx // 2)))
                 else:
                   paramList.append(vgpr(destVgprPrefix + "+%u+%u"%(tmpVgprOffset, g2lIdx)))
                 numsOfRegister.append(1)
               else:
-                paramList.append(vgpr(destVgprPrefix + "+%u"%(g2lIdx + eccOffset), blockWidth))
-                numsOfRegister.append(blockWidth)
+                paramList.append(vgpr(destVgprPrefix + "+%u"%(g2lIdx + eccOffset), dsStoreWidth))
+                numsOfRegister.append(dsStoreWidth)
 
               if self.db["ForceInputValue%s"%tc]:
                 localWriteCVTCode.add(VMovB32(dst=vgpr(destVgprPrefix + "+%u"%(g2lIdx)), src=self.db["ForceValue%s"], comment="ForceInputValue"))
               if (kernel["ProblemType"]["DataType"].isBFloat16() and kernel["ProblemType"]["DataType%s"%tc].isHalf()) and not tP["isM"]:
-                numIters = 1 if blockWidth <= 1 else blockWidth
+                numIters = 1 if dsStoreWidth <= 1 else dsStoreWidth
                 vgprTmp = self.vgprPool.checkOut(2)
                 for iter in range(0, numIters):
                   f16Tobf16Idx = g2lIdx + iter
@@ -6868,7 +6870,7 @@ class KernelWriterAssembly(KernelWriter):
             if (datatype.numBytes() == 2) and not tP["isM"]:
               if (s % 2) == 1:
                 isHigh16Bits = True
-              if (blockWidth == 0.5) and (instHi % 2 == 1):
+              if (dsStoreWidth == 0.5) and (instHi % 2 == 1):
                 isHigh16Bits = True
               if kernel["ProblemType"]["DataType%s"%tc].isFloat8():
                 if (g2lIdx % 2) == 1:
@@ -6887,7 +6889,7 @@ class KernelWriterAssembly(KernelWriter):
             if tP["bpeDS"] != tP["bpeGR"]:
               assert numBlocks == 1
               if (kernel["ProblemType"]["DataType%s"%tc].isSingle() and kernel["ProblemType"]["DataType"].isHalf()):
-                newBlockWidth = (tP["bpeGR"] / tP["bpe"]) * blockWidth
+                newBlockWidth = (tP["bpeGR"] / tP["bpe"]) * dsStoreWidth
                 if newBlockWidth == 1:
                   dst_sel = SelectBit.WORD_1 if isHigh16Bits else SelectBit.WORD_0
                   new_src = fastdeepcopy(paramList[0])
@@ -6906,7 +6908,7 @@ class KernelWriterAssembly(KernelWriter):
                   (tc == "B" and kernel["ProblemType"]["DataType"].isBFloat8Float8())):
                   toF8 = True
 
-                newBlockWidth = (tP["bpeGR"] / tP["bpe"]) * blockWidth
+                newBlockWidth = (tP["bpeGR"] / tP["bpe"]) * dsStoreWidth
                 if newBlockWidth == 0.5:
                   if kernel["ProblemType"]["StochasticRounding"]:
                     vgprTmp = self.vgprPool.checkOutAligned(4, 2)
@@ -6975,8 +6977,7 @@ class KernelWriterAssembly(KernelWriter):
                   self.vgprPool.checkIn(vgprTmp)
 
               elif (kernel["ProblemType"]["DataType%s"%tc].isFloat8() and kernel["ProblemType"]["DataType"].isHalf()):
-                newBlockWidth = tP["globalReadInstruction"].blockWidth
-                if newBlockWidth == 0.25:
+                if bufferLoadWidth == 0.25:
                   new_src = fastdeepcopy(paramList[0])
                   if tP["glvw"] == 1:
                     vgprTmp = self.vgprPool.checkOut(1)
@@ -7012,23 +7013,23 @@ class KernelWriterAssembly(KernelWriter):
                       localWriteCVTCode.add(VCvtFP8toF32(dst=vgpr(vgprTmp), src=new_src , sdwa=SDWAModifiers(src0_sel=src_sel), comment="convert C to fp32"))
                       localWriteCVTCode.add(VCvtF32toF16(dst=paramList[0], src=vgpr(vgprTmp), sdwa=SDWAModifiers(dst_sel=dst_sel), comment="convert C to fp16"))
                       self.vgprPool.checkIn(vgprTmp)
-                elif newBlockWidth == 0.5:
+                elif bufferLoadWidth == 0.5:
                   vgprTmp = self.vgprPool.checkOutAligned(2, 2)
                   src_sel = SelectBit.WORD_1 if isCvtHighBits else SelectBit.WORD_0
-                  modNum = max(1, int(newBlockWidth / blockWidth))
+                  modNum = max(1, int(bufferLoadWidth / dsStoreWidth))
                   if (not isHigh16Bits) and (g2lIdx % modNum == 0):
                     localWriteCVTCode.add(VCvtPkFP8toF32(dst=vgpr(vgprTmp, 2), src=vgpr(destVgprPrefix + "+%u"%(g2lIdx)), sdwa=SDWAModifiers(src0_sel=src_sel), comment="convert to F32"))
                     localWriteCVTCode.add(VCvtF32toF16(dst=vgpr(destVgprPrefix + "+%u"%(g2lIdx)), src=vgpr(vgprTmp), sdwa=SDWAModifiers(dst_sel=SelectBit.WORD_0), comment="Convert to FP16"))
-                    if (newBlockWidth <= blockWidth):
+                    if (bufferLoadWidth <= dsStoreWidth):
                       localWriteCVTCode.add(VCvtF32toF16(dst=vgpr(destVgprPrefix + "+%u"%(g2lIdx)), src=vgpr(vgprTmp+1), sdwa=SDWAModifiers(dst_sel=SelectBit.WORD_1), comment="Convert to FP16"))
-                  elif (newBlockWidth > blockWidth):
+                  elif (bufferLoadWidth > dsStoreWidth):
                     localWriteCVTCode.add(VCvtF32toF16(dst=vgpr(destVgprPrefix + "+%u"%(g2lIdx)), src=vgpr(vgprTmp+1), sdwa=SDWAModifiers(dst_sel=SelectBit.WORD_1), comment="Convert to FP16"))
                   self.vgprPool.checkIn(vgprTmp)
                 else:
-                  modNum = max(1, int(newBlockWidth / blockWidth))
+                  modNum = max(1, int(bufferLoadWidth / dsStoreWidth))
                   vgprTmp = self.vgprPool.checkOutAligned(2, 2)
-                  if (not isHigh16Bits) and (newBlockWidth <= blockWidth):
-                    for vi in range(0, int(newBlockWidth)):
+                  if (not isHigh16Bits) and (bufferLoadWidth <= dsStoreWidth):
+                    for vi in range(0, int(bufferLoadWidth)):
                       localWriteCVTCode.add(VCvtPkFP8toF32(dst=vgpr(vgprTmp, 2), src=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx+tP["shiftGR"], vi)), sdwa=SDWAModifiers(src0_sel=SelectBit.WORD_0), comment="convert to F32"))
                       localWriteCVTCode.add(VCvtF32toF16(dst=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi * 2)), src=vgpr(vgprTmp), sdwa=SDWAModifiers(dst_sel=SelectBit.WORD_0), comment="Convert to FP16"))
                       localWriteCVTCode.add(VCvtF32toF16(dst=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi * 2)), src=vgpr(vgprTmp+1), sdwa=SDWAModifiers(dst_sel=SelectBit.WORD_1), comment="Convert to FP16"))
@@ -7044,9 +7045,9 @@ class KernelWriterAssembly(KernelWriter):
                       interOffset = 0 if idxMod % 2 == 0 else 1
                       localWriteCVTCode.add(VCvtPkFP8toF32(dst=vgpr(vgprTmp, 2), src=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdxTmp+tP["shiftGR"], vi)), sdwa=SDWAModifiers(src0_sel=selectBit), comment="convert to F32"))
                       localWriteCVTCode.add(VCvtF32toF16(dst=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdxTmp, vi * 2 + interOffset)), src=vgpr(vgprTmp), sdwa=SDWAModifiers(dst_sel=SelectBit.WORD_0), comment="Convert to FP16"))
-                      if blockWidth != 0.5:
+                      if dsStoreWidth != 0.5:
                         localWriteCVTCode.add(VCvtF32toF16(dst=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdxTmp, vi * 2 + interOffset)), src=vgpr(vgprTmp+1), sdwa=SDWAModifiers(dst_sel=SelectBit.WORD_1), comment="Convert to FP16"))
-                    elif blockWidth == 0.5:
+                    elif dsStoreWidth == 0.5:
                       localWriteCVTCode.add(VCvtF32toF16(dst=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdxTmp, vi * 2 + interOffset)), src=vgpr(vgprTmp+1), sdwa=SDWAModifiers(dst_sel=SelectBit.WORD_1), comment="Convert to FP16"))
                   self.vgprPool.checkIn(vgprTmp)
               else:
@@ -7065,7 +7066,6 @@ class KernelWriterAssembly(KernelWriter):
 
             if self.do["LocalWrite%s"%tc]:
               localWriteCode.add(writeInst)
-              instructionCnt += 1 if blockWidth < 8 else 2
 
       if regTmpVgprBlock != None:
         self.vgprPool.checkIn(regTmpVgprBlock)
