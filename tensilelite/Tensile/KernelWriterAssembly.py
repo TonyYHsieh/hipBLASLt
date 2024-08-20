@@ -6226,29 +6226,27 @@ class KernelWriterAssembly(KernelWriter):
       else:
         destVgprPrefix = "G2L%s"%(tc)
 
-      loopCnt = -1
       for perp in range(0, tP["nrp"]):
         for sPerp in range(0, tP["nrpv"]):
           for para in range(0, tP["nrc"]):
             for sPara in range(0, tP["nrcv"]//tP["nrcvpi"]):
-              i = sPara + (tP["nrcv"]//tP["nrcvpi"]) * (para + tP["nrc"] * (sPerp + tP["nrpv"] * perp))
-              loopCnt += 1
-              graIdx = i * self.states.rpgo if kernel["BufferLoad"] else i * self.states.rpga
-              g2lIdx = i * loadWidth * tP["bpeRatio"]
+              instIdx = sPara + (tP["nrcv"]//tP["nrcvpi"]) * (para + tP["nrc"] * (sPerp + tP["nrpv"] * perp))
+              graIdx = instIdx * self.states.rpgo if kernel["BufferLoad"] else instIdx * self.states.rpga
+              g2lIdx = instIdx * loadWidth * tP["bpeRatio"]
 
               # Each load may contains a small bundle of instructions, package them together in loadModule:
-              loadModule = Module("load%u"%loopCnt)
+              loadModule = Module("load%u" % instIdx)
               imod.middle.add(loadModule)
 
               if self.states.archCaps["HasEccHalf"] and not tP["isM"]:
                 numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc =='B' else self.states.m.numVgprG2L
                 eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
-                eccOffset = _getEccOffset(loadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=i, numVgprG2L=numVgprG2L)
+                eccOffset = _getEccOffset(loadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=instIdx, numVgprG2L=numVgprG2L)
               else:
                 eccOffset = 0
 
               datatype = kernel["ProblemType"]["DataType%s"%tc] if kernel["ConvertAfterDS"] else kernel["ProblemType"]["DataType"]
-              isHigh16Bits = ((datatype.numBytes() == 2) and ((loopCnt % 2) == 1)) if (not tP["isM"]) else False
+              isHigh16Bits = ((datatype.numBytes() == 2) and ((instIdx% 2) == 1)) if (not tP["isM"]) else False
 
               if kernel["BufferLoad"]:
                 if kernel["_UseSgprForGRO"]:
@@ -6270,7 +6268,7 @@ class KernelWriterAssembly(KernelWriter):
                 # ScalarGlobalReadOffset should be negative value with unroll mirroring.
                 # However, buffer_load uses soffset as uint value, so GRO - SGRO, SGRO = 0
                 if unrollMirrorWithSoffset:
-                  codeMod = Module("mirrorIdx%u"%loopCnt)
+                  codeMod = Module("mirrorIdx%u" % instIdx)
                   codeMod.add(VSubU32(dst=vgpr(offsetVgpr), src0=vgpr(offsetVgpr), src1=soffset, comment="mirror unroll: GRO=GRO-SGRO, soffset=0"))
                   loadModule.add(codeMod)
                   soffset_prev = soffset
@@ -6325,7 +6323,7 @@ class KernelWriterAssembly(KernelWriter):
                           comment="G -> Reg %u_%u_%u_%u"%(para, sPara, perp, sPerp)))
 
                 if unrollMirrorWithSoffset:
-                  codeMod = Module("mirrorIdx%u"%loopCnt)
+                  codeMod = Module("mirrorIdx%u" % instIdx)
                   codeMod.add(VAddU32(dst=vgpr(offsetVgpr), src0=vgpr(offsetVgpr), src1=soffset_prev, comment="mirror unroll: restore GRO=GRO+SGRO"))
                   loadModule.add(codeMod)
 
@@ -6341,7 +6339,7 @@ class KernelWriterAssembly(KernelWriter):
                           addr0=vgpr("GlobalReadAddr%s+%u"%(tc,graIdx),2), addr1="", \
                           soffset=0, offset=0, \
                           glc=isGlc, slc=isSlc, nt=isNT, lds=isLds, \
-                          hi16=(kernel["ProblemType"]["DataType"].isHalf() or kernel["ProblemType"]["DataType"].isBFloat16()) and loopCnt%2==1, \
+                          hi16=isHigh16Bits, \
                           comment="G -> Reg %u_%u_%u_%u"%(para, sPara, perp, sPerp )))
 
       if kernel["ProblemType"]["Sparse"] and kernel["DirectToVgprSparseMetadata"]:
@@ -6358,7 +6356,7 @@ class KernelWriterAssembly(KernelWriter):
             for unrollIdx in range(0, kernel["LoopIters"]):
               bpl = kernel["MIInputPerThread"]//8 # bytes per load: 1 byte for fp16,bf16, 2 bytes for int8
               constOffset = unrollIdx * kernel["MatrixInstK"] // 8
-              codeMod = Module("load metadata%u"%loopCnt)
+              codeMod = Module("load metadata%u" % instIdx)
               imod.middle.add(codeMod)
               codeMod.add( self.chooseGlobalRead(kernel["BufferLoad"], \
                         bpl, \
@@ -6505,7 +6503,7 @@ class KernelWriterAssembly(KernelWriter):
   ##############################################################################
   # Calculate offset to use for LDS write
   # Intro:
-  #   Each WI has a 2D tile index (coal, perp).
+  #   Each WI has a 2D tile index (coal, nrvIdx).
   #     - Code above computes global mem address by scaling one dim by the
   #       lda and adding the other.
   #     - Here we compute a linear LDS offset by scaling one dim by the MT
@@ -6517,40 +6515,40 @@ class KernelWriterAssembly(KernelWriter):
   #   Total load insts is nrc * nrp which load the macro-tile.
   #   Par and coalesced are ~synonyms referring to same dimension
   #   Either nrpv or nrvc must be 1 - can't have vectors in both dimensions.
-  #     Thus either sPerp or sPara is 0.
+  #     Thus either nrpvIdx or nrcvIdx is 0.
   # Inputs:
-  #   perp : index of the load in perp dimension (0...nrp)
-  #   par  : index of the load in the para dim (0...nrc)
-  #   sPerp : component index of the perp vector (0...nrpv)
-  #   sPara : component index of the par vector (0...nrcv)
+  #   nrvIdx : index of the load in nrvIdx dimension (0...nrp)
+  #   par  : index of the load in the nrc dim (0...nrc)
+  #   nrpvIdx : component index of the  vector (0...nrpv)
+  #   nrcvIdx : component index of the nrc vector (0...nrcv)
   # Outputs:
   #   offsetBytes : Offset in bytes for the _ds_store instruction
   #   i : i-th instruction
   #   comment : Comment with the text version of the formula
   #############################################################################
-  def calculateLdsWriteOffset(self, perp, para, sPerp, sPara, kernel, tP):
+  def calculateLdsWriteOffset(self, nrvIdx, nrcIdx, nrpvIdx, nrcvIdx, kernel, tP):
     tc = tP["tensorChar"]
     mask = 0
-    lscaOffset = para * kernel[tP["lsc"]]
-    perp_masked = perp
-    perp_rem = 0
-    lspaOffset = perp_masked * kernel[tP["lsp"]]
+    lscaOffset = nrcIdx * kernel[tP["lsc"]]
+    nrvIdx_masked = nrvIdx
+    nrvIdx_rem = 0
+    lspaOffset = nrvIdx_masked * kernel[tP["lsp"]]
     rem = 0
 
     # Add component offset to interleave from different regs
     # and compute mysterious "i"
-    assert(sPerp==0 or sPara==0)
+    assert(nrpvIdx==0 or nrcvIdx==0)
 
     if tP["tlu"] != kernel["UnrollMajorLDS%s" % tP["tensorChar"]]:
-      lspaOffset += sPerp & mask
-      lscaOffset += sPara
-      rem = (sPerp & ~mask)
-      i = sPara + (tP["nrcv"]//tP["nrcvpi"]) * (para + tP["nrc"] * (sPerp + tP["nrpv"] * perp_masked))
+      lspaOffset += nrpvIdx & mask
+      lscaOffset += nrcvIdx
+      rem = (nrpvIdx & ~mask)
+      i = nrcvIdx + (tP["nrcv"]//tP["nrcvpi"]) * (nrcIdx              + tP["nrc"] * (nrpvIdx +              tP["nrpv"] * nrvIdx_masked))
     else:
-      lscaOffset += sPara
-      lspaOffset += sPerp
+      lscaOffset += nrcvIdx
+      lspaOffset += nrpvIdx
       rem = 0
-      i = sPara + (tP["nrcv"]//tP["nrcvpi"]) * (para * tP["glvw"] + tP["nrc"] * (sPerp + tP["glvw"] * tP["nrpv"] * perp ))
+      i = nrcvIdx + (tP["nrcv"]//tP["nrcvpi"]) * (nrcIdx * tP["glvw"] + tP["nrc"] * (nrpvIdx + tP["glvw"] * tP["nrpv"] * nrvIdx ))
 
     LdsPad = kernel["LdsPad%s"%tc] if kernel["LdsBlockSizePerPad%s"%tc] == 0 else 0
     lds_stride = (kernel["_DepthU%s"%tc] + LdsPad) if kernel["UnrollMajorLDS%s" % tP["tensorChar"]] \
@@ -6558,7 +6556,7 @@ class KernelWriterAssembly(KernelWriter):
 
     if tP["tlu"] != kernel["UnrollMajorLDS%s" % tP["tensorChar"]]:
       lspaOffset *= lds_stride
-      lspaOffset += rem + perp_rem
+      lspaOffset += rem + nrvIdx_rem
     else:
       lscaOffset *= lds_stride
       lscaOffset += rem
@@ -6571,11 +6569,11 @@ class KernelWriterAssembly(KernelWriter):
 
     offsetBytes += tP["localWriteSwapByteOffset"]
 
-    comment = "lwo%s_%u_%u_%u_%u = (%s%d*%s)" % (tP["tensorChar"], para, sPara, perp, sPerp, (("%u + "%sPara) if tP["wtc"] else ""), para, tP["lsc"] )
+    comment = "lwo%s_%u_%u_%u_%u = (%s%d*%s)" % (tP["tensorChar"], nrcIdx, nrcvIdx, nrvIdx, nrpvIdx, (("%u + "%nrcvIdx) if tP["wtc"] else ""), nrcIdx, tP["lsc"] )
 
     if not tP["tlu"]:
       comment += "*(MT%s+PAD)" % (tP["tileChar"])
-    comment += " + (%d*%s)" % (perp, tP["lsp"])
+    comment += " + (%d*%s)" % (nrvIdx, tP["lsp"])
 
     if tP["tlu"]:
       comment += "(*MT%s+PAD)" % (tP["tileChar"])
@@ -6737,33 +6735,34 @@ class KernelWriterAssembly(KernelWriter):
       regTmpVgprBlock = None
 
       if swapAB == 1:
-        destVgprPrefix = "G2L%s2"%(tc)
+        destVgprPrefix = "G2L%s2" % (tc)
       else:
-        destVgprPrefix = "G2L%s"%(tc)
+        destVgprPrefix = "G2L%s" % (tc)
 
-      for perp in range(0, tP["nrp"]):
-        localWriteCode = imod.add(Module("LocalWrite%u perp=%d"%(instructionCnt,perp)))
+      for nrpIdx in range(0, tP["nrp"]):
+        localWriteCode = imod.add(Module("LocalWrite%u nrpIdx = %d" % (instructionCnt, nrpIdx)))
         lwa = "LocalWriteAddr%s"%tc  # default
 
-        for para in range(0, tP["nrc"]):
-          if para>=1:
-            localWriteCode = imod.add(Module("LocalWrite%u perp=%d para=%d"%(instructionCnt,perp,para)))
+        for nrcIdx in range(0, tP["nrc"]):
+          if nrcIdx >= 1:
+            localWriteCode = imod.add(Module("LocalWrite%u nrpIdx = %d nrcIdx = %d" % (instructionCnt, nrpIdx, nrcIdx)))
 
-          for s in range(0, max(tP["nwcv"],tP["nwpv"])//tP["nwcvpi"]):
+          for s in range(0, max(tP["nwcv"], tP["nwpv"]) // tP["nwcvpi"]):
             localWriteCVTCode = Module()
-            sPerp = 0
-            sPara = 0
+            nrpvIdx = 0
+            nrcvIdx = 0
             needToSplitMetadata = False
+
             if tP["tlu"] != kernel["UnrollMajorLDS%s" % tP["tensorChar"]]:
               if tP["wtc"]:
-                sPerp = s
+                nrpvIdx = s
             else:
               if tP["wtc"]:
-                sPara = s
+                nrcvIdx = s
                 needToSplitMetadata = tP["isM"]
 
-            #print("perp:{}/{} para:{}/{} sPerp:{} sPara:{}".format(perp,tP["nrp"],para,tP["nrc"],sPerp,sPara))
-            (offset, i, comment) = self.calculateLdsWriteOffset(perp, para, sPerp, sPara, kernel, tP)
+            #print("nrpIdx:{}/{} nrcIdx:{}/{} nrpvIdx:{} nrcvIdx:{}".format(nrpIdx,tP["nrp"],nrcIdx,tP["nrc"],nrpvIdx,nrcvIdx))
+            (offset, i, comment) = self.calculateLdsWriteOffset(nrpIdx, nrcIdx, nrpvIdx, nrcvIdx, kernel, tP)
 
             # Need refactor, the pattern < glvw in fp8 is not the same as the original.
             # Thus the offset calculation here does not match global read.
@@ -6796,7 +6795,7 @@ class KernelWriterAssembly(KernelWriter):
               numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc == 'B' else self.states.m.numVgprG2L
               eccinstHi = instHi
               # FIXME: Workaround, unique pattern in 8bit + glvw == 2...
-              if tP["bpeDS"] == tP["bpeGR"] and (tP["globalReadInstruction"].totalWidth) == 0.5 and (blockWidth == 0.25) and not tP["isM"]:
+              if tP["bpeDS"] == tP["bpeGR"] and (tP["globalReadInstruction"].totalWidth == 0.5) and (blockWidth == 0.25) and (not tP["isM"]):
                 eccinstHi = i // 2
               eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
               eccOffset = _getEccOffset(tP["globalReadInstruction"].totalWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=eccinstHi, numVgprG2L=numVgprG2L)
@@ -6863,9 +6862,6 @@ class KernelWriterAssembly(KernelWriter):
             for oIdx in range(0, numOffsets):
               paramList.append(offset)
 
-            #print "offset", offset
-
-            #comment = "Reg -> L %u_%u_%u_%u"%(para, sPara, perp, sPerp)
             isHigh16Bits = False
             isCvtHighBits = False
             datatype = kernel["ProblemType"]["DataType%s"%tc] if kernel["ConvertAfterDS"] else kernel["ProblemType"]["DataType"]

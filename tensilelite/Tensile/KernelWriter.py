@@ -3108,10 +3108,10 @@ class KernelWriter(metaclass=abc.ABCMeta):
       self.initLocalReadMemoryInstruction(instructions, kernel, tensorParametersM, self.states.bpr)
 
     # global reads per instruction
-    tensorParametersA["nrcvpi"] = int((tensorParametersA["globalReadInstruction"].totalWidth*self.states.bpr)/tensorParametersA["bpeGR"])
-    tensorParametersB["nrcvpi"] = int((tensorParametersB["globalReadInstruction"].totalWidth*self.states.bpr)/tensorParametersB["bpeGR"])
-    tensorParametersA["nwcvpi"] = int((tensorParametersA["localWriteInstruction"].totalWidth*self.states.bpr)/tensorParametersA["bpeDS"])
-    tensorParametersB["nwcvpi"] = int((tensorParametersB["localWriteInstruction"].totalWidth*self.states.bpr)/tensorParametersB["bpeDS"])
+    tensorParametersA["nrcvpi"] = int((tensorParametersA["globalReadInstruction"].totalWidth * self.states.bpr) / tensorParametersA["bpeGR"])
+    tensorParametersB["nrcvpi"] = int((tensorParametersB["globalReadInstruction"].totalWidth * self.states.bpr) / tensorParametersB["bpeGR"])
+    tensorParametersA["nwcvpi"] = int((tensorParametersA["localWriteInstruction"].totalWidth * self.states.bpr) / tensorParametersA["bpeDS"])
+    tensorParametersB["nwcvpi"] = int((tensorParametersB["localWriteInstruction"].totalWidth * self.states.bpr) / tensorParametersB["bpeDS"])
 
     if tensorParametersM is not None:
       tensorParametersM["nrcvpi"] = int((tensorParametersM["globalReadInstruction"].totalWidth*self.states.bpr)/tensorParametersM["bpeDS"])
