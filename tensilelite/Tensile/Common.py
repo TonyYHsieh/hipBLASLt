@@ -209,7 +209,7 @@ globalParameters["ShortNames"] = False            # on windows kernel names can 
 globalParameters["MergeFiles"] = True             # F=store every solution and kernel in separate file; T=store all solutions in single file
 globalParameters["NumMergedFiles"] = 1            # The number of files that kernels should be split between when merging
 
-globalParameters["MaxFileName"] = 64              # If a file name would be longer than this, shorten it with a hash.
+globalParameters["MaxFileName"] = 128              # If a file name would be longer than this, shorten it with a hash.
 globalParameters["SupportedISA"] = [(9,4,2)] # assembly kernels writer supports these architectures
 
 globalParameters["GenerateManifestAndExit"] = False               # Output manifest file with list of expected library objects and exit
