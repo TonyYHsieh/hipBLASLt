@@ -6795,7 +6795,7 @@ class KernelWriterAssembly(KernelWriter):
               eccinstHi = instHi
               # FIXME: Workaround, unique pattern in 8bit + glvw == 2...
               if tP["bpeDS"] == tP["bpeGR"] and (bufferLoadWidth == 0.5) and (dsStoreWidth == 0.25) and (not tP["isM"]):
-                eccinstHi = i // 2
+                eccinstHi = instIdx // 2
               eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
               eccOffset = _getEccOffset(bufferLoadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=eccinstHi, numVgprG2L=numVgprG2L)
             else:
