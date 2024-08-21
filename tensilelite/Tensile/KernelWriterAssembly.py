@@ -5767,7 +5767,7 @@ class KernelWriterAssembly(KernelWriter):
       graIdx          = 0
       g2lIdx          = 0
       bufferLoadWidth = tP["globalReadInstruction"].totalWidth
-      dsWriteWidth    = tP["localWriteInstruction"].blockWidth
+      dsStoreWidth    = tP["localWriteInstruction"].blockWidth
 
       isGlc = tP["NonTemporal"] & 0x1
       isSlc = tP["NonTemporal"] & 0x2
@@ -5827,7 +5827,7 @@ class KernelWriterAssembly(KernelWriter):
                     destVgprHi = self.vgprPool.checkOut( int8TempVgpr , 'destVgprHi')
                   dataIsByte = True
                   regIdx = r // 4
-                  if (dsWriteWidth <= 0.5) and ((r % 2) == 0) and (not tP["isM"]):
+                  if (dsStoreWidth <= 0.5) and ((r % 2) == 0) and (not tP["isM"]):
                       numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L
                       eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
                       eccOffset = _getEccOffset(bufferLoadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=instIdx, numVgprG2L=numVgprG2L)
@@ -5839,7 +5839,7 @@ class KernelWriterAssembly(KernelWriter):
                     # In some cards, loading half types into register will zero out
                     # the other half. Therefore we need to load into a separate register
                     # then pack 2 registers into one
-                    if (dsWriteWidth == 0.5) and ((r % 2) == 0):
+                    if (dsStoreWidth == 0.5) and ((r % 2) == 0):
                       numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L
                       eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
                       eccOffset = _getEccOffset(bufferLoadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=instIdx, numVgprG2L=numVgprG2L)
@@ -5935,27 +5935,19 @@ class KernelWriterAssembly(KernelWriter):
 
                   offset = r * tP["bpeGR"] + instOffset
                   comment = "load one buffer value"
-                  if (dataType.numBytes() == 2) and not tP["isM"]:
-                    if numElementsPerLoad == 2:
-                      # Pack two FP16 values into a single load dword x2
-                      r += 1 # skip next element since we loaded 2X here
-                      comment = "load packed 2X half buffer value"
-                    elif not kernel["DirectToLds%s"%tc]:
-                      hi16 = (instIdx % 2) if (tP["glvw"] == 1) else (r % 2)
-                      comment="load one buffer value"
 
-                  if ((dataType.numBytes() == 1) and (not tP["isM"])) or (tP["isM"] and (destVgprHi != None)):
-                    # TODO-Int8, Check this:
-                    # if numElementsPerLoad==2:
-                    #   # Pack two FP16 values into a single load dword x2
-                    #   r += 1 # skip next element since we loaded 2X here
-                    #   comment = "load packed 2X half buffer value"
-                    if not kernel["DirectToLds%s"%tc]:
-                      hi8  = (instIdx % 4) % 2 if (tP["glvw"] == 1) else (r % 4) % 2
-                      hi16 = False if (tP["glvw"] == 1) else ((r % 4) // 2)
-                      comment="load one buffer value"
+                  if (tP["bpeGR"] == 2) and (numElementsPerLoad == 2):
+                    # Pack two FP16 values into a single load dword x2
+                    r += 1 # skip next element since we loaded 2X here
+                    comment = "load packed 2X half buffer value"
+                  elif not kernel["DirectToLds%s"%tc]:
+                    HiIdx = instIdx * numLoadVectorComp + r
+                    mod = self.states.bpr // tP["bpeGR"]
+                    hi8  = (mod > 1) and (HiIdx % (mod // 2))
+                    hi16 = (mod > 1) and ((HiIdx % mod) // (mod // 2))
+                    comment="load one buffer value"
 
-                  bpl = numElementsPerLoad*(tP["bpeGR"] if not tP["isM"] else tP["bpe"]) # bytesPerLoad
+                  bpl = numElementsPerLoad * (tP["bpeGR"] if not tP["isM"] else tP["bpe"]) # bytesPerLoad
 
                   # if hi8=1 or hi16=1 (component 1,2,3 for int8) or (component 1 for half), use the temp destVgprHi
                   # but only when hi16=1 we use the _d16_hi version instruction, see the below visualized int8 comment
