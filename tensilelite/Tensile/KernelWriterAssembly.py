@@ -6241,8 +6241,8 @@ class KernelWriterAssembly(KernelWriter):
               else:
                 eccOffset = 0
 
-              datatype = kernel["ProblemType"]["DataType%s"%tc] if kernel["ConvertAfterDS"] else kernel["ProblemType"]["DataType"]
-              isHigh16Bits = ((datatype.numBytes() == 2) and ((instIdx% 2) == 1)) if (not tP["isM"]) else False
+              mod = self.states.bpr // tP["bpeGR"]
+              isHigh16Bits = (mod > 1) and ((instIdx % mod) // (mod // 2))
 
               if kernel["BufferLoad"]:
                 if kernel["_UseSgprForGRO"]:
