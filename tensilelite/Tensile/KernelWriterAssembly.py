@@ -6233,7 +6233,7 @@ class KernelWriterAssembly(KernelWriter):
               else:
                 eccOffset = 0
 
-              mod = self.states.bpr // tP["bpeGR"]
+              mod = roundUp(1 / loadWidth)
               isHigh16Bits = (mod > 1) and ((instIdx % mod) // (mod // 2))
 
               if kernel["BufferLoad"]:
