@@ -6853,11 +6853,8 @@ class KernelWriterAssembly(KernelWriter):
             for oIdx in range(0, numOffsets):
               paramList.append(offset)
 
-            isHigh16Bits = False
-            isCvtHighBits = False
-            datatype = kernel["ProblemType"]["DataType%s"%tc] if kernel["ConvertAfterDS"] else kernel["ProblemType"]["DataType"]
             mod = roundUp(1 / dsStoreWidth)
-            isHigh16Bits = (mod > 1) and ((instIdx % mod) > ((mod // 2) - 1)) # 2,3
+            isHigh16Bits = (mod > 1) and ((instIdx % mod) // (mod // 2)) # 2,3
             isCvtHighBits = (tP["bpeDS"] == 2) and kernel["ProblemType"]["DataType%s"%tc].isFloat8() and ((g2lIdx % 2) == 1)
 
             # Need cvt
