@@ -6750,46 +6750,27 @@ class KernelWriterAssembly(KernelWriter):
                 needToSplitMetadata = tP["isM"]
 
             #print("nrpIdx:{}/{} nrcIdx:{}/{} nrpvIdx:{} nrcvIdx:{}".format(nrpIdx,tP["nrp"],nrcIdx,tP["nrc"],nrpvIdx,nrcvIdx))
-            (offset, instIdx, comment) = self.calculateLdsWriteOffset(nrpIdx, nrcIdx, nrpvIdx, nrcvIdx, kernel, tP)
-            instIdx = instIdx if (dsStoreWidth < 8) else (instIdx * 2)
+            (offset, dsInstIdx, comment) = self.calculateLdsWriteOffset(nrpIdx, nrcIdx, nrpvIdx, nrcvIdx, kernel, tP)
+            dsInstIdx = dsInstIdx if (dsStoreWidth < 8) else (dsInstIdx * 2)
+            glInstIdx = int(dsInstIdx / (bufferLoadWidth / dsStoreWidth))
 
-            localWriteCode.addComment1("LocalWrite nrpIdx %d nrcIdx %d nrpvIdx %d nrcvIdx %d instIdx %d" % (nrpIdx, nrcIdx, nrpvIdx, nrcvIdx, instIdx))
+            localWriteCode.addComment1("LocalWrite nrpIdx %d nrcIdx %d nrpvIdx %d nrcvIdx %d dsInstIdx %d" % (nrpIdx, nrcIdx, nrpvIdx, nrcvIdx, dsInstIdx))
 
             # Need refactor, the pattern < glvw in fp8 is not the same as the original.
             # Thus the offset calculation here does not match global read.
-            if tP["glvw"] <= 2:
-              g2lIdx = instIdx * dsStoreWidth
-              if isBpeInputLarger:
-                g2lIdx *= (tP["bpeGR"]// tP["bpeDS"])
-              g2lIdx = int(g2lIdx)
-            else:
-              g2lIdx = int(instIdx * dsStoreWidth)
-              if isBpeInputLarger:
-                g2lIdx *= (tP["bpeGR"]// tP["bpeDS"])
+            g2lIdx = int(dsInstIdx * dsStoreWidth * tP["bpeGR"] / tP["bpeDS"])
 
-            graIdx = instIdx * self.states.rpgo if kernel["BufferLoad"] else instIdx * self.states.rpga
+            if tP["isM"] and (not needToSplitMetadata):
+                g2lIdx = dsInstIdx * self.states.rpgo if kernel["BufferLoad"] else dsInstIdx * self.states.rpga
 
-            if tP["isM"]:
-              if not needToSplitMetadata:
-                g2lIdx = graIdx
-
-            # If g2lIdx is already in the dict and dsStoreWidth < 1, the data may
-            # be packed into one register.
-            instHi = 0
-            if g2lIdx in g2lIdxDict:
-              g2lIdxDict[g2lIdx] += 1
-            else:
-              g2lIdxDict[g2lIdx] = 0
-            instHi = g2lIdxDict[g2lIdx]
+            mod = 1 / (dsStoreWidth * tP["bpeGR"] / tP["bpeDS"])
+            isHigh16Bits = (mod > 1) and ((dsInstIdx % mod) // (mod // 2)) # 2,3
+            isCvtHighBits = (tP["bpeDS"] == 2) and kernel["ProblemType"]["DataType%s"%tc].isFloat8() and ((g2lIdx % 2) == 1)
 
             if self.states.archCaps["HasEccHalf"]:
               numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc == 'B' else self.states.m.numVgprG2L
-              eccinstHi = instHi
-              # FIXME: Workaround, unique pattern in 8bit + glvw == 2...
-              if tP["bpeDS"] == tP["bpeGR"] and (not tP["isM"]):
-                eccinstHi = instIdx // roundUp(bufferLoadWidth / dsStoreWidth)
-              eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
-              eccOffset = _getEccOffset(bufferLoadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=eccinstHi, numVgprG2L=numVgprG2L)
+              eccBpe = max(tP["bpeGR"], tP["bpeDS"])
+              eccOffset = _getEccOffset(bufferLoadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=glInstIdx, numVgprG2L=numVgprG2L)
             else:
               eccOffset = 0
 
@@ -6816,7 +6797,7 @@ class KernelWriterAssembly(KernelWriter):
             for _ in range(0, numBlocks):
               # FIXME: In the future all registers should pass from global read instead of recalculate them
               if bufferLoadWidth == dsStoreWidth and tP["glvw"] == 1:
-                paramList.append(vgpr(destVgprPrefix + "+%u"%(self.vgprs.globalReadRegisters[tc][instIdx]), dsStoreWidth))
+                paramList.append(vgpr(destVgprPrefix + "+%u"%(self.vgprs.globalReadRegisters[tc][dsInstIdx]), dsStoreWidth))
               elif dsStoreWidth == 1:
                 paramList.append(vgpr(destVgprPrefix + "+%u"%(g2lIdx)))
                 numsOfRegister.append(1)
@@ -6852,10 +6833,6 @@ class KernelWriterAssembly(KernelWriter):
 
             for oIdx in range(0, numOffsets):
               paramList.append(offset)
-
-            mod = roundUp(1 / dsStoreWidth)
-            isHigh16Bits = (mod > 1) and ((instIdx % mod) // (mod // 2)) # 2,3
-            isCvtHighBits = (tP["bpeDS"] == 2) and kernel["ProblemType"]["DataType%s"%tc].isFloat8() and ((g2lIdx % 2) == 1)
 
             # Need cvt
             if tP["bpeDS"] != tP["bpeGR"]:
