@@ -5813,7 +5813,7 @@ class KernelWriterAssembly(KernelWriter):
                 dataType = kernel["ProblemType"]["DataType"] if tP["glvw"] < glvwWorkaround else kernel["ProblemType"]["DataType%s"%tcDataType]
                 if kernel["ConvertAfterDS"]:
                     dataType = kernel["ProblemType"]["DataType%s"%tcDataType]
-                if (dataType.numBytes() == 1) or tP["isM"]:
+                if tP["bpeGR"] == 1:
                   # TODO-Int8, Check this:
                   # if tP["glvw"]>1 and kernel["AssertSummationElementMultiple"] % 2 == 0:
                   # # Pack two FP16 values into a single load dword x2
@@ -5827,11 +5827,16 @@ class KernelWriterAssembly(KernelWriter):
                     destVgprHi = self.vgprPool.checkOut( int8TempVgpr , 'destVgprHi')
                   dataIsByte = True
                   regIdx = r // 4
-                  if (dsStoreWidth <= 0.5) and ((r % 2) == 0) and (not tP["isM"]):
-                      numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L
-                      eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
+                  if (dsStoreWidth <= 0.5) and ((r % 2) == 0):
+                      if tc == 'A':
+                          numVgprG2L = self.states.a.numVgprG2L
+                      elif tc == 'B':
+                          numVgprG2L = self.states.b.numVgprG2L
+                      else:
+                          numVgprG2L = self.states.m.numVgprG2L
+                      eccBpe = max(tP["bpeGR"], tP["bpeDS"])
                       eccOffset = _getEccOffset(bufferLoadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=instIdx, numVgprG2L=numVgprG2L)
-                elif (dataType.numBytes() == 2):
+                elif tP["bpeGR"] == 2:
                   if tP["glvw"]>1 and kernel["AssertSummationElementMultiple"] % 2 == 0:
                   # Pack two FP16 values into a single load dword x2
                     numElementsPerLoad = 2
@@ -5845,16 +5850,16 @@ class KernelWriterAssembly(KernelWriter):
                       eccOffset = _getEccOffset(bufferLoadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=instIdx, numVgprG2L=numVgprG2L)
                     else:
                       destVgprHi = self.vgprPool.checkOut(1, 'destVgprHi')
-                  regIdx = r // 2
+                  regIdx = r * tP["bpeGR"] // self.states.bpr
                 elif dataType.isInt8x4() or dataType.isSingle():
-                  regIdx = r
+                  regIdx = r * tP["bpeGR"] // self.states.bpr
                 elif dataType.isDouble():
                   numElementsPerLoad = kernel["GlobalReadVectorWidth%c"%tc] # adjust numElementsPerLoad for DGEMM
-                  regIdx = r * 2
+                  regIdx = r * tP["bpeGR"] // self.states.bpr
                 elif dataType.isSingleComplex():
-                  regIdx = r * 2
+                  regIdx = r * tP["bpeGR"] // self.states.bpr
                 elif dataType.isDoubleComplex() :
-                  regIdx = r * 4
+                  regIdx = r * tP["bpeGR"] // self.states.bpr
                 else:
                   printWarning("DataType unsupported")
                 module.addComment0("g2l=%u, load component %u"%(g2lIdx, r))
@@ -5930,8 +5935,8 @@ class KernelWriterAssembly(KernelWriter):
                     destVgpr=0
                     self.vgprs.globalReadRegisters[tc].append(0)
                   else:
-                    destVgpr="G2L%s+%u+%u"%(tc, g2lIdx + tP["shiftGR"] if not tP["isM"] else graIdx, regIdx+eccOffset)
-                    self.vgprs.globalReadRegisters[tc].append( (g2lIdx + tP["shiftGR"] if not tP["isM"] else graIdx) + regIdx+eccOffset)
+                    destVgpr="G2L%s+%u+%u"%(tc, (g2lIdx + tP["shiftGR"]), (regIdx + eccOffset))
+                    self.vgprs.globalReadRegisters[tc].append(g2lIdx + tP["shiftGR"] + regIdx + eccOffset)
 
                   offset = r * tP["bpeGR"] + instOffset
                   comment = "load one buffer value"
@@ -5947,13 +5952,13 @@ class KernelWriterAssembly(KernelWriter):
                     hi16 = (mod > 1) and ((HiIdx % mod) // (mod // 2))
                     comment="load one buffer value"
 
-                  bpl = numElementsPerLoad * (tP["bpeGR"] if not tP["isM"] else tP["bpe"]) # bytesPerLoad
+                  bpl = numElementsPerLoad * tP["bpeGR"] # bytesPerLoad
 
                   # if hi8=1 or hi16=1 (component 1,2,3 for int8) or (component 1 for half), use the temp destVgprHi
                   # but only when hi16=1 we use the _d16_hi version instruction, see the below visualized int8 comment
                   loadVgpr = destVgprHi if ((hi16 or hi8) and destVgprHi != None) else destVgpr
                   self.vgprs.globalReadRegisters[tc][-1] = destVgprHi if ((hi16 or hi8) and destVgprHi != None) else self.vgprs.globalReadRegisters[tc][-1]
-                  if (kernel["ProblemType"]["DataType%s"%tcDataType].isInt8() or kernel["ProblemType"]["DataType%s"%tcDataType].is8bitFloat() or tP["isM"]) and (not self.states.archCaps["HasEccHalf"]):
+                  if (tP["bpeGR"] == 1) and (not self.states.archCaps["HasEccHalf"]):
                     module.add(VMovB32(dst=vgpr(loadVgpr), src=0, comment="set to zero to avoid unexpected value"))
                   module.add(self.chooseGlobalRead(True, \
                             bpl, destVgpr=loadVgpr, \
@@ -6226,9 +6231,9 @@ class KernelWriterAssembly(KernelWriter):
               loadModule = Module("load%u" % instIdx)
               imod.middle.add(loadModule)
 
-              if self.states.archCaps["HasEccHalf"] and not tP["isM"]:
+              if self.states.archCaps["HasEccHalf"]:
                 numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc =='B' else self.states.m.numVgprG2L
-                eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
+                eccBpe = max(tP["bpeGR"], tP["bpeDS"])
                 eccOffset = _getEccOffset(loadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=instIdx, numVgprG2L=numVgprG2L)
               else:
                 eccOffset = 0
@@ -6296,10 +6301,8 @@ class KernelWriterAssembly(KernelWriter):
                   destVgpr=0
                   self.vgprs.globalReadRegisters[tc].append(0)
                 else:
-                  destVgpr = destVgprPrefix + "+%u"%((g2lIdx+eccOffset+tP["shiftGR"]) if not tP["isM"] else graIdx)
-                  self.vgprs.globalReadRegisters[tc].append(g2lIdx+eccOffset+tP["shiftGR"] if not tP["isM"] else graIdx)
-                  if tP["isM"]:
-                    assert(graIdx <= self.states.m.numVgprG2LAllocated)
+                  destVgpr = destVgprPrefix + "+%u" % (g2lIdx + eccOffset + tP["shiftGR"])
+                  self.vgprs.globalReadRegisters[tc].append(g2lIdx + eccOffset + tP["shiftGR"])
 
                 # TODO: is it possible to load only hi16 when no in tail? (need to check INT8 too)
                 loadModule.add( self.chooseGlobalRead(kernel["BufferLoad"], \
@@ -6759,9 +6762,6 @@ class KernelWriterAssembly(KernelWriter):
             # Need refactor, the pattern < glvw in fp8 is not the same as the original.
             # Thus the offset calculation here does not match global read.
             g2lIdx = int(dsInstIdx * dsStoreWidth * tP["bpeGR"] / tP["bpeDS"])
-
-            if tP["isM"] and (not needToSplitMetadata):
-                g2lIdx = dsInstIdx * self.states.rpgo if kernel["BufferLoad"] else dsInstIdx * self.states.rpga
 
             mod = 1 / (dsStoreWidth * tP["bpeGR"] / tP["bpeDS"])
             isHigh16Bits = (mod > 1) and ((dsInstIdx % mod) // (mod // 2)) # 2,3
