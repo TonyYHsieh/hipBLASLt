@@ -5768,6 +5768,7 @@ class KernelWriterAssembly(KernelWriter):
       g2lIdx          = 0
       bufferLoadWidth = tP["globalReadInstruction"].totalWidth
       dsStoreWidth    = tP["localWriteInstruction"].blockWidth
+      blockWidth      = max(bufferLoadWidth, dsStoreWidth)
 
       isGlc = tP["NonTemporal"] & 0x1
       isSlc = tP["NonTemporal"] & 0x2
@@ -5786,7 +5787,7 @@ class KernelWriterAssembly(KernelWriter):
             for sPara in range(0, tP["nrcv"]//tP["nrcvpi"]):
               instIdx = sPara + (tP["nrcv"] // tP["nrcvpi"]) * (para + tP["nrc"] * (sPerp + tP["nrpv"] * perp))
               graIdx = instIdx * self.states.rpgo if kernel["BufferLoad"] else instIdx * self.states.rpga
-              g2lIdx = instIdx * bufferLoadWidth * tP["bpeRatio"]
+              g2lIdx = instIdx * blockWidth
 
               destVgprHi = None
               dataIsByte = False
@@ -5828,14 +5829,8 @@ class KernelWriterAssembly(KernelWriter):
                   dataIsByte = True
                   regIdx = r // 4
                   if (dsStoreWidth <= 0.5) and ((r % 2) == 0):
-                      if tc == 'A':
-                          numVgprG2L = self.states.a.numVgprG2L
-                      elif tc == 'B':
-                          numVgprG2L = self.states.b.numVgprG2L
-                      else:
-                          numVgprG2L = self.states.m.numVgprG2L
-                      eccBpe = max(tP["bpeGR"], tP["bpeDS"])
-                      eccOffset = _getEccOffset(bufferLoadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=instIdx, numVgprG2L=numVgprG2L)
+                      numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc =='B' else self.states.m.numVgprG2L
+                      eccOffset = _getEccOffset(blockWidth, idx=instIdx, numVgprG2L=numVgprG2L)
                 elif tP["bpeGR"] == 2:
                   if tP["glvw"]>1 and kernel["AssertSummationElementMultiple"] % 2 == 0:
                   # Pack two FP16 values into a single load dword x2
@@ -5845,9 +5840,8 @@ class KernelWriterAssembly(KernelWriter):
                     # the other half. Therefore we need to load into a separate register
                     # then pack 2 registers into one
                     if (dsStoreWidth == 0.5) and ((r % 2) == 0):
-                      numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L
-                      eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
-                      eccOffset = _getEccOffset(bufferLoadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=instIdx, numVgprG2L=numVgprG2L)
+                      numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc =='B' else self.states.m.numVgprG2L
+                      eccOffset = _getEccOffset(blockWidth, idx=instIdx, numVgprG2L=numVgprG2L)
                     else:
                       destVgprHi = self.vgprPool.checkOut(1, 'destVgprHi')
                   regIdx = r * tP["bpeGR"] // self.states.bpr
@@ -5946,7 +5940,7 @@ class KernelWriterAssembly(KernelWriter):
                     r += 1 # skip next element since we loaded 2X here
                     comment = "load packed 2X half buffer value"
                   elif not kernel["DirectToLds%s"%tc]:
-                    HiIdx = instIdx * numLoadVectorComp + r
+                    HiIdx = instIdx * numLoadVectorComp * tP["bpeRatio"] + r
                     mod = self.states.bpr // tP["bpeGR"]
                     hi8  = (mod > 1) and (HiIdx % (mod // 2))
                     hi16 = (mod > 1) and ((HiIdx % mod) // (mod // 2))
@@ -6201,9 +6195,12 @@ class KernelWriterAssembly(KernelWriter):
       self.vgprs.globalReadRegisters[tc] = []
       graIdx = 0
       g2lIdx = 0
-      loadWidth = tP["globalReadInstruction"].totalWidth # load width in elements?
+      bufferLoadWidth = tP["globalReadInstruction"].blockWidth
+      dsStoreWidth = tP["localWriteInstruction"].blockWidth
+      loadWidth = max(bufferLoadWidth, dsStoreWidth)
       bpe = tP["bpeGR"]
       bpl = bpe * tP["glvw"]  # bytes per load
+
 
       isGlc = tP["NonTemporal"] & 0x1
       isSlc = tP["NonTemporal"] & 0x2
@@ -6224,8 +6221,9 @@ class KernelWriterAssembly(KernelWriter):
           for para in range(0, tP["nrc"]):
             for sPara in range(0, tP["nrcv"]//tP["nrcvpi"]):
               instIdx = sPara + (tP["nrcv"]//tP["nrcvpi"]) * (para + tP["nrc"] * (sPerp + tP["nrpv"] * perp))
+
               graIdx = instIdx * self.states.rpgo if kernel["BufferLoad"] else instIdx * self.states.rpga
-              g2lIdx = instIdx * loadWidth * tP["bpeRatio"]
+              g2lIdx = instIdx * loadWidth
 
               # Each load may contains a small bundle of instructions, package them together in loadModule:
               loadModule = Module("load%u" % instIdx)
@@ -6233,8 +6231,7 @@ class KernelWriterAssembly(KernelWriter):
 
               if self.states.archCaps["HasEccHalf"]:
                 numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc =='B' else self.states.m.numVgprG2L
-                eccBpe = max(tP["bpeGR"], tP["bpeDS"])
-                eccOffset = _getEccOffset(loadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=instIdx, numVgprG2L=numVgprG2L)
+                eccOffset = _getEccOffset(loadWidth, idx=instIdx, numVgprG2L=numVgprG2L)
               else:
                 eccOffset = 0
 
@@ -6700,6 +6697,7 @@ class KernelWriterAssembly(KernelWriter):
       numOffsets   = instruction.numOffsets
       dsStoreWidth = instruction.blockWidth
       bufferLoadWidth = tP["globalReadInstruction"].blockWidth
+      blockWidth = max(dsStoreWidth, bufferLoadWidth)
       g2lIdx = 0
 
       if 0:
@@ -6738,7 +6736,9 @@ class KernelWriterAssembly(KernelWriter):
           if nrcIdx >= 1:
             localWriteCode = imod.add(Module("LocalWrite nrpIdx = %d nrcIdx = %d" % (nrpIdx, nrcIdx)))
 
-          for s in range(0, max(tP["nwcv"], tP["nwpv"]) // tP["nwcvpi"]):
+          storePerVector = max(tP["nwcv"], tP["nwpv"]) // tP["nwcvpi"]
+          loadPerVector = tP["nrcv"]//tP["nrcvpi"]
+          for s in range(0, storePerVector):
             localWriteCVTCode = Module()
             nrpvIdx = 0
             nrcvIdx = 0
@@ -6755,22 +6755,21 @@ class KernelWriterAssembly(KernelWriter):
             #print("nrpIdx:{}/{} nrcIdx:{}/{} nrpvIdx:{} nrcvIdx:{}".format(nrpIdx,tP["nrp"],nrcIdx,tP["nrc"],nrpvIdx,nrcvIdx))
             (offset, dsInstIdx, comment) = self.calculateLdsWriteOffset(nrpIdx, nrcIdx, nrpvIdx, nrcvIdx, kernel, tP)
             dsInstIdx = dsInstIdx if (dsStoreWidth < 8) else (dsInstIdx * 2)
-            glInstIdx = int(dsInstIdx / (bufferLoadWidth / dsStoreWidth))
+            glInstIdx = dsInstIdx * (loadPerVector // storePerVector)
 
             localWriteCode.addComment1("LocalWrite nrpIdx %d nrcIdx %d nrpvIdx %d nrcvIdx %d dsInstIdx %d" % (nrpIdx, nrcIdx, nrpvIdx, nrcvIdx, dsInstIdx))
 
             # Need refactor, the pattern < glvw in fp8 is not the same as the original.
             # Thus the offset calculation here does not match global read.
-            g2lIdx = int(dsInstIdx * dsStoreWidth * tP["bpeGR"] / tP["bpeDS"])
+            g2lIdx = int(glInstIdx * blockWidth)
 
-            mod = 1 / (dsStoreWidth * tP["bpeGR"] / tP["bpeDS"])
+            mod = 1 / blockWidth
             isHigh16Bits = (mod > 1) and ((dsInstIdx % mod) // (mod // 2)) # 2,3
             isCvtHighBits = (tP["bpeDS"] == 2) and kernel["ProblemType"]["DataType%s"%tc].isFloat8() and ((g2lIdx % 2) == 1)
 
             if self.states.archCaps["HasEccHalf"]:
               numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc == 'B' else self.states.m.numVgprG2L
-              eccBpe = max(tP["bpeGR"], tP["bpeDS"])
-              eccOffset = _getEccOffset(bufferLoadWidth, bpr=self.states.bpr, bpe=eccBpe, glvw=tP["glvw"], idx=glInstIdx, numVgprG2L=numVgprG2L)
+              eccOffset = _getEccOffset(blockWidth, idx=glInstIdx, numVgprG2L=numVgprG2L)
             else:
               eccOffset = 0
 
@@ -6964,7 +6963,7 @@ class KernelWriterAssembly(KernelWriter):
                       self.vgprPool.checkIn(vgprTmp)
                 elif bufferLoadWidth == 0.5:
                   vgprTmp = self.vgprPool.checkOutAligned(2, 2)
-                  src_sel = SelectBit.WORD_1 if isCvtHighBits else SelectBit.WORD_0
+                  src_sel = SelectBit.WORD_1 if isHigh16Bits else SelectBit.WORD_0
                   modNum = max(1, int(bufferLoadWidth / dsStoreWidth))
                   if (not isHigh16Bits) and (g2lIdx % modNum == 0):
                     localWriteCVTCode.add(VCvtPkFP8toF32(dst=vgpr(vgprTmp, 2), src=vgpr(destVgprPrefix + "+%u"%(g2lIdx)), sdwa=SDWAModifiers(src0_sel=src_sel), comment="convert to F32"))
@@ -10774,11 +10773,10 @@ class KernelWriterAssembly(KernelWriter):
     self.vgprPool.checkIn(tmp.idx)
     return module
 
-def _getEccOffset(totalWidth, bpr, bpe, glvw, idx, numVgprG2L):
+def _getEccOffset(totalWidth, idx, numVgprG2L):
   if totalWidth < 1: # Need extra offset if global read < 1
-    modVal = int(bpr / (bpe * glvw))
-    left = idx % modVal
-    return numVgprG2L * left
+    modVal = int(1 / totalWidth)
+    return (idx % modVal) * numVgprG2L
   else:
     return 0
 
