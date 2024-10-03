@@ -758,8 +758,7 @@ namespace Tensile
         m_boundIndices    = boundIndices;
         m_beta            = beta;
         m_workspaceSize   = workspaceSize;
-        m_betaRestriction = toScalarValueEnum(
-            m_beta); // Set enum using beta to potentially allow for faster solutions
+        m_betaRestriction = toScalarValueEnum(m_beta); // Set enum using beta to potentially allow for faster solutions
         consistencyCheck();
         normalize();
     }
@@ -792,6 +791,7 @@ namespace Tensile
         for(int i = 0; i < m_freeIndices.size(); i++)
         {
             size_t mySize = dTensor.sizes()[m_freeIndices[i].d];
+
             if(m_freeIndices[i].isA)
             {
                 m_freeIndicesA.push_back(m_freeIndices[i]);
