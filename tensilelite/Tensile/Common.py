@@ -1371,7 +1371,9 @@ defaultProblemType = {
     # AmaxD
     "OutputAmaxD":              False,
     # For kernels putting arguments in workspaces instead of kernel arguments, they can choose to support user arguments input instead.
-    "SupportUserArgs":          True
+    "SupportUserArgs":          True,
+    # activation and multiplicatioin, dim M of tensor D will be half, in dim M, value D = act(value[i]) * value(i+m/2)
+    "ActAndMul":                False
     }
 
 defaultProblemSizes = [{"Range": [ [2880], 0, 0 ]}]

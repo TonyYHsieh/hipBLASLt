@@ -84,6 +84,7 @@ namespace TensileLite
             bool        m_useE;
             bool        m_useGradient = false;
             bool        m_outputAmaxD;
+            bool        m_actAndMul;
 
             int                              m_sparse;
             KernelLanguage                   m_kernelLanguage;

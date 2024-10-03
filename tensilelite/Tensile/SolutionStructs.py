@@ -551,6 +551,7 @@ class ProblemType(Mapping):
     if self["UseScaleAlphaVec"]: name += "_SAV"
 
     if self["SupportUserArgs"]: name += "_UserArgs"
+    if self["ActAndMul"]: name += "_AAM"
 
     return name
 

@@ -353,6 +353,7 @@ namespace TensileLite
                 ("rotating-buffer-size",      po::value<int32_t>()->default_value(0), "Size of rotating buffer in the unit of MB.")
                 ("rotating-buffer-mode",      po::value<int32_t>()->default_value(0), "Rotating mode.")
                 ("output-amaxD",              po::value<bool>()->default_value(false), "Output AmaxD.")
+                ("act-and-mul",               po::value<bool>()->default_value(false), "Activation and multiple.")
                 ;
             // clang-format on
 
