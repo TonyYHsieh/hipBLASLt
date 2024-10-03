@@ -603,19 +603,16 @@ omp_set_num_threads(MAX_OMP_THREADS);
         {
             Accumulator* ws                   = nullptr;
             size_t       validationStrideGemm = 1;
-            if(problem.useGradient() && problem.useBias()
-               && (problem.biasSrc() == ContractionProblemGemm::D))
+
+            if(problem.useGradient() && problem.useBias() && (problem.biasSrc() == ContractionProblemGemm::D))
             {
                 validationStrideGemm = 1;
-                ws                   = (Accumulator*)malloc(problem.d().totalAllocatedElements()
-                                          * sizeof(Accumulator));
+                ws                   = (Accumulator*)malloc(problem.d().totalAllocatedElements() * sizeof(Accumulator));
             }
             else
             {
-                if(elementsToValidate > 0
-                   && elementsToValidate < problem.d().totalLogicalElements())
-                    validationStrideGemm
-                        = NextPrime(problem.d().totalAllocatedElements() / elementsToValidate);
+                if(elementsToValidate > 0 && elementsToValidate < problem.d().totalLogicalElements())
+                    validationStrideGemm = NextPrime(problem.d().totalAllocatedElements() / elementsToValidate);
             }
 
             // Convert void* to pointers
@@ -664,8 +661,7 @@ omp_set_num_threads(MAX_OMP_THREADS);
 
             auto boundCount = CoordCount(boundSize.begin() + 1, boundSize.end());
 
-            if(std::get<typename Inputs::AlphaType>(inputs.alpha)
-               != static_cast<typename Inputs::AlphaType>(0))
+            if(std::get<typename Inputs::AlphaType>(inputs.alpha) != static_cast<typename Inputs::AlphaType>(0))
             {
                 if(inputs.a == nullptr || inputs.b == nullptr)
                 {
@@ -683,8 +679,7 @@ omp_set_num_threads(MAX_OMP_THREADS);
 
             Accumulator    amaxD(0);
             Accumulator    negOne(-1);
-            constexpr bool notCmplxAmaxD = !std::is_same<Accumulator, std::complex<double>>()
-                                           && !std::is_same<Accumulator, std::complex<float>>();
+            constexpr bool notCmplxAmaxD = !std::is_same<Accumulator, std::complex<double>>() && !std::is_same<Accumulator, std::complex<float>>();
 
             // gemm
 omp_set_num_threads(MAX_OMP_THREADS);
@@ -696,8 +691,8 @@ omp_set_num_threads(MAX_OMP_THREADS);
                 std::vector<int64_t> cCoord(c.dimensions());
                 std::vector<int64_t> dCoord(d.dimensions());
                 std::vector<int64_t> biasCoord(bias.dimensions());
-                CoordNumbered(
-                    dNum, dCoord.begin(), dCoord.end(), d.sizes().begin(), d.sizes().end());
+
+                CoordNumbered(dNum, dCoord.begin(), dCoord.end(), d.sizes().begin(), d.sizes().end());
 
                 for(size_t i = 0; i < problem.batchIndices().size(); i++)
                 {
@@ -727,17 +722,12 @@ omp_set_num_threads(MAX_OMP_THREADS);
                 Accumulator value(0);
 
                 // Check short-circuit for alpha = 0
-                if(std::get<typename Inputs::AlphaType>(inputs.alpha)
-                   != static_cast<typename Inputs::AlphaType>(0))
+                if(std::get<typename Inputs::AlphaType>(inputs.alpha) != static_cast<typename Inputs::AlphaType>(0))
                 {
                     for(size_t boundNum = 0; boundNum < boundCount; boundNum++)
                     {
                         std::vector<int64_t> bound(problem.boundIndices().size());
-                        CoordNumbered(boundNum,
-                                      bound.begin() + 1,
-                                      bound.end(),
-                                      boundSize.begin() + 1,
-                                      boundSize.end());
+                        CoordNumbered(boundNum, bound.begin() + 1, bound.end(), boundSize.begin() + 1, boundSize.end());
 
                         for(int i = 1; i < bound.size(); i++)
                         {
@@ -745,11 +735,9 @@ omp_set_num_threads(MAX_OMP_THREADS);
                             bCoord[boundIndices[i].b] = bound[i];
 
                             if(problem.boundIndices()[i].aMirror)
-                                aCoord[boundIndices[i].a]
-                                    = boundSize[i] - aCoord[boundIndices[i].a] - 1;
+                                aCoord[boundIndices[i].a] = boundSize[i] - aCoord[boundIndices[i].a] - 1;
                             if(problem.boundIndices()[i].bMirror)
-                                bCoord[boundIndices[i].b]
-                                    = boundSize[i] - bCoord[boundIndices[i].b] - 1;
+                                bCoord[boundIndices[i].b] = boundSize[i] - bCoord[boundIndices[i].b] - 1;
                         }
 
                         size_t aIndex = a.index(aCoord);
@@ -761,32 +749,24 @@ omp_set_num_threads(MAX_OMP_THREADS);
                         // innermost bound calculation:
                         for(size_t i = 0; i < boundSize[0]; i++)
                         {
-                            size_t aI
-                                = problem.boundIndices()[0].aMirror ? (boundSize[0] - i - 1) : i;
-                            size_t bI
-                                = problem.boundIndices()[0].bMirror ? (boundSize[0] - i - 1) : i;
+                            size_t aI = problem.boundIndices()[0].aMirror ? (boundSize[0] - i - 1) : i;
+                            size_t bI = problem.boundIndices()[0].bMirror ? (boundSize[0] - i - 1) : i;
 
                             typename Inputs::AType aVal(0);
                             typename Inputs::BType bVal(0);
-                            aVal = Transform<typename Inputs::AType>::Input(
-                                aPtr[aIndex + (aI * aStride)], aConjugate);
-                            bVal = Transform<typename Inputs::BType>::Input(
-                                bPtr[bIndex + (bI * bStride)], bConjugate);
+                            aVal = Transform<typename Inputs::AType>::Input(aPtr[aIndex + (aI * aStride)], aConjugate);
+                            bVal = Transform<typename Inputs::BType>::Input(bPtr[bIndex + (bI * bStride)], bConjugate);
 
-                            if constexpr(sizeof(typename Inputs::AType)
-                                             > sizeof(typename Inputs::ComputeInputType)
-                                         && sizeof(typename Inputs::BType)
-                                                > sizeof(typename Inputs::ComputeInputType))
+                            if constexpr(sizeof(typename Inputs::AType) > sizeof(typename Inputs::ComputeInputType)
+                                      && sizeof(typename Inputs::BType) > sizeof(typename Inputs::ComputeInputType))
                             {
-                                if(std::is_same<Float8BFloat8,
-                                                typename Inputs::ComputeInputType>::value)
+                                if(std::is_same<Float8BFloat8, typename Inputs::ComputeInputType>::value)
                                 {
                                     auto aValCast = static_cast<Tensile::Float8>(aVal);
                                     auto bValCast = static_cast<Tensile::BFloat8>(bVal);
                                     value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
                                 }
-                                else if(std::is_same<BFloat8Float8,
-                                                     typename Inputs::ComputeInputType>::value)
+                                else if(std::is_same<BFloat8Float8, typename Inputs::ComputeInputType>::value)
                                 {
                                     auto aValCast = static_cast<Tensile::BFloat8>(aVal);
                                     auto bValCast = static_cast<Tensile::Float8>(bVal);
@@ -797,35 +777,28 @@ omp_set_num_threads(MAX_OMP_THREADS);
                                     typename Inputs::ComputeInputType aValCast, bValCast;
                                     if(problem.useScaleAB() == "Scalar")
                                     {
-                                        Accumulator scaleA = GetValue<Accumulator>(
-                                            problem.alphaType(), inputs.scaleA, 0, aConjugate);
-                                        auto tmp = multiply<Accumulator>(aVal, scaleA);
-                                        aValCast
-                                            = static_cast<typename Inputs::ComputeInputType>(tmp);
-                                        Accumulator scaleB = GetValue<Accumulator>(
-                                            problem.alphaType(), inputs.scaleB, 0, aConjugate);
-                                        tmp = multiply<Accumulator>(bVal, scaleB);
-                                        bValCast
-                                            = static_cast<typename Inputs::ComputeInputType>(tmp);
+                                        Accumulator scaleA   = GetValue<Accumulator>(problem.alphaType(), inputs.scaleA, 0, aConjugate);
+                                        auto        tmp      = multiply<Accumulator>(aVal, scaleA);
+                                                    aValCast = static_cast<typename Inputs::ComputeInputType>(tmp);
+
+                                        Accumulator scaleB   = GetValue<Accumulator>( problem.alphaType(), inputs.scaleB, 0, aConjugate);
+                                                    tmp      = multiply<Accumulator>(bVal, scaleB);
+                                                    bValCast = static_cast<typename Inputs::ComputeInputType>(tmp);
                                     }
                                     else
                                     {
-                                        aValCast
-                                            = static_cast<typename Inputs::ComputeInputType>(aVal);
-                                        bValCast
-                                            = static_cast<typename Inputs::ComputeInputType>(bVal);
+                                        aValCast = static_cast<typename Inputs::ComputeInputType>(aVal);
+                                        bValCast = static_cast<typename Inputs::ComputeInputType>(bVal);
                                     }
                                     value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
                                 }
                             }
-                            else if constexpr(sizeof(typename Inputs::AType)
-                                              > sizeof(typename Inputs::ComputeInputType))
+                            else if constexpr(sizeof(typename Inputs::AType) > sizeof(typename Inputs::ComputeInputType))
                             {
                                 typename Inputs::ComputeInputType aValCast;
                                 if(problem.useScaleAB() == "Scalar")
                                 {
-                                    Accumulator scaleA = GetValue<Accumulator>(
-                                        problem.alphaType(), inputs.scaleA, 0, aConjugate);
+                                    Accumulator scaleA = GetValue<Accumulator>(problem.alphaType(), inputs.scaleA, 0, aConjugate);
                                     auto tmp = multiply<Accumulator>(aVal, scaleA);
                                     aValCast = static_cast<typename Inputs::ComputeInputType>(tmp);
                                 }
@@ -835,14 +808,12 @@ omp_set_num_threads(MAX_OMP_THREADS);
                                 }
                                 value += multiply<Accumulator, MathOpAccum>(aValCast, bVal);
                             }
-                            else if constexpr(sizeof(typename Inputs::BType)
-                                              > sizeof(typename Inputs::ComputeInputType))
+                            else if constexpr(sizeof(typename Inputs::BType) > sizeof(typename Inputs::ComputeInputType))
                             {
                                 typename Inputs::ComputeInputType bValCast;
                                 if(problem.useScaleAB() == "Scalar")
                                 {
-                                    Accumulator scaleB = GetValue<Accumulator>(
-                                        problem.alphaType(), inputs.scaleB, 0, aConjugate);
+                                    Accumulator scaleB = GetValue<Accumulator>(problem.alphaType(), inputs.scaleB, 0, aConjugate);
                                     auto tmp = multiply<Accumulator>(bVal, scaleB);
                                     bValCast = static_cast<typename Inputs::ComputeInputType>(tmp);
                                 }
@@ -870,32 +841,22 @@ omp_set_num_threads(MAX_OMP_THREADS);
 
                 if(problem.useScaleAB() == "Scalar")
                 {
-                    Accumulator scaleA
-                        = GetValue<Accumulator>(problem.alphaType(), inputs.scaleA, 0, aConjugate);
-                    Accumulator scaleB
-                        = GetValue<Accumulator>(problem.alphaType(), inputs.scaleB, 0, aConjugate);
-                    if constexpr(sizeof(typename Inputs::AType)
-                                 <= sizeof(typename Inputs::ComputeInputType))
+                    Accumulator scaleA = GetValue<Accumulator>(problem.alphaType(), inputs.scaleA, 0, aConjugate);
+                    Accumulator scaleB = GetValue<Accumulator>(problem.alphaType(), inputs.scaleB, 0, aConjugate);
+                    if constexpr(sizeof(typename Inputs::AType) <= sizeof(typename Inputs::ComputeInputType))
                         alpha *= scaleA;
-
-                    if constexpr(sizeof(typename Inputs::BType)
-                                 <= sizeof(typename Inputs::ComputeInputType))
+                    if constexpr(sizeof(typename Inputs::BType) <= sizeof(typename Inputs::ComputeInputType))
                         alpha *= scaleB;
                 }
                 else if(problem.useScaleAB() == "Vector")
                 {
                     auto posB = int(int(dNum / problem.d().sizes()[0]) % problem.d().sizes()[1]);
                     auto posA = int(dNum % problem.d().sizes()[0]);
-                    Accumulator scaleA = GetValue<Accumulator>(
-                        problem.alphaType(), inputs.scaleA, posA, aConjugate);
-                    Accumulator scaleB = GetValue<Accumulator>(
-                        problem.alphaType(), inputs.scaleB, posB, aConjugate);
-                    if constexpr(sizeof(typename Inputs::AType)
-                                 <= sizeof(typename Inputs::ComputeInputType))
+                    Accumulator scaleA = GetValue<Accumulator>(problem.alphaType(), inputs.scaleA, posA, aConjugate);
+                    Accumulator scaleB = GetValue<Accumulator>(problem.alphaType(), inputs.scaleB, posB, aConjugate);
+                    if constexpr(sizeof(typename Inputs::AType) <= sizeof(typename Inputs::ComputeInputType))
                         alpha *= scaleA;
-
-                    if constexpr(sizeof(typename Inputs::BType)
-                                 <= sizeof(typename Inputs::ComputeInputType))
+                    if constexpr(sizeof(typename Inputs::BType) <= sizeof(typename Inputs::ComputeInputType))
                         alpha *= scaleB;
                 }
 
@@ -908,8 +869,7 @@ omp_set_num_threads(MAX_OMP_THREADS);
                         pos = int(int(dNum / problem.d().sizes()[0]) % problem.d().sizes()[1]);
                     else
                         pos = int(dNum % problem.d().sizes()[0]);
-                    Accumulator scaleAlphaVec = GetValue<Accumulator>(
-                        problem.alphaType(), inputs.scaleAlphaVec, pos, aConjugate);
+                    Accumulator scaleAlphaVec = GetValue<Accumulator>(problem.alphaType(), inputs.scaleAlphaVec, pos, aConjugate);
                     resultD *= scaleAlphaVec;
                 }
 
@@ -918,8 +878,7 @@ omp_set_num_threads(MAX_OMP_THREADS);
                     Accumulator cValue = multiply<Accumulator>(beta, cPtr[cIndex]);
                     if(problem.useScaleCD())
                     {
-                        Accumulator scaleC = GetValue<Accumulator>(
-                            problem.betaType(), inputs.scaleC, 0, aConjugate);
+                        Accumulator scaleC = GetValue<Accumulator>(problem.betaType(), inputs.scaleC, 0, aConjugate);
                         cValue *= scaleC;
                     }
 
@@ -932,43 +891,43 @@ omp_set_num_threads(MAX_OMP_THREADS);
                     auto biasIndex = problem.bias().index(biasCoord);
                     int  pos       = 0;
                     if(problem.getParams().factorDim())
-                        pos = int(int(dNum / problem.d().sizes()[0]) % problem.d().sizes()[1])
-                              + biasIndex;
+                        pos = int(int(dNum / problem.d().sizes()[0]) % problem.d().sizes()[1]) + biasIndex;
                     else
                         pos = int(dNum % problem.d().sizes()[0]) + biasIndex;
-                    Accumulator bias = GetValue<Accumulator>(
-                        problem.bias().dataType(), inputs.bias, pos, aConjugate);
+                    Accumulator bias = GetValue<Accumulator>(problem.bias().dataType(), inputs.bias, pos, aConjugate);
                     resultD += bias;
                 }
+
                 // E
                 if(problem.useE() && !problem.useGradient())
                 {
-                    auto eIndex
-                        = problem.tensors()[ContractionProblemGemm::TENSOR::E].index(dCoord);
+                    auto eIndex = problem.tensors()[ContractionProblemGemm::TENSOR::E].index(dCoord);
                     SetValue<Accumulator>(
                         problem.tensors()[ContractionProblemGemm::TENSOR::E].dataType(),
                         resultD,
                         inputs.e,
                         eIndex);
                 }
+
                 // Activation adds here
                 std::vector<Accumulator> actArgs;
                 for(int i = 0; i < inputs.activationArgs.size(); i++)
                     actArgs.push_back(constVariantCast<Accumulator>(inputs.activationArgs[i]));
+
                 if(problem.useGradient() && problem.activationType() != ActivationType::None
                    && problem.getParams().activationEnum() != ActivationType::None)
                 {
                     Accumulator dataE = static_cast<Accumulator>(0);
                     if(problem.useE())
                     {
-                        auto eIndex
-                            = problem.tensors()[ContractionProblemGemm::TENSOR::E].index(dCoord);
+                        auto eIndex = problem.tensors()[ContractionProblemGemm::TENSOR::E].index(dCoord);
                         dataE = GetValue<Accumulator>(
                             problem.tensors()[ContractionProblemGemm::TENSOR::E].dataType(),
                             inputs.e,
                             eIndex,
                             aConjugate);
                     }
+
                     dataE = Activation(problem.activationType(),
                                        dataE,
                                        problem.getParams().activationEnum(),
@@ -999,15 +958,15 @@ omp_set_num_threads(MAX_OMP_THREADS);
 
                 if(problem.useScaleCD())
                 {
-                    Accumulator scaleD
-                        = GetValue<Accumulator>(problem.betaType(), inputs.scaleD, 0, aConjugate);
+                    Accumulator scaleD = GetValue<Accumulator>(problem.betaType(), inputs.scaleD, 0, aConjugate);
                     resultD *= scaleD;
                 }
-                if(problem.useBias() && problem.useGradient()
-                   && (problem.biasSrc() == ContractionProblemGemm::D))
+
+                if(problem.useBias() && problem.useGradient() && (problem.biasSrc() == ContractionProblemGemm::D))
                 {
                     ws[dIndex] = resultD;
                 }
+
                 dPtr[dIndex] = SaturateCast<typename Inputs::DType>(resultD);
             }
 
@@ -1025,8 +984,7 @@ omp_set_num_threads(MAX_OMP_THREADS);
                 auto& biasTensor = problem.tensor(ContractionProblemGemm::TENSOR::BIAS);
                 if(problem.biasSrc() == ContractionProblemGemm::D)
                 {
-                    auto msg = ReductionCPU<Accumulator, Accumulator>(
-                        biasTensor, d, ws, inputs, elementsToValidate, 1);
+                    auto msg = ReductionCPU<Accumulator, Accumulator>(biasTensor, d, ws, inputs, elementsToValidate, 1);
                     if(!msg.empty())
                     {
                         free(ws);
@@ -1036,8 +994,7 @@ omp_set_num_threads(MAX_OMP_THREADS);
                 else if(problem.biasSrc() == ContractionProblemGemm::A)
                 {
                     auto reducIdx = problem.transA() ? 0 : 1;
-                    auto msg      = ReductionCPU<typename Inputs::AType, Accumulator>(
-                        biasTensor, a, inputs.a, inputs, elementsToValidate, reducIdx);
+                    auto msg      = ReductionCPU<typename Inputs::AType, Accumulator>(biasTensor, a, inputs.a, inputs, elementsToValidate, reducIdx);
                     if(!msg.empty())
                     {
                         std::runtime_error(msg.c_str());
@@ -1046,8 +1003,7 @@ omp_set_num_threads(MAX_OMP_THREADS);
                 else if(problem.biasSrc() == ContractionProblemGemm::B)
                 {
                     auto reducIdx = problem.transB() ? 1 : 0;
-                    auto msg      = ReductionCPU<typename Inputs::BType, Accumulator>(
-                        biasTensor, b, inputs.b, inputs, elementsToValidate, reducIdx);
+                    auto msg      = ReductionCPU<typename Inputs::BType, Accumulator>(biasTensor, b, inputs.b, inputs, elementsToValidate, reducIdx);
                     if(!msg.empty())
                     {
                         std::runtime_error(msg.c_str());
@@ -1055,8 +1011,7 @@ omp_set_num_threads(MAX_OMP_THREADS);
                 }
                 else
                 {
-                    std::string msg = "Unsupported bias reduction source "
-                                      + std::to_string(problem.biasSrc()) + ".";
+                    std::string msg = "Unsupported bias reduction source " + std::to_string(problem.biasSrc()) + ".";
                     throw std::runtime_error(msg.c_str());
                 }
                 free(ws);

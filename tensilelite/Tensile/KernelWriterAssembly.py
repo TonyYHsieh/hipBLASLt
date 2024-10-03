@@ -11307,18 +11307,17 @@ class KernelWriterAssembly(KernelWriter):
   ########################################
   def initActivationLoop(self, kernel, beta, edge):
     # Create a suffix and check if the string exists
-    activationLabelSuffix = self.labels.getNameInc( \
-      "%s%s"%("_Beta" if beta else "", "_Edge" if edge else ""))
+    activationLabelSuffix = self.labels.getNameInc("%s%s"%("_Beta" if beta else "", "_Edge" if edge else ""))
     activationCDataType = kernel["ProblemType"]["ActivationComputeDataType"]
     activationType = kernel["ProblemType"]["ActivationType"]
     activationEndLabel = Label("Activation_End%s"%activationLabelSuffix, "")
     activationLabelModules = []
     activationEnumStrList = []
+
     if kernel["ActivationFuncCall"]:
       activationLabelModules.append("")
       activationEnumStrList.append("none")
-    elif ((kernel["GlobalSplitU"] == 1 or (kernel["GlobalSplitUAlgorithm"] == 'MultipleBufferSingleKernel')) and kernel["ActivationFused"]) and \
-      (activationType != 'none'):
+    elif ((kernel["GlobalSplitU"] == 1 or (kernel["GlobalSplitUAlgorithm"] == 'MultipleBufferSingleKernel')) and kernel["ActivationFused"]) and (activationType != 'none'):
       if activationType in ['all', 'hipblaslt_all']:
         exportType = ActivationType.Export.GRADONLY if kernel["ProblemType"]["Gradient"] else ActivationType.Export.NORMAL
         supportedBy = ActivationType.SupportedBy.ALL if activationType == 'all' else ActivationType.SupportedBy.HIPBLASLT
