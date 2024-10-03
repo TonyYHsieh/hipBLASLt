@@ -68,7 +68,7 @@ class ProblemType:
                  'useBeta', 'useBias', 'biasSrcWhiteList', 'useE', 'useScaleAB', 'useScaleCD', 'useScaleAlphaVec', 'biasDataTypeWhiteList',
                  'highPrecisionAccumulate', 'useInitialStridesAB', 'useInitialStridesCD', 'stridedBatched', 'groupedGemm',
                  'useGradient', 'activationType', 'activationArgLength', 'activationComputeDataType', 'activationNoGuard',
-                 'sparse', 'f32XdlMathOp', 'supportDeviceUserArguments', 'outputAmaxD']
+                 'sparse', 'f32XdlMathOp', 'supportDeviceUserArguments', 'outputAmaxD', 'actAndMul']
     @classmethod
     def FromOriginalState(cls, d):
         indices = [None]*d['TotalIndices']
@@ -257,6 +257,11 @@ class ProblemType:
         rv.supportDeviceUserArguments = False
         if 'SupportUserArgs' in d:
             rv.supportDeviceUserArguments = d['SupportUserArgs']
+
+        rv.actAndMul = False
+        if 'ActAndMul' in d:
+            rv.actAndMul = d['ActAndMul']
+
         return rv
 
     def __init__(self, freeIndices=None, batchIndices=None, boundIndices=None, aDims=None, bDims=None, cDims=None, dDims=None):
@@ -374,6 +379,7 @@ class ProblemType:
             predicates.append(ProblemPredicate("Sparse", value=self.sparse))
             predicates.append(ProblemPredicate("F32XdlMathOp", value=self.f32XdlMathOp))
             predicates.append(ProblemPredicate("SupportDeviceUserArguments", value=self.supportDeviceUserArguments))
+            predicates.append(ProblemPredicate("ActAndMul", value=self.actAndMul))
 
         return predicates
 
