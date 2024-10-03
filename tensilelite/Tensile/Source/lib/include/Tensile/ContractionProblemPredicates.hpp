@@ -2654,6 +2654,42 @@ namespace TensileLite
                                         0);
                 }
             };
+
+            struct ActAndMulCheck : public Predicate_CRTP<ActAndMulCheck, ContractionProblemGemm>
+            {
+                enum
+                {
+                    HasIndex = false,
+                    HasValue = true
+                };
+                bool value;
+
+                ActAndMulCheck() = default;
+                ActAndMulCheck(bool value)
+                    : value(value)
+                {
+                }
+
+                static std::string Type()
+                {
+                    return "ActAndMul";
+                }
+
+                virtual bool operator()(ContractionProblemGemm const& problem) const override
+                {
+                    return problem.actAndMul() == value;
+                }
+
+                virtual bool debugEval(ContractionProblemGemm const& problem,
+                                       std::ostream&                 stream) const override
+                {
+                    bool rv = (*this)(problem);
+
+                    stream << *this << ": prob: " << problem.actAndMul()
+                           << ", Is sol support: " << value << std::endl;
+                    return rv;
+                }
+            };
         } // namespace Contraction
 
         /**

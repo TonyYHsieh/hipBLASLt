@@ -137,7 +137,9 @@ namespace TensileLite
                                         lhs.outputAmaxD(),
                                         rhs.outputAmaxD(),
                                         lhs.f32XdlMathOp(),
-                                        rhs.f32XdlMathOp());
+                                        rhs.f32XdlMathOp(),
+                                        lhs.actAndMul(),
+                                        rhs.actAndMul());
         }
     };
 } // namespace TensileLite
@@ -173,7 +175,8 @@ namespace std
                                          problem.useScaleCD(),
                                          problem.useScaleAlphaVec(),
                                          problem.outputAmaxD(),
-                                         problem.f32XdlMathOp());
+                                         problem.f32XdlMathOp(),
+                                         problem.actAndMul());
         }
     };
 
@@ -210,7 +213,8 @@ namespace std
                                               problem.useScaleCD(),
                                               problem.useScaleAlphaVec(),
                                               problem.outputAmaxD(),
-                                              problem.f32XdlMathOp());
+                                              problem.f32XdlMathOp(),
+                                              problem.actAndMul());
             }
             return hash;
         }

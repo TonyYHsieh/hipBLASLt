@@ -176,6 +176,8 @@ namespace TensileLite
                 m_useScaleAlphaVec = args["use-scaleAlphaVec"].as<int>();
             if(args.count("max-workspace-size"))
                 m_maxWorkspaceSize = args["max-workspace-size"].as<size_t>();
+            if(args.count("act-and-mul"))
+                m_actAndMul = args["act-and-mul"].as<bool>();
 
             if(args.count("compute-input-type"))
             {
@@ -403,6 +405,7 @@ namespace TensileLite
                             rv.back().setF32XdlMathOp(m_f32XdlMathOp);
                             rv.back().setActivationComputeType(m_activationComputeType);
                             rv.back().setUseDeviceUserArguments(m_useUserArgs);
+                            rv.back().setActAndMul(m_actAndMul);
                         }
                     }
                 }
