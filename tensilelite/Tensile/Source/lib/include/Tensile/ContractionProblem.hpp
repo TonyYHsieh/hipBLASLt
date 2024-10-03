@@ -657,6 +657,11 @@ namespace Tensile
             m_useScaleAlphaVec = useScaleAlphaVec;
         }
 
+        void setActAndMul(bool actAndMul)
+        {
+            m_actAndMul = actAndMul;
+        }
+
         bool useE() const
         {
             return m_useE;
@@ -685,6 +690,11 @@ namespace Tensile
         int useScaleAlphaVec() const
         {
             return m_useScaleAlphaVec;
+        }
+
+        bool actAndMul() const
+        {
+            return m_actAndMul;
         }
 
         void setE(DataType                   type,
@@ -1176,6 +1186,7 @@ namespace Tensile
         ActivationType m_activationType          = ActivationType::None;
         bool           m_activationNoGuard       = false;
         int            m_sparse                  = 0;
+        bool           m_actAndMul               = false;
 
         KernelLanguage    m_kernelLanguage    = KernelLanguage::Any;
         PerformanceMetric m_performanceMetric = PerformanceMetric::DeviceEfficiency;
