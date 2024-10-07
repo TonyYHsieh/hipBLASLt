@@ -458,6 +458,8 @@ namespace Tensile
    * @param beta Representative value of beta. Is only used to possibly
    *             select a more efficient kernel if we know that
    *             `beta == 0` or `beta == 1`.
+   *
+   * @param actAndMul use ActAndMul or not. if used, D will be hald in m Dim
    */
         static ContractionProblemGemm FromIndexSizes(FreeIndices const&         freeIndices,
                                                      BatchIndices const&        batchIndices,
@@ -471,7 +473,8 @@ namespace Tensile
                                                      std::vector<size_t> const& cStrides,
                                                      DataType                   dType,
                                                      std::vector<size_t> const& dStrides,
-                                                     double                     beta);
+                                                     double                     beta,
+                                                     bool                       actAndMul = false);
 
         /**
    * Create a ContractionProblemGemm based on an operation identifier such as
@@ -531,7 +534,8 @@ namespace Tensile
                                BatchIndices const&     batchIndices,
                                BoundIndices const&     boundIndices,
                                double                  beta,
-                               size_t                  workspaceSize = 0);
+                               size_t                  workspaceSize = 0,
+                               bool                    actAndMul = false);
 
         //! Returns size given original index assignment (in range
         //! 0..NumIndicesC+boundSizes)
@@ -655,11 +659,6 @@ namespace Tensile
         void setUseScaleAlphaVec(int useScaleAlphaVec)
         {
             m_useScaleAlphaVec = useScaleAlphaVec;
-        }
-
-        void setActAndMul(bool actAndMul)
-        {
-            m_actAndMul = actAndMul;
         }
 
         bool useE() const

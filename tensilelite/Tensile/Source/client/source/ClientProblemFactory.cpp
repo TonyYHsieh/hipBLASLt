@@ -295,7 +295,8 @@ namespace Tensile
                                 cStrides,
                                 m_tensorTypes[ContractionProblemGemm::TENSOR::D],
                                 dStrides,
-                                m_constantValues[ContractionProblemGemm::CONST::BETA]));
+                                m_constantValues[ContractionProblemGemm::CONST::BETA],
+                                m_actAndMul));
 
                             rv.back().setComputeInputType(m_computeInputType);
                             rv.back().setAlphaRestriction(toScalarValueEnum(
@@ -405,7 +406,6 @@ namespace Tensile
                             rv.back().setF32XdlMathOp(m_f32XdlMathOp);
                             rv.back().setActivationComputeType(m_activationComputeType);
                             rv.back().setUseDeviceUserArguments(m_useUserArgs);
-                            rv.back().setActAndMul(m_actAndMul);
                         }
                     }
                 }
