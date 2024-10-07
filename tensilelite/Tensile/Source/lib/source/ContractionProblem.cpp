@@ -447,7 +447,8 @@ namespace TensileLite
                                                std::vector<size_t> const& cStrides,
                                                DataType                   dType,
                                                std::vector<size_t> const& dStrides,
-                                               double                     beta)
+                                               double                     beta,
+                                               bool                       actAndMul)
     {
         size_t maxA = 0;
         size_t maxB = 0;
@@ -491,7 +492,7 @@ namespace TensileLite
                 bSizes[free.i] = indexSize;
 
             cSizes[free.c] = indexSize;
-            dSizes[free.d] = indexSize;
+            dSizes[free.d] = (actAndMul && free.isA) ? indexSize / 2 : indexSize ;
         }
 
         for(auto const& batch : batchIndices)
@@ -546,7 +547,9 @@ namespace TensileLite
                                       freeIndices,
                                       batchIndices,
                                       boundIndices,
-                                      beta);
+                                      beta,
+                                      0,
+                                      actAndMul);
     }
 
     ContractionProblemGemm ContractionProblemGemm::GetDummy()
@@ -585,12 +588,14 @@ namespace TensileLite
                                                    BatchIndices const&     batchIndices,
                                                    BoundIndices const&     boundIndices,
                                                    double                  beta,
-                                                   size_t                  workspaceSize)
+                                                   size_t                  workspaceSize,
+                                                   bool                    actAndMul)
         : ContractionProblem(ContractionProblemGemm::TENSOR::TENSOR_COUNT)
         , m_freeIndices(freeIndices)
         , m_batchIndices(batchIndices)
         , m_boundIndices(boundIndices)
         , m_beta(beta)
+        , m_actAndMul(actAndMul)
     {
         m_workspaceSize                                          = workspaceSize;
         m_tensors[ContractionProblemGemm::TENSOR::A]             = a;
@@ -991,7 +996,10 @@ namespace TensileLite
             {
                 aUseCount[free.i]++;
                 TENSILE_ASSERT_EXC(free.i < aTensor.dimensions());
-                TENSILE_ASSERT_EXC(aTensor.sizes()[free.i] == dTensor.sizes()[free.d]);
+                if (m_actAndMul)
+                    TENSILE_ASSERT_EXC(aTensor.sizes()[free.i] == (dTensor.sizes()[free.d] * 2)) ;
+                else
+                    TENSILE_ASSERT_EXC(aTensor.sizes()[free.i] == dTensor.sizes()[free.d]);
             }
             else
             {
