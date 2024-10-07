@@ -2680,7 +2680,11 @@ class Solution(collections.abc.Mapping):
       autoLRVW = 0
       if state["LocalReadVectorWidth"] == -1:
         autoLRVW = 1
-        if state["TransposeLDS"]:
+
+        if ((state["PrefetchLocalRead"] >= state["LoopIters"] and state["InnerUnroll"] == 1) or \
+            state["ClusterLocalRead"] or \
+            (state["InnerUnroll"] >= state["LocalReadVectorWidth"] // state["MIInputPerThread"])) \
+           and state["TransposeLDS"]:
           state["LocalReadVectorWidth"] = 16 // state["ProblemType"]["DataType"].numBytes()
         else:
           state["LocalReadVectorWidth"] = state["MIInputPerThread"]
