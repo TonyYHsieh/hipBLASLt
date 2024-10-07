@@ -778,13 +778,20 @@ class ExactList(Problem):
     predStridesC = stridesC is not None and stridesC[1] != -1
     predStridesA = stridesA is not None and stridesA[1] != -1
     predStridesB = stridesB is not None and stridesB[1] != -1
-    return problemSize[:problemType["NumIndicesC"]+1] + \
-           (max(problemSize[0], problemSize[problemType["IndexAssignmentsLD"][0]]) if not predStridesD else stridesD[1], ) + \
-           (max(problemSize[0], problemSize[problemType["IndexAssignmentsLD"][1]]) if not predStridesC else stridesC[1], ) + \
-           (max(problemSize[problemType["IndexAssignmentsLD"][2]],
-                problemSize[problemType["IndexAssignmentsA"][0]]) if not predStridesA else stridesA[1], ) + \
-           (max(problemSize[problemType["IndexAssignmentsLD"][3]],
-                problemSize[problemType["IndexAssignmentsB"][0]]) if not predStridesB else stridesB[1], )
+
+    ldd = max(problemSize[0], problemSize[problemType["IndexAssignmentsLD"][0]])
+    ldc = max(problemSize[0], problemSize[problemType["IndexAssignmentsLD"][1]])
+    lda = max(problemSize[problemType["IndexAssignmentsLD"][2]], problemSize[problemType["IndexAssignmentsA"][0]])
+    ldb = max(problemSize[problemType["IndexAssignmentsLD"][3]], problemSize[problemType["IndexAssignmentsB"][0]])
+
+    ldd = stridesD[1] if predStridesD else ldd
+    ldc = stridesC[1] if predStridesC else ldc
+    lda = stridesA[1] if predStridesA else lda
+    ldb = stridesB[1] if predStridesB else ldb
+
+    ldd = (ldd // 2) if problemType["ActAndMul"] else ldd
+
+    return problemSize[:problemType["NumIndicesC"]+1] + (ldd, ldc, lda, ldb)
 
 
 class ExactDict(Problem):
