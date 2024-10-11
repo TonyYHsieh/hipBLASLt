@@ -2648,7 +2648,7 @@ class Solution(collections.abc.Mapping):
     def calcLdsNumBytes(ldsPadA: int, LdsBlockSizePerPadA: int, ldsPadB: int, LdsBlockSizePerPadB: int) -> int:
       bpeA = state["ProblemType"]["DataTypeA"].numBytes() if state["ConvertAfterDS"] else state["ProblemType"]["DataType"].numBytes()
       bpeB = state["ProblemType"]["DataTypeB"].numBytes() if state["ConvertAfterDS"] else state["ProblemType"]["DataType"].numBytes()
-      ldsAlign = int(64 / state["ProblemType"]["DataType"].numRegisters())
+      ldsAlign = 64
 
       if state["UnrollMajorLDSA"]:
         ldsNumBytesA = (state["_DepthUA"] + ldsPadA) * state["MacroTileA"] * bpeA
