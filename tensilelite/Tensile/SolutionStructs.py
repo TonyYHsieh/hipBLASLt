@@ -2140,7 +2140,7 @@ class Solution(collections.abc.Mapping):
     #   state["BatchSizeEqual"] = 1
 
     isa = tuple(state["ISA"])
-    
+
     if state["StreamK"] != 0:
       state["GlobalSplitU"] = 0 # Cannot enable both Stream-K and GSU
       if state["MIWaveGroup"][0] * state["MIWaveGroup"][1] != 4:
@@ -3434,26 +3434,34 @@ class Solution(collections.abc.Mapping):
 
     ldsNumBytesA, ldsNumBytesAlignedA, ldsNumBytesB, ldsNumBytesAlignedB, ldsNumBytesMetadata, ldsNumBytesAlignedMetadata = calcLdsNumBytes(state["LdsPadA"], state["LdsBlockSizePerPadA"], state["LdsPadB"], state["LdsBlockSizePerPadB"])
 
+    ldsNumBytesAAM        = ldsNumBytesA        if state["ProblemType"]["ActAndMul"] else 0
+    ldsNumBytesAlignedAAM = ldsNumBytesAlignedA if state["ProblemType"]["ActAndMul"] else 0
+
     # todo, can the alignment be a power of 2?
     state["LdsOffsetA"] = 0
+
     if state["PrefetchGlobalRead"]:
-      state["LdsNumElementsAlignedA"] = ldsNumBytesAlignedA
-      state["LdsNumElementsAlignedB"] = ldsNumBytesAlignedB
+      state["LdsNumElementsAlignedA"]        = ldsNumBytesAlignedA
+      state["LdsNumElementsAlignedAAM"]      = ldsNumBytesAlignedAAM
+      state["LdsNumElementsAlignedB"]        = ldsNumBytesAlignedB
       state["LdsNumElementsAlignedMetadata"] = ldsNumBytesAlignedMetadata
-      state["LdsOffsetMetadata"] = state["LdsOffsetA"] + state["LdsNumElementsAlignedA"]
-      state["LdsOffsetB"] = state["LdsOffsetMetadata"] + state["LdsNumElementsAlignedMetadata"]
+      state["LdsOffsetAAM"]                  = state["LdsOffsetA"] + state["LdsNumElementsAlignedA"]
+      state["LdsOffsetMetadata"]             = state["LdsOffsetAAM"] + state["LdsNumElementsAlignedAAM"]
+      state["LdsOffsetB"]                    = state["LdsOffsetMetadata"] + state["LdsNumElementsAlignedMetadata"]
 
       offsetBlk = state["LdsOffsetB"] +  ldsNumBytesAlignedB
       offsetBlk = int(2**(math.ceil(math.log(offsetBlk, 2))))
 
       state["LdsOffsetA_Blk"] = offsetBlk
-      state["LdsOffsetMetadata_Blk"] = state["LdsOffsetA_Blk"] + state["LdsNumElementsAlignedA"]
+      state["LdsOffsetAAM_Blk"] = state["LdsOffsetA_Blk"] + state["LdsNumElementsAlignedA"]
+      state["LdsOffsetMetadata_Blk"] = state["LdsOffsetAAM_Blk"] + state["LdsNumElementsAlignedAAM"]
       state["LdsOffsetB_Blk"] = state["LdsOffsetMetadata_Blk"] + state["LdsNumElementsAlignedMetadata"]
       ldsNumBytesAB = state["LdsOffsetB_Blk"] + ldsNumBytesB
     else:
-      state["LdsOffsetMetadata"] = ldsNumBytesAlignedA
-      state["LdsOffsetB"] = state["LdsOffsetMetadata"] + ldsNumBytesAlignedMetadata
-      ldsNumBytesAB = state["LdsOffsetB"] + ldsNumBytesB
+      state["LdsOffsetAAM"]      = ldsNumBytesAlignedA
+      state["LdsOffsetMetadata"] = state["LdsOffsetAAM"] + ldsNumBytesAlignedAAM
+      state["LdsOffsetB"]        = state["LdsOffsetMetadata"] + ldsNumBytesAlignedMetadata
+      ldsNumBytesAB              = state["LdsOffsetB"] + ldsNumBytesB
 
     # lds buffer size for reduction
     ldsNumBytesReduction = state["LocalSplitU"] * state["MacroTile0"] * state["MacroTile1"] * state["ProblemType"]["ComputeDataType"].numBytes() if state["LocalSplitU"] > 1 else 0
