@@ -1310,17 +1310,17 @@ class KernelWriterAssembly(KernelWriter):
       tmpSgpr2     = tmpSgpr1+1
       WGMXCCSgpr   = tmpSgpr2+1
       CU_CountSgpr = WGMXCCSgpr+1
- 
+
       module.add(SLShiftRightB32(dst=sgpr(WGMXCCSgpr), shiftHex=hex(16), src=sgpr("WGM"), comment="Get WGMXCC"))
       module.add(SFf1B32(dst=sgpr(WGMXCCSgpr), src=sgpr(WGMXCCSgpr), comment="Get log(WGMXCC)"))
       module.add(SLShiftRightB32(dst=sgpr(CU_CountSgpr), shiftHex=hex(22), src=sgpr("WGM"), comment="Get CU_Count"))
- 
+
       label_skipWGMXCC = Label(label="skip_WGMXCC", comment="skip WGMXCC if no enough WGs to remap")
- 
+
       module.addComment0("remap WGs if WGMXCC > 1 ( log(WGMXCC) > 0 )")
       module.add(SCmpGtI32(src0=sgpr(WGMXCCSgpr), src1=0))
       module.add(SCBranchSCC0(label_skipWGMXCC.getLabelName()))
- 
+
       module.addComment0("only remap WGs in the range")
       tmpVgpr     = self.vgprPool.checkOut(2)
       tmpVgprRes  = RegisterPoolResource(tmpVgpr, 2)
@@ -1328,11 +1328,11 @@ class KernelWriterAssembly(KernelWriter):
       module.add(SLShiftLeftB32(dst=sgpr(tmpSgpr0), shiftHex=sgpr(WGMXCCSgpr), src=sgpr(tmpSgpr0)))
       module.add(SCmpGeU32(src0=sgpr("WorkGroup0"), src1=sgpr(tmpSgpr0)))
       module.add(SCBranchSCC1(label_skipWGMXCC.getLabelName()))
- 
+
       label_XCCG_nonzero = Label(label="XCCG_nonzero", comment="")
       module.add(SCmpEQU32(src0=sgpr(CU_CountSgpr), src1=0, comment="CU_Count == 0 ?"))
       module.add(SCBranchSCC0(label_XCCG_nonzero.getLabelName()))
- 
+
       # CU_count == 0
       module.add(SLShiftRightB32(dst=sgpr(tmpSgpr0), shiftHex=sgpr(WGMXCCSgpr), src=sgpr("WorkGroup0")))
       module.add(SBfmB32(dst=sgpr(tmpSgpr1), src0=sgpr(WGMXCCSgpr), src1=0))
@@ -1341,7 +1341,7 @@ class KernelWriterAssembly(KernelWriter):
       module.add(SMulI32(dst=sgpr(tmpSgpr1), src0=sgpr(tmpSgpr1), src1=sgpr(tmpSgpr2)))
       module.add(SAddU32(dst=sgpr("WorkGroup0"), src0=sgpr(tmpSgpr0), src1=sgpr(tmpSgpr1)))
       module.add(SBranch(label_skipWGMXCC.getLabelName()))
- 
+
       # CU_count > 0
       module.add(label_XCCG_nonzero)
       module.addComment0("temp0 = (wg//CU_Count)*CU_Count")
@@ -1364,7 +1364,7 @@ class KernelWriterAssembly(KernelWriter):
       module.add(SMulI32(dst=sgpr(tmpSgpr1), src0=sgpr(tmpSgpr1), src1=sgpr(tmpSgpr2)))
       module.addComment0("WorkGroup0 = temp0 + temp1")
       module.add(SAddU32(dst=sgpr("WorkGroup0"), src0=sgpr(tmpSgpr0), src1=sgpr(tmpSgpr1)))
- 
+
       module.add(label_skipWGMXCC)
     return module
 
@@ -1599,7 +1599,7 @@ class KernelWriterAssembly(KernelWriter):
             moduleScaleAB.add(label)
 
       moduleWg = Module("Calculate Workgroup")
-      
+
       # C regs are not used during initialization so mark them as available -
       # we will claim then just before the start of the unroll loop:
       self.vgprPool.add(self.states.a.startVgprValu , \
@@ -1619,7 +1619,7 @@ class KernelWriterAssembly(KernelWriter):
       if kernel["StreamK"] == 0:
         moduleWg.add(self.localReadAddresses(kernel, tPA, tPB, tPM))
         moduleWg.add(self.localWriteAddresses(kernel, tPA, tPB, tPM))
-      
+
       def waitForArgsToLoad():
         if kernel["ProblemType"]["SupportUserArgs"]:
           moduleWg.add(SWaitCnt(lgkmcnt=0, comment="wait for %u/%u bytes of kern args" % \
@@ -2058,7 +2058,7 @@ class KernelWriterAssembly(KernelWriter):
     ########################################
     # Blocked rows or columns
     # Do branch
-    
+
     # Restore WGM
     module.add(SSExtI16toI32(dst=sgpr("WGM"), src=sgpr("WGM"), comment="Restore WGM"))
 
@@ -2531,10 +2531,10 @@ class KernelWriterAssembly(KernelWriter):
     module = Module("graFinalOffsets")
     tc = tP["tensorChar"]
     tmp = self.vgprPool.checkOut(3, "tmp", self.states.preventVgprOverflowDuringNewTile)
-    graIdx = 0
     swapPerpPara = (((tP["isA"] or tP["isB"]) and kernel["DirectToVgpr%s"%tc]) and (not tP["tlu"]) and tP["nrp"] > 1)
 
     if not swapPerpPara:
+      graIdx = 0
       for perp in range(0, tP["nrp"]):
         for sPerp in range(0, tP["nrpv"]):
           for para in range(0, tP["nrc"]):
@@ -2544,6 +2544,7 @@ class KernelWriterAssembly(KernelWriter):
               module.add(singleModule)
     else:
       # swap para and perp
+      graIdx = 0
       for para in range(0, tP["nrc"]):
         for sPara in range(0, int(tP["nrcv"]/tP["nrcvpi"])):
           for perp in range(0, tP["nrp"]):
@@ -2551,6 +2552,25 @@ class KernelWriterAssembly(KernelWriter):
               # single loop
               singleModule, graIdx = self.graFinalOffsetsSingleLoop(kernel, tP, tc, tmp, graIdx, perp, sPerp, para, sPara)
               module.add(singleModule)
+
+    if kernel["ProblemType"]["ActAndMul"] and tP["isA"]:
+      idx0    = kernel["ProblemType"]["Index0"]
+      idxChar = globalParameters["IndexChars"][idx0]
+      size    = self.sizeRef(idx0)
+      stride  = self.strideRef(tc, idx0)
+      module.addComment1("global read addresses: final offsets aam")
+      module.add(SLShiftRightB32(dst=sgpr(tmp), src=size, shiftHex=0x1, comment="(Size%c / 2) * Stride%c * BpeGRA" % (idxChar, idxChar)))
+      module.add(SMulI32(dst=sgpr(tmp), src0=sgpr(tmp), src1=stride, comment="(Size%c / 2) * Stride%c * BpeGRA" % (idxChar, idxChar)))
+      module.add(SMulI32(dst=sgpr(tmp), src0=sgpr(tmp), src1=tP["bpeGR"], comment="(Size%c / 2) * Stride%c * BpeGRA" % (idxChar, idxChar)))
+
+      graIdx = 0
+      for perp in range(0, tP["nrp"] * tP["nrpv"] * tP["nrc"] * (tP["nrcv"]//tP["nrcvpi"])):
+        if graIdx==0 or not kernel["_UseSgprForGRO"]:
+          if kernel["BufferLoad"]:
+            src = "GlobalReadOffsetA+%u" % graIdx
+            dst = "GlobalReadOffsetAAM+%u" % graIdx
+            module.add(VAddU32(dst=vgpr(dst), src0=vgpr(src), src1=sgpr(tmp), comment="Add ActAndMul offset"))
+        graIdx += self.states.rpgo if kernel["BufferLoad"] else self.states.rpga
 
     self.vgprPool.checkIn(tP["gpr"]["lwoT"])
     tP["gpr"]["lwoT"] = None
@@ -2892,7 +2912,7 @@ class KernelWriterAssembly(KernelWriter):
 
         skComponent = Component.StreamK.find(self)
         module.add(skComponent.computeLoadSrd(self, kernel, tc, stmp))
-          
+
         gsuComponent = Component.GSU.find(self)
         module.add(gsuComponent.computeLoadSrd(self, kernel, tP, stmp, tileStart))
 
@@ -3708,13 +3728,17 @@ class KernelWriterAssembly(KernelWriter):
       tmpAddr = self.vgprPool.checkOut(1,"tmp vgpr for lds init C registers")
       module.add(VMovB32(dst=vgpr(tmpAddr), src=self.consts.ldsOOB, comment="set out-of-bound addr"))
 
-    for i in range(0, numCVgpr):
-      copyInst = VMovB32 if self.states.c.numVgprValu else VAccvgprWrite
-      regStr = vgpr("ValuC+%u"%i) if self.states.c.numVgprValu else accvgpr(i)
-      if not kernel["LdsInitCVgprs"]:
-        module.add(copyInst(dst=regStr, src=hex(0), comment="initC"))
-      else:
-        module.add(DSLoadB32(dst=regStr, src=vgpr(tmpAddr), ds=DSModifiers(offset=0), comment="initC"))
+    loop = 2 if kernel["ProblemType"]["ActAndMul"] else 1
+
+    for l in range(loop):
+      for i in range(numCVgpr):
+        copyInst = VMovB32 if self.states.c.numVgprValu else VAccvgprWrite
+        regIdx = l * numCVgpr + i
+        regStr = vgpr("ValuC+%u"%regIdx) if self.states.c.numVgprValu else accvgpr(regIdx)
+        if not kernel["LdsInitCVgprs"]:
+          module.add(copyInst(dst=regStr, src=hex(0), comment="initC"))
+        else:
+          module.add(DSLoadB32(dst=regStr, src=vgpr(tmpAddr), ds=DSModifiers(offset=0), comment="initC"))
 
     if kernel["LdsInitCVgprs"]:
       self.vgprPool.checkIn(tmpAddr)
@@ -3798,7 +3822,7 @@ class KernelWriterAssembly(KernelWriter):
                 comment="Compute actual stagger start for this tile"))
       module.add(SLShiftLeftB32(dst=sgpr("StaggerUIter"), src=sgpr("StaggerUIter"), \
                 shiftHex=sgpr(staggerUStrideShift), comment="shift by StaggerUStride"))
-      
+
       skComponent = Component.StreamK.find(self)
       module.add(skComponent.declareStaggerParms(self, kernel))
 
@@ -4093,7 +4117,7 @@ class KernelWriterAssembly(KernelWriter):
 
       skComponent = Component.StreamK.find(self)
       module.add(skComponent.tailLoopNumIter(self, kernel, loopCounter))
-      
+
       gsuComponent = Component.GSU.find(self)
       module.add(gsuComponent.tailLoopNumIter(self, kernel, loopCounter))
 
@@ -4114,7 +4138,7 @@ class KernelWriterAssembly(KernelWriter):
       with self.allocTmpSgpr(3) as tmpSgprInfo:
         skComponent = Component.StreamK.find(self)
         module.add(skComponent.calculateLoopNumIter(self, kernel, loopCounterName, loopIdx, tmpSgprInfo))
-                
+
         gsuComponent = Component.GSU.find(self)
         module.add(gsuComponent.calculateLoopNumIter(self, kernel, loopCounterName, tmpSgprInfo))
 
@@ -4573,7 +4597,7 @@ class KernelWriterAssembly(KernelWriter):
                       (vbegin, vbegin+vsize))
 
     lastRegTag=None
-    
+
     for i in range(0, self.sgprPool.size()):
       regTag = self.sgprPool.pool[i].tag
       if regTag != lastRegTag:
@@ -8995,7 +9019,7 @@ class KernelWriterAssembly(KernelWriter):
                           edges=None):
     if not self.do["PostLoop"]: return Module("GlobalWriteElements (Empty)")
     module = Module("GlobalWriteElements")
-    
+
     module.addComment2("Global Write Elements")
     if kernel["ProblemType"]["OutputAmaxD"]:
         module.add(VMovB32(dst=vgpr("AmaxOut"), src="0"))
