@@ -67,8 +67,14 @@ class LocalReadVALU(LocalRead):
                 # paramList.append(vgpr("LocalReadAddr%s"%tc))
 
                 for oIdx in range(0, numOffsets):
-                    paramList.append(((rIdx*blockWidth + kernel["SubGroup%u"%tile01] * (vIdx*numOffsets+oIdx)*kernel["VectorWidthA"] \
-                      + tP["localReadOffset"]) * tP["bpe"] + tP["localReadSwapByteOffset"]) // offsetMultiplier)
+                    offset = rIdx * blockWidth
+                    offset = offset + (vIdx * numOffsets + oIdx) * kernel["SubGroup%u"%tile01] * kernel["VectorWidthA"]
+                    offset = offset + tP["localReadOffset"]
+                    offset = offset * tP["bpeDS"]
+                    offset = offset + tP["localReadSwapByteOffset"]
+                    offset = offset // offsetMultiplier
+
+                    paramList.append(offset)
                     # print("Debug: Matrix{}, rIdx offset {}, vIdx offset {}, bpe {}, net offset {}".format( \
                     #     tP["tensorChar"], \
                     #     rIdx * blockWidth, \
