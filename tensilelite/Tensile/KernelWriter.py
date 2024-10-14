@@ -4388,6 +4388,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     tP["localWriteSwapByteOffset"] = 0
     tP["gpr"] = {}
     tP["metadataWriteSwapByteOffset"] = 0
+    tP["ActAndMul"] = False
 
   ##############################################################################
   # Global Read Addresses: Tile Assignment A/B

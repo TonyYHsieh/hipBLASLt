@@ -6442,6 +6442,7 @@ class KernelWriterAssembly(KernelWriter):
 
     def globalReadBody(tP):
       tc = tP["tensorChar"]
+      tcAAM = "AAM" if tP["ActAndMul"] else tc
       self.vgprs.globalReadRegisters[tc] = []
       graIdx = 0
       g2lIdx = 0
@@ -6460,9 +6461,9 @@ class KernelWriterAssembly(KernelWriter):
 
       if g2lBufIdx >= 1:
         # G2L vgpr base string. DirectToVgpr or swapAB case. Need to toggle destination vreg set
-        destVgprPrefix = "G2L%s%u"%(tc, g2lBufIdx + 1)
+        destVgprPrefix = "G2L%s%u"%(tcAAM, g2lBufIdx + 1)
       else:
-        destVgprPrefix = "G2L%s"%(tc)
+        destVgprPrefix = "G2L%s"%(tcAAM)
 
       loopCnt = -1
       for perp in range(0, tP["nrp"]):
@@ -6487,19 +6488,19 @@ class KernelWriterAssembly(KernelWriter):
 
               if kernel["BufferLoad"]:
                 if kernel["_UseSgprForGRO"]:
-                  offsetVgpr= "GlobalReadOffset%s+0"%(tc)
+                  offsetVgpr= "GlobalReadOffset%s+0"%(tcAAM)
                 else:
-                  offsetVgpr= "GlobalReadOffset%s+%u"%(tc, graIdx)
+                  offsetVgpr= "GlobalReadOffset%s+%u"%(tcAAM, graIdx)
 
                 # vgpr for GRO
                 if not kernel["_UseSgprForGRO"]:
                   soffset = "0"
                 # instruction offset with Sgpr for GRO
                 elif kernel["DirectToLds%s"%tc] and kernel["UseInstOffsetForGRO"]:
-                  soffset = sgpr("ScalarGlobalReadOffset%s+%u"%(tc, graIdx))
+                  soffset = sgpr("ScalarGlobalReadOffset%s+%u"%(tcAAM, graIdx))
                 # Sgpr for GRO
                 else:
-                  soffset = "0" if graIdx == 0 else sgpr("ScalarGlobalReadOffset%s+%u"%(tc, graIdx-1))
+                  soffset = "0" if graIdx == 0 else sgpr("ScalarGlobalReadOffset%s+%u"%(tcAAM, graIdx-1))
 
                 unrollMirrorWithSoffset = kernel["ProblemType"]["IndicesSummation"][self.states.unrollIdx] in problemType["MirrorDims%s"%tc] and soffset != "0"
                 # ScalarGlobalReadOffset should be negative value with unroll mirroring.
@@ -6575,7 +6576,7 @@ class KernelWriterAssembly(KernelWriter):
                 loadModule.add( self.chooseGlobalRead(False, \
                           bpl, \
                           destVgpr=destVgpr, \
-                          addr0=vgpr("GlobalReadAddr%s+%u"%(tc,graIdx),2), addr1="", \
+                          addr0=vgpr("GlobalReadAddr%s+%u"%(tcAAM,graIdx),2), addr1="", \
                           soffset=0, offset=0, \
                           glc=isGlc, slc=isSlc, nt=isNT, lds=isLds, \
                           hi16=(kernel["ProblemType"]["DataType"].isHalf() or kernel["ProblemType"]["DataType"].isBFloat16()) and loopCnt%2==1, \
@@ -6609,6 +6610,13 @@ class KernelWriterAssembly(KernelWriter):
 
     if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"] and tP["is_sparse"]:
         globalReadBody(tP["tpsMetadata"])
+
+    if kernel["ProblemType"]["ActAndMul"] and tP["isA"]:
+      tP["ActAndMul"] = True
+      globalReadBody(tP)
+      if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"] and tP["is_sparse"]:
+        globalReadBody(tP["tpsMetadata"])
+      tP["ActAndMul"] = False
 
     if self.db["ConservativeWaitCnt"] & 0x1:
         imod.footer.add(SBarrier(comment="debug"))
