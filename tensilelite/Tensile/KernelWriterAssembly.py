@@ -4886,6 +4886,7 @@ class KernelWriterAssembly(KernelWriter):
   ##############################################################################
   def generateSrcStrForMFMA(self, kernel, tP, innerUnroll, vregSetIdx, vgprPerInput, m, u, iui, idxAB, bk=None):
     tc = tP["tensorChar"]
+    tcAAM = "AAM" if tP["ActAndMul"] else tc
 
     statesAorB = self.states.a if tP["isA"] else self.states.b
     numVgprValuPerBlock = statesAorB.numVgprValuPerBlock
@@ -4909,7 +4910,7 @@ class KernelWriterAssembly(KernelWriter):
     iui_new = (iui//numReadsIterCoalesced)*numReadsIterCoalesced
     iui_new_offset = iui%numReadsIterCoalesced*vgprPerInput
     ab_new = idxAB*vgprPerInput*numReadsIterCoalesced
-    abStr = "Valu%c_X%u_I%u+%u+%u+%u" % (tc, vgprBuffer_new, iui_new, ab_new, vgprBuffer_new_offset, iui_new_offset)
+    abStr = "Valu%s_X%u_I%u+%u+%u+%u" % (tcAAM, vgprBuffer_new, iui_new, ab_new, vgprBuffer_new_offset, iui_new_offset)
     # TODO: implement DTV + pack
     #packDTV = self.packDTVA if tP["isA"] else self.packDTVB
     packDTV = False # tentative
@@ -4918,7 +4919,7 @@ class KernelWriterAssembly(KernelWriter):
       numVgprPerBlock = statesAorB.numVgprG2LAllocated
       numVgprPerBlock //= 2 # DTV case, buffer is doubled. //2 to calculate single size
       ab_new += vregSetIdx * numVgprPerBlock + ( vgprBuffer_new * innerUnroll) * numVgprValuPerBlock
-      abStr  = "G2L%c+%u+%u" % (tc, ab_new, vgprBuffer_new_offset)
+      abStr  = "G2L%c+%u+%u" % (tcAAM, ab_new, vgprBuffer_new_offset)
 
     if bk != None:
       abStr += "+%u"%(bk)
@@ -5255,154 +5256,158 @@ class KernelWriterAssembly(KernelWriter):
     if s_nop != 0:
       imod.add(SNop(waitState=(s_nop - 1), comment=""))
 
+    actAndMulLoop = 2 if kernel["ProblemType"]["ActAndMul"] else 1
     prevAccIdx = -1
-    for iui in range(0, innerUnroll):
-      if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
-        iuiM_new = (iui//self.states.numReadsIterCoalescedMetadata)*self.states.numReadsIterCoalescedMetadata
-        iuiM_new_offset = iui%self.states.numReadsIterCoalescedMetadata*vgprPerInputM
+    for actIdx in range(actAndMulLoop):
+      for iui in range(0, innerUnroll):
+        if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
+          iuiM_new = (iui//self.states.numReadsIterCoalescedMetadata)*self.states.numReadsIterCoalescedMetadata
+          iuiM_new_offset = iui%self.states.numReadsIterCoalescedMetadata*vgprPerInputM
 
-      zgemmVaddSrcCheck = [[], [], []] # to avoid generating redundant v_add
-      outer = 1
-      loopSwap = False
-      # complex case, swap inner loop and outer loop so that idxA comes outer
-      # this is to re-use same tmp vgpr to nagate ai or ar
-      if kernel["ProblemType"]["DataType"].isComplex() and tPB["tile01Idx"]:
-        outer = 0
-        loopSwap = True
-      inner = 1 - outer # inner is the opposite of outer
-      for idxOuter in range(0, kernel["MIWaveTile"][outer]):
-        for idxInner in range(0, kernel["MIWaveTile"][inner]):
-          idx0 = idxInner
-          idx1 = idxOuter
-          if loopSwap:
-            idx0, idx1 = idx1, idx0
-          accIdx   = idx1 * kernel["MIWaveTile"][0] + idx0
-          accStart = accIdx * accs_per_wave
-          accEnd   = accStart + accs_per_wave - 1
+        zgemmVaddSrcCheck = [[], [], []] # to avoid generating redundant v_add
+        outer = 1
+        loopSwap = False
+        # complex case, swap inner loop and outer loop so that idxA comes outer
+        # this is to re-use same tmp vgpr to nagate ai or ar
+        if kernel["ProblemType"]["DataType"].isComplex() and tPB["tile01Idx"]:
+          outer = 0
+          loopSwap = True
+        inner = 1 - outer # inner is the opposite of outer
+        for idxOuter in range(0, kernel["MIWaveTile"][outer]):
+          for idxInner in range(0, kernel["MIWaveTile"][inner]):
+            idx0 = idxInner
+            idx1 = idxOuter
+            if loopSwap:
+              idx0, idx1 = idx1, idx0
+            accIdx   = idx0 + idx1 * kernel["MIWaveTile"][0] + actIdx * kernel["MIWaveTile"][0] * kernel["MIWaveTile"][1]
+            accStart = accIdx * accs_per_wave
+            accEnd   = accStart + accs_per_wave - 1
 
-          idxA     = idx0 if tPB["tile01Idx"] else idx1
-          idxB     = idx1 if tPB["tile01Idx"] else idx0
-          aStr_base = self.generateSrcStrForMFMA(kernel, tPA, innerUnroll, vregSetIdx, vgprPerInputA, m, u, iui, idxA)
-          bStr_base = self.generateSrcStrForMFMA(kernel, tPB, innerUnroll, vregSetIdx, vgprPerInputB, m, u, iui, idxB)
-          aStr     = vgpr(aStr_base, vgprPerInputA)
-          bStr     = vgpr(bStr_base, vgprPerInputB)
-          Str0     = aStr if tPB["tile01Idx"] else bStr
-          Str1     = bStr if tPB["tile01Idx"] else aStr
+            idxA             = idx0 if tPB["tile01Idx"] else idx1
+            idxB             = idx1 if tPB["tile01Idx"] else idx0
+            tPA["ActAndMul"] = True if actIdx else False
+            aStr_base        = self.generateSrcStrForMFMA(kernel, tPA, innerUnroll, vregSetIdx, vgprPerInputA, m, u, iui, idxA)
+            bStr_base        = self.generateSrcStrForMFMA(kernel, tPB, innerUnroll, vregSetIdx, vgprPerInputB, m, u, iui, idxB)
+            tPA["ActAndMul"] = False
+            aStr             = vgpr(aStr_base, vgprPerInputA)
+            bStr             = vgpr(bStr_base, vgprPerInputB)
+            Str0             = aStr if tPB["tile01Idx"] else bStr
+            Str1             = bStr if tPB["tile01Idx"] else aStr
 
-          if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
-            idxM     = idxB if kernel["ProblemType"]["Sparse"] == 2 else idxA
-            m_new    = idxM*self.states.numReadsIterCoalescedMetadata
-            mStr     = "ValuMetadata_X%u_I%u+%u+%u+%u" % (vgprBufferM_new, iuiM_new, m_new, vgprBufferM_new_offset, iuiM_new_offset)
-            mStr     = vgpr(mStr, vgprPerInputM)
+            if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
+              idxM     = idxB if kernel["ProblemType"]["Sparse"] == 2 else idxA
+              m_new    = idxM*self.states.numReadsIterCoalescedMetadata
+              mStr     = "ValuMetadata_X%u_I%u+%u+%u+%u" % (vgprBufferM_new, iuiM_new, m_new, vgprBufferM_new_offset, iuiM_new_offset)
+              mStr     = vgpr(mStr, vgprPerInputM)
 
-          if kernel["ProblemType"]["DataType"].isComplex():
-            # override because complex mul is emulated by 4 mfma insts
-            # TODO: adopt component system
-            miInInstType = miOutInstType #"f32" for SingleComplex, "f64" for DoubleComplex
-            ccA = kernel["ProblemType"]["ComplexConjugateA"]
-            ccB = kernel["ProblemType"]["ComplexConjugateB"]
-            ccVgprs = [None]*3 # three terms that can be negated: [real1, imag0, imag1]
-            ccInsts = [None]*3
-            accImOffset = accVgprImagNumOffset(kernel)
-            accStartSrcImg = accStartSrc+accImOffset
-            accEndSrcImg = accStartSrcImg + accs_per_wave - 1
+            if kernel["ProblemType"]["DataType"].isComplex():
+              # override because complex mul is emulated by 4 mfma insts
+              # TODO: adopt component system
+              miInInstType = miOutInstType #"f32" for SingleComplex, "f64" for DoubleComplex
+              ccA = kernel["ProblemType"]["ComplexConjugateA"]
+              ccB = kernel["ProblemType"]["ComplexConjugateB"]
+              ccVgprs = [None]*3 # three terms that can be negated: [real1, imag0, imag1]
+              ccInsts = [None]*3
+              accImOffset = accVgprImagNumOffset(kernel)
+              accStartSrcImg = accStartSrc+accImOffset
+              accEndSrcImg = accStartSrcImg + accs_per_wave - 1
 
-            # vgpr A,B setting. In complex case, numRegistersIn does not match. Use numRegistersOut instead
-            ar_base = aStr_base
-            ai_base = ar_base + "+%u"%numRegistersOut
-            ar = vgpr(ar_base, numRegistersOut)
-            ai = vgpr(ai_base, numRegistersOut)
-            br_base = bStr_base
-            bi_base = br_base + "+%u"%numRegistersOut
-            br = vgpr(br_base, numRegistersOut)
-            bi = vgpr(bi_base, numRegistersOut)
-            minus_ar = ar.getMinus()
-            minus_ai = ai.getMinus()
-            if miOutInstType == InstType.INST_F32:
-              VAddX = VAddF32
-            elif miOutInstType == InstType.INST_F64:
-              VAddX = VAddF64
-            else:
-              printExit("Unsupported v_add type %s"%miOutInstType)
-            offsetVgpr = [0,0,0]
-            forceGenerate = ccA and ccB # so far, v_add is always necessary for ccA and ccB case
-            if ccA == ccB:
-              arrayIndex = 0
-              ccVgprs[arrayIndex] = self.vgprPool.checkOutAligned(numRegistersOut, numRegistersOut, "negate r1")
-              # generate negate code only when same code is not generated (avoid generating same (redundant) code again
-              if forceGenerate or (ai not in zgemmVaddSrcCheck[arrayIndex]):
-                ccInsts[arrayIndex] = VAddX(dst=vgpr(ccVgprs[arrayIndex] + offsetVgpr[arrayIndex], numRegistersOut), src0=minus_ai, src1=0, comment="Ai=-Ai")
-                zgemmVaddSrcCheck[arrayIndex].append(ai)
-            if ccA:
-              arrayIndex = 1
-              ccVgprs[arrayIndex] = self.vgprPool.checkOutAligned(numRegistersOut, numRegistersOut, "negate i0")
-              # generate negate code only when same code is not generated (avoid generating same (redundant) code again
-              if forceGenerate or (ai not in zgemmVaddSrcCheck[arrayIndex]):
-                ccInsts[arrayIndex] = VAddX(dst=vgpr(ccVgprs[arrayIndex] + offsetVgpr[arrayIndex], numRegistersOut), src0=minus_ai, src1=0, comment="Ai=-Ai")
-                zgemmVaddSrcCheck[arrayIndex].append(ai)
-            if ccB:
-              arrayIndex = 2
-              ccVgprs[arrayIndex] = self.vgprPool.checkOutAligned(numRegistersOut, numRegistersOut, "negate i1")
-              # generate negate code only when same code is not generated (avoid generating same (redundant) code again
-              if forceGenerate or (ar not in zgemmVaddSrcCheck[arrayIndex]):
-                ccInsts[arrayIndex] = VAddX(dst=vgpr(ccVgprs[arrayIndex] + offsetVgpr[arrayIndex], numRegistersOut), src0=minus_ar, src1=0, comment="Ar=-Ar")
-                zgemmVaddSrcCheck[arrayIndex].append(ar)
-            (src0, src1) = (br, ar) if kernel["SourceSwap"] else (ar, br)
-            for inst in ccInsts:
-              if inst is not None:
-                imod.add(inst)
-            variant = [kernel["MatrixInstM"], kernel["MatrixInstN"], kernel["MatrixInstK"], kernel["MatrixInstB"]]
-            imod.add(MFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=False, \
-                     acc=gprfunc(accStart, (accEnd-accStart+1)), a=src0, b=src1, acc2=gprfunc(accStart, (accEnd-accStart+1)), \
-                     comment="Cr += Ar*Br"))
-            (src0, src1) = (bi, (vgpr(ccVgprs[0] + offsetVgpr[0], numRegistersOut) if ccVgprs[0] else ai)) if kernel["SourceSwap"] else ((vgpr(ccVgprs[0] + offsetVgpr[0], numRegistersOut) if ccVgprs[0] else ai), bi)
-            imod.add(MFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=False, \
-                     acc=gprfunc((accStart+accStoreCIdx), (accEnd-accStart+1)), a=src0, b=src1, acc2=gprfunc(accStart, (accEnd-accStart+1)), \
-                     comment="Cr += %sAi*Bi"%("-" if ccVgprs[0] else "")))
-            (src0, src1) = (br, (vgpr(ccVgprs[1] + offsetVgpr[1], numRegistersOut) if ccVgprs[1] else ai)) if kernel["SourceSwap"] else ((vgpr(ccVgprs[1] + offsetVgpr[1], numRegistersOut) if ccVgprs[1] else ai), br)
-            imod.add(MFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=False, \
-                     acc=gprfunc((accStart+accImOffset), (accEnd-accStart+1)), a=src0, b=src1, acc2=gprfunc(accStartSrcImg, (accEndSrcImg-accStartSrcImg+1)), \
-                     comment="Ci += %sAi*Br"%("-" if ccVgprs[1] else "")))
-            (src0, src1) = (bi, (vgpr(ccVgprs[2] + offsetVgpr[2], numRegistersOut) if ccVgprs[2] else ar)) if kernel["SourceSwap"] else ((vgpr(ccVgprs[2] + offsetVgpr[2], numRegistersOut) if ccVgprs[2] else ar), bi)
-            imod.add(MFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=False, \
-                     acc=gprfunc((accStart+accImOffset+accStoreCIdx), (accEnd-accStart+1)), a=src0, b=src1, acc2=gprfunc(accStartSrcImg, (accEndSrcImg-accStartSrcImg+1)), \
-                     comment="Ci += %sAr*Bi"%("-" if ccVgprs[2] else "")))
-            for v in ccVgprs:
-              if v is not None: self.vgprPool.checkIn(v)
-          else:
-
-            if kernel["SourceSwap"]:
-              src0 = Str1
-              src1 = Str0
-            else:
-              src0 = Str0
-              src1 = Str1
-
-            variant = [kernel["MatrixInstM"], kernel["MatrixInstN"], kernel["MatrixInstK"], kernel["MatrixInstB"]]
-
-            waits = self.mfmaIter_waitCount(kernel)
-            if waits > 0 and prevAccIdx == accIdx:
-              imod.add(SNop(waits - 1, "Wait for C"))
-            if(kernel["ProblemType"]["Sparse"]):
-              if kernel["DirectToVgprSparseMetadata"]:
-                miWaveTile = kernel["MIWaveTileB"] if kernel["ProblemType"]["Sparse"] == 2 else kernel["MIWaveTileA"]
-                idx = idx1 if kernel["ProblemType"]["Sparse"] == 2 else idx0
-                accInStart = miWaveTile * kernel["LoopIters"] * unrollLoopIdx + idx * kernel["LoopIters"] + unrollIdx
-                imod.add(SMFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=mfma_1k, \
-                                        acc=gprfunc((accStart+accStoreCIdx), (accEnd-accStart+1)), \
-                                        a=src0, b=src1, metadata=vgpr("ValuMetadata+%u"%(accInStart)), \
-                                        comment="left value = %s[%u+%u:%u+%u]" % (accumRegType, accStart, accStoreCIdx, accEnd, accStoreCIdx)))
+              # vgpr A,B setting. In complex case, numRegistersIn does not match. Use numRegistersOut instead
+              ar_base = aStr_base
+              ai_base = ar_base + "+%u"%numRegistersOut
+              ar = vgpr(ar_base, numRegistersOut)
+              ai = vgpr(ai_base, numRegistersOut)
+              br_base = bStr_base
+              bi_base = br_base + "+%u"%numRegistersOut
+              br = vgpr(br_base, numRegistersOut)
+              bi = vgpr(bi_base, numRegistersOut)
+              minus_ar = ar.getMinus()
+              minus_ai = ai.getMinus()
+              if miOutInstType == InstType.INST_F32:
+                VAddX = VAddF32
+              elif miOutInstType == InstType.INST_F64:
+                VAddX = VAddF64
               else:
-                imod.add(SMFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=mfma_1k, \
-                           acc=gprfunc((accStart+accStoreCIdx), (accEnd-accStart+1)), \
-                           a=src0, b=src1, metadata=mStr, \
-                           comment="left value = %s[%u+%u:%u+%u]" % (accumRegType, accStart, accStoreCIdx, accEnd, accStoreCIdx)))
+                printExit("Unsupported v_add type %s"%miOutInstType)
+              offsetVgpr = [0,0,0]
+              forceGenerate = ccA and ccB # so far, v_add is always necessary for ccA and ccB case
+              if ccA == ccB:
+                arrayIndex = 0
+                ccVgprs[arrayIndex] = self.vgprPool.checkOutAligned(numRegistersOut, numRegistersOut, "negate r1")
+                # generate negate code only when same code is not generated (avoid generating same (redundant) code again
+                if forceGenerate or (ai not in zgemmVaddSrcCheck[arrayIndex]):
+                  ccInsts[arrayIndex] = VAddX(dst=vgpr(ccVgprs[arrayIndex] + offsetVgpr[arrayIndex], numRegistersOut), src0=minus_ai, src1=0, comment="Ai=-Ai")
+                  zgemmVaddSrcCheck[arrayIndex].append(ai)
+              if ccA:
+                arrayIndex = 1
+                ccVgprs[arrayIndex] = self.vgprPool.checkOutAligned(numRegistersOut, numRegistersOut, "negate i0")
+                # generate negate code only when same code is not generated (avoid generating same (redundant) code again
+                if forceGenerate or (ai not in zgemmVaddSrcCheck[arrayIndex]):
+                  ccInsts[arrayIndex] = VAddX(dst=vgpr(ccVgprs[arrayIndex] + offsetVgpr[arrayIndex], numRegistersOut), src0=minus_ai, src1=0, comment="Ai=-Ai")
+                  zgemmVaddSrcCheck[arrayIndex].append(ai)
+              if ccB:
+                arrayIndex = 2
+                ccVgprs[arrayIndex] = self.vgprPool.checkOutAligned(numRegistersOut, numRegistersOut, "negate i1")
+                # generate negate code only when same code is not generated (avoid generating same (redundant) code again
+                if forceGenerate or (ar not in zgemmVaddSrcCheck[arrayIndex]):
+                  ccInsts[arrayIndex] = VAddX(dst=vgpr(ccVgprs[arrayIndex] + offsetVgpr[arrayIndex], numRegistersOut), src0=minus_ar, src1=0, comment="Ar=-Ar")
+                  zgemmVaddSrcCheck[arrayIndex].append(ar)
+              (src0, src1) = (br, ar) if kernel["SourceSwap"] else (ar, br)
+              for inst in ccInsts:
+                if inst is not None:
+                  imod.add(inst)
+              variant = [kernel["MatrixInstM"], kernel["MatrixInstN"], kernel["MatrixInstK"], kernel["MatrixInstB"]]
+              imod.add(MFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=False, \
+                       acc=gprfunc(accStart, (accEnd-accStart+1)), a=src0, b=src1, acc2=gprfunc(accStart, (accEnd-accStart+1)), \
+                       comment="Cr += Ar*Br"))
+              (src0, src1) = (bi, (vgpr(ccVgprs[0] + offsetVgpr[0], numRegistersOut) if ccVgprs[0] else ai)) if kernel["SourceSwap"] else ((vgpr(ccVgprs[0] + offsetVgpr[0], numRegistersOut) if ccVgprs[0] else ai), bi)
+              imod.add(MFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=False, \
+                       acc=gprfunc((accStart+accStoreCIdx), (accEnd-accStart+1)), a=src0, b=src1, acc2=gprfunc(accStart, (accEnd-accStart+1)), \
+                       comment="Cr += %sAi*Bi"%("-" if ccVgprs[0] else "")))
+              (src0, src1) = (br, (vgpr(ccVgprs[1] + offsetVgpr[1], numRegistersOut) if ccVgprs[1] else ai)) if kernel["SourceSwap"] else ((vgpr(ccVgprs[1] + offsetVgpr[1], numRegistersOut) if ccVgprs[1] else ai), br)
+              imod.add(MFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=False, \
+                       acc=gprfunc((accStart+accImOffset), (accEnd-accStart+1)), a=src0, b=src1, acc2=gprfunc(accStartSrcImg, (accEndSrcImg-accStartSrcImg+1)), \
+                       comment="Ci += %sAi*Br"%("-" if ccVgprs[1] else "")))
+              (src0, src1) = (bi, (vgpr(ccVgprs[2] + offsetVgpr[2], numRegistersOut) if ccVgprs[2] else ar)) if kernel["SourceSwap"] else ((vgpr(ccVgprs[2] + offsetVgpr[2], numRegistersOut) if ccVgprs[2] else ar), bi)
+              imod.add(MFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=False, \
+                       acc=gprfunc((accStart+accImOffset+accStoreCIdx), (accEnd-accStart+1)), a=src0, b=src1, acc2=gprfunc(accStartSrcImg, (accEndSrcImg-accStartSrcImg+1)), \
+                       comment="Ci += %sAr*Bi"%("-" if ccVgprs[2] else "")))
+              for v in ccVgprs:
+                if v is not None: self.vgprPool.checkIn(v)
             else:
-              imod.add(MFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=mfma_1k, \
-                                       acc=gprfunc((accStart+accStoreCIdx), (accEnd-accStart+1)), \
-                                       a=src0, b=src1, acc2=gprfunc(accStart, (accEnd-accStart+1)), neg=neg_flag,\
-                                       comment="left value = %s[%u+%u:%u+%u]" % (accumRegType, accStart, accStoreCIdx, accEnd, accStoreCIdx)))
-            prevAccIdx = accIdx
+
+              if kernel["SourceSwap"]:
+                src0 = Str1
+                src1 = Str0
+              else:
+                src0 = Str0
+                src1 = Str1
+
+              variant = [kernel["MatrixInstM"], kernel["MatrixInstN"], kernel["MatrixInstK"], kernel["MatrixInstB"]]
+
+              waits = self.mfmaIter_waitCount(kernel)
+              if waits > 0 and prevAccIdx == accIdx:
+                imod.add(SNop(waits - 1, "Wait for C"))
+              if(kernel["ProblemType"]["Sparse"]):
+                if kernel["DirectToVgprSparseMetadata"]:
+                  miWaveTile = kernel["MIWaveTileB"] if kernel["ProblemType"]["Sparse"] == 2 else kernel["MIWaveTileA"]
+                  idx = idx1 if kernel["ProblemType"]["Sparse"] == 2 else idx0
+                  accInStart = miWaveTile * kernel["LoopIters"] * unrollLoopIdx + idx * kernel["LoopIters"] + unrollIdx
+                  imod.add(SMFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=mfma_1k, \
+                                          acc=gprfunc((accStart+accStoreCIdx), (accEnd-accStart+1)), \
+                                          a=src0, b=src1, metadata=vgpr("ValuMetadata+%u"%(accInStart)), \
+                                          comment="left value = %s[%u+%u:%u+%u]" % (accumRegType, accStart, accStoreCIdx, accEnd, accStoreCIdx)))
+                else:
+                  imod.add(SMFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=mfma_1k, \
+                             acc=gprfunc((accStart+accStoreCIdx), (accEnd-accStart+1)), \
+                             a=src0, b=src1, metadata=mStr, \
+                             comment="left value = %s[%u+%u:%u+%u]" % (accumRegType, accStart, accStoreCIdx, accEnd, accStoreCIdx)))
+              else:
+                imod.add(MFMAInstruction(instType=miInInstType, accType=miOutInstType, variant=variant, mfma1k=mfma_1k, \
+                                         acc=gprfunc((accStart+accStoreCIdx), (accEnd-accStart+1)), \
+                                         a=src0, b=src1, acc2=gprfunc(accStart, (accEnd-accStart+1)), neg=neg_flag,\
+                                         comment="left value = %s[%u+%u:%u+%u]" % (accumRegType, accStart, accStoreCIdx, accEnd, accStoreCIdx)))
+              prevAccIdx = accIdx
 
     # release register
     if kReg is not None: self.vgprPool.checkIn(kReg)
@@ -6833,12 +6838,15 @@ class KernelWriterAssembly(KernelWriter):
     # print("2lscaOffset", lscaOffset)
     offsetElements = (lspaOffset + lscaOffset)
     # print("offsetElements", offsetElements)
-    offsetBytes   = offsetElements*tP["bpeDS"]
+    offsetBytes   = offsetElements * tP["bpeDS"]
 
     if kernel["LdsBlockSizePerPad%s"%tc] != 0 and kernel["LdsPad%s"%tc] != 0:
       offsetBytes   = offsetBytes + (offsetBytes // kernel["LdsBlockSizePerPad%s"%tc]) * kernel["LdsPad%s"%tc] * tP["bpeDS"]
 
     offsetBytes += tP["localWriteSwapByteOffset"]
+
+    if tP["ActAndMul"] and tP["isA"]:
+      offsetBytes =+ kernel["LdsNumElementsAlignedAAM"]
 
     #print("offsetBytes", offsetBytes)
     #print "offset", offset
@@ -6985,6 +6993,7 @@ class KernelWriterAssembly(KernelWriter):
 
     def localWriteBody(tP):
       tc = tP["tensorChar"]
+      tcAAM = "AAM" if tP["ActAndMul"] else tc
 
       instruction = tP["localWriteInstruction"]
       numBlocks = instruction.numBlocks
@@ -7018,9 +7027,9 @@ class KernelWriterAssembly(KernelWriter):
       regTmpVgprBlock = None
 
       if swapAB == 1:
-        destVgprPrefix = "G2L%s2"%(tc)
+        destVgprPrefix = "G2L%s2"%(tcAAM)
       else:
-        destVgprPrefix = "G2L%s"%(tc)
+        destVgprPrefix = "G2L%s"%(tcAAM)
       for perp in range(0, tP["nrp"]):
         localWriteCode = imod.add(Module("LocalWrite%u perp=%d"%(instructionCnt,perp)))
         lwa = "LocalWriteAddr%s"%tc  # default
@@ -7385,9 +7394,16 @@ class KernelWriterAssembly(KernelWriter):
     if (not kernel["DirectToLds%s"%tc]):
       if not ((tP["isA"] or tP["isB"]) and kernel["DirectToVgpr%s"%tc]):
         localWriteBody(tP)
-      if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
-        if tP["is_sparse"]:
+      if kernel["ProblemType"]["Sparse"] and (not kernel["DirectToVgprSparseMetadata"]) and tP["is_sparse"]:
+        localWriteBody(tP["tpsMetadata"])
+
+      if kernel["ProblemType"]["ActAndMul"] and tP["isA"]:
+        tP["ActAndMul"] = True
+        if not ((tP["isA"] or tP["isB"]) and kernel["DirectToVgpr%s"%tc]):
+          localWriteBody(tP)
+        if kernel["ProblemType"]["Sparse"] and (not kernel["DirectToVgprSparseMetadata"]) and tP["is_sparse"]:
           localWriteBody(tP["tpsMetadata"])
+        tP["ActAndMul"] = False
 
     return imod
 

@@ -1732,6 +1732,13 @@ class KernelWriter(metaclass=abc.ABCMeta):
           localReadCodeB, packCodeB = self.localReadDo(kernel, plrIdx*self.states.numIterPerCoalescedReadB, iui*self.states.numReadsIterCoalescedB, 0, tensorParametersB)
           localReads.add(localReadCodeB)
           pack[plrIdx*self.states.numIterPerCoalescedReadB].add(packCodeB)
+        if kernel["ProblemType"]["ActAndMul"] and doReadA:
+          localReads.addComment1("local read aam")
+          tensorParametersA["ActAndMul"] = True
+          localReadCodeAAM, packCodeAAM = self.localReadDo(kernel, plrIdx*self.states.numIterPerCoalescedReadA, iui*self.states.numReadsIterCoalescedA, 0, tensorParametersA)
+          localReads.add(localReadCodeAAM)
+          pack[plrIdx*self.states.numIterPerCoalescedReadA].add(packCodeAAM)
+          tensorParametersA["ActAndMul"] = False
         if (not isResetLroIter or iui != kernel["InnerUnroll"]-1):
           if doReadA:
             localReads.addComment1("local read increment a")
@@ -1996,7 +2003,14 @@ class KernelWriter(metaclass=abc.ABCMeta):
             localReadCodeB, packCodeB = self.localReadDo(kernel, plrIdx*self.states.numIterPerCoalescedReadB, iui*self.states.numReadsIterCoalescedB, 0, tensorParametersB)
             module.add(localReadCodeB)
             pack[plrIdx].add(packCodeB)
-
+          if kernel["ProblemType"]["ActAndMul"]:
+            if iui*self.states.numReadsIterCoalescedA < kernel["InnerUnroll"]:
+              module.addComment1("prefetch local aam")
+              tensorParametersA["ActAndMul"] = True
+              localReadCodeA, packCodeA = self.localReadDo(kernel, plrIdx*self.states.numIterPerCoalescedReadA, iui*self.states.numReadsIterCoalescedA, 0, tensorParametersA)
+              module.add(localReadCodeA)
+              pack[plrIdx].add(packCodeA)
+              tensorParametersA["ActAndMul"] = False
           if iui*self.states.numReadsIterCoalescedA < kernel["InnerUnroll"]:
             module.addComment0("local read increment a")
             module.add(self.localReadInc(kernel, iui, tensorParametersA))
@@ -2102,6 +2116,14 @@ class KernelWriter(metaclass=abc.ABCMeta):
           localReads.add(localReadCodeB)
           localReadsB.add(localReadCodeB)
           pack[plrIdx*self.states.numIterPerCoalescedReadB].add(packCodeB)
+        if kernel["ProblemType"]["ActAndMul"] and doReadA:
+          localReads.addComment1("local read aam")
+          tensorParametersA["ActAndMul"] = True
+          localReadCodeA, packCodeA = self.localReadDo(kernel, plrIdxLR*self.states.numIterPerCoalescedReadA, iui*self.states.numReadsIterCoalescedA, 0, tensorParametersA)
+          localReads.add(localReadCodeA)
+          localReadsA.add(localReadCodeA)
+          pack[plrIdx*self.states.numIterPerCoalescedReadA].add(packCodeA)
+          tensorParametersA["ActAndMul"] = False
         # Don't increment the LRO if we are going to reset them below:
         if not isResetLroIter or iui != kernel["InnerUnroll"]-1:
           if doReadA:
@@ -2342,6 +2364,14 @@ class KernelWriter(metaclass=abc.ABCMeta):
                 localReadCodeB, packCodeB = self.localReadDo(kernel, plrIdx*self.states.numIterPerCoalescedReadB, iui*self.states.numReadsIterCoalescedB, espi, tensorParametersB)
                 module.add(localReadCodeB)
                 pack[plrIdx].add(packCodeB)
+              if kernel["ProblemType"]["ActAndMul"]:
+                if iui*self.states.numReadsIterCoalescedA < kernel["InnerUnroll"]:
+                  module.addComment1("local read prefetch aam")
+                  tensorParametersA["ActAndMul"] = True
+                  localReadCodeA, packCodeA = self.localReadDo(kernel, plrIdx*self.states.numIterPerCoalescedReadA, iui*self.states.numReadsIterCoalescedA, espi, tensorParametersA)
+                  module.add(localReadCodeA)
+                  pack[plrIdx].add(packCodeA)
+                  tensorParametersA["ActAndMul"] = False
               if iui*self.states.numReadsIterCoalescedA < kernel["InnerUnroll"]:
                 module.addComment1("local read inc a")
                 module.add(self.localReadInc(kernel, iui, tensorParametersA))
@@ -2602,6 +2632,15 @@ class KernelWriter(metaclass=abc.ABCMeta):
             localReadCodeB, packCodeB = self.localReadDo(kernel, bufIdxB*self.states.numIterPerCoalescedReadB, iui*self.states.numIterPerCoalescedReadB, 0, tensorParametersB)
             module.add(localReadCodeB)
             pack[0].add(packCodeB)
+          if kernel["ProblemType"]["ActAndMul"]:
+            if mValue*self.states.numReadsIterCoalescedA < mEnd:
+              # Reading 16-bit data from LDS requires packing when ECC enabled
+              module.addComment1("local read aam")
+              tensorParametersA["ActAndMul"] = True
+              localReadCodeA, packCodeA = self.localReadDo(kernel, bufIdxA*self.states.numIterPerCoalescedReadA, iui*self.states.numIterPerCoalescedReadA, 0, tensorParametersA)
+              module.add(localReadCodeA)
+              pack[0].add(packCodeA)
+              tensorParametersA["ActAndMul"] = False
           # adjustment for DirectToLds case
           iuiParam = iui + tailLoopInnerUnroll * mValue
           module.addComment1("local read inc a")

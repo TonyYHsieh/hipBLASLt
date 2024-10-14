@@ -3438,29 +3438,31 @@ class Solution(collections.abc.Mapping):
     ldsNumBytesAlignedAAM = ldsNumBytesAlignedA if state["ProblemType"]["ActAndMul"] else 0
 
     # todo, can the alignment be a power of 2?
-    state["LdsOffsetA"] = 0
+    state["LdsNumElementsAlignedA"]        = ldsNumBytesAlignedA
+    state["LdsNumElementsAlignedAAM"]      = ldsNumBytesAlignedAAM
+    state["LdsNumElementsAlignedB"]        = ldsNumBytesAlignedB
+    state["LdsNumElementsAlignedMetadata"] = ldsNumBytesAlignedMetadata
+
+    state["LdsOffsetA"]                    = 0
+    state["LdsOffsetAAM"]                  = state["LdsOffsetA"] + state["LdsNumElementsAlignedA"]
+    state["LdsOffsetMetadata"]             = state["LdsOffsetAAM"] + state["LdsNumElementsAlignedAAM"]
+    state["LdsOffsetB"]                    = state["LdsOffsetMetadata"] + state["LdsNumElementsAlignedMetadata"]
 
     if state["PrefetchGlobalRead"]:
-      state["LdsNumElementsAlignedA"]        = ldsNumBytesAlignedA
-      state["LdsNumElementsAlignedAAM"]      = ldsNumBytesAlignedAAM
-      state["LdsNumElementsAlignedB"]        = ldsNumBytesAlignedB
-      state["LdsNumElementsAlignedMetadata"] = ldsNumBytesAlignedMetadata
-      state["LdsOffsetAAM"]                  = state["LdsOffsetA"] + state["LdsNumElementsAlignedA"]
-      state["LdsOffsetMetadata"]             = state["LdsOffsetAAM"] + state["LdsNumElementsAlignedAAM"]
-      state["LdsOffsetB"]                    = state["LdsOffsetMetadata"] + state["LdsNumElementsAlignedMetadata"]
-
       offsetBlk = state["LdsOffsetB"] +  ldsNumBytesAlignedB
       offsetBlk = int(2**(math.ceil(math.log(offsetBlk, 2))))
 
-      state["LdsOffsetA_Blk"] = offsetBlk
-      state["LdsOffsetAAM_Blk"] = state["LdsOffsetA_Blk"] + state["LdsNumElementsAlignedA"]
+      state["LdsOffsetA_Blk"]        = offsetBlk
+      state["LdsOffsetAAM_Blk"]      = state["LdsOffsetA_Blk"] + state["LdsNumElementsAlignedA"]
       state["LdsOffsetMetadata_Blk"] = state["LdsOffsetAAM_Blk"] + state["LdsNumElementsAlignedAAM"]
-      state["LdsOffsetB_Blk"] = state["LdsOffsetMetadata_Blk"] + state["LdsNumElementsAlignedMetadata"]
-      ldsNumBytesAB = state["LdsOffsetB_Blk"] + ldsNumBytesB
+      state["LdsOffsetB_Blk"]        = state["LdsOffsetMetadata_Blk"] + state["LdsNumElementsAlignedMetadata"]
+
+      ldsNumBytesAB                  = state["LdsOffsetB_Blk"] + ldsNumBytesB
     else:
-      state["LdsOffsetAAM"]      = ldsNumBytesAlignedA
-      state["LdsOffsetMetadata"] = state["LdsOffsetAAM"] + ldsNumBytesAlignedAAM
-      state["LdsOffsetB"]        = state["LdsOffsetMetadata"] + ldsNumBytesAlignedMetadata
+      state["LdsOffsetAAM"]      = state["LdsOffsetA"] + state["LdsNumElementsAlignedA"]
+      state["LdsOffsetMetadata"] = state["LdsOffsetAAM"] + state["LdsNumElementsAlignedAAM"]
+      state["LdsOffsetB"]        = state["LdsOffsetMetadata"] + state["LdsNumElementsAlignedMetadata"]
+
       ldsNumBytesAB              = state["LdsOffsetB"] + ldsNumBytesB
 
     # lds buffer size for reduction
