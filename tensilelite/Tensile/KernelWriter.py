@@ -196,7 +196,7 @@ class StateValues:
   e: MatrixInfo                          = field(default_factory=MatrixInfo)
   bias: MatrixInfo                       = field(default_factory=MatrixInfo)
   m: ABMatrixInfo                        = field(default_factory=ABMatrixInfo)       # For Sparse Metadata
-  totalAgprs: int                        = 0
+  numCAgprs: int                         = 0
   totalVgprs: int                        = 0
   totalSgprs: int                        = 0
   lastValuAB: int                        = 0
@@ -3462,7 +3462,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     # VGPR Assignment
     ####################################
     vgprIdx = 0
-    self.states.totalAgprs = 0
+    self.states.numCAgprs = 0
     self.states.c.startVgprValu = vgprIdx; vgprIdx += self.states.c.numVgprValu
 
     if kernel["EnableMatrixInstruction"]:
@@ -3479,7 +3479,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       # AGPR Allocation
       ########################################
       if not kernel["MIArchVgpr"]:
-        self.states.totalAgprs = self.states.c.numVgprValu
+        self.states.numCAgprs = self.states.c.numVgprValu
         vgprIdx = 0
         self.states.c.numVgprValu = 0
 
@@ -4012,7 +4012,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     self.savedSgprPool = None
 
     ## accumulator Buffer for storeCinUnroll feature
-    self.agprPool = RegisterPool(self.states.totalAgprs, 'a', defaultPreventOverflow=False, printRP=0)
+    self.agprPool = RegisterPool(self.states.numCAgprs, 'a', defaultPreventOverflow=False, printRP=0)
 
     ########################################
     # reads Per Iteration
