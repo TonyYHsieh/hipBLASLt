@@ -1565,10 +1565,9 @@ class KernelWriterAssembly(KernelWriter):
       moduleWg.addComment0("init: add vgpr [%u...%u) to pool" % \
                           (self.states.c.startVgprValu, self.states.c.startVgprValu+self.states.c.numVgprValu))
 
-      numAccvgprs = self.states.totalAgprs
-      self.agprPool.add(0, numAccvgprs, "ValuC-Block")
-      moduleWg.addComment0("init: add agpr [%u...%u) to pool" % \
-                          (0, numAccvgprs))
+      numCAgprs = self.states.numCAgprs
+      self.agprPool.add(0, numCAgprs, "ValuC-Block")
+      moduleWg.addComment0("init: add agpr [%u...%u) to pool" % (0, numCAgprs))
 
       if kernel["StreamK"] == 0:
         moduleWg.add(self.localReadAddresses(kernel, tPA, tPB, tPM))
@@ -3651,12 +3650,12 @@ class KernelWriterAssembly(KernelWriter):
     module = Module("initC")
     self.vgprPool.remove(self.states.c.startVgprValu, self.states.c.numVgprValu, "ValuC")
     module.addComment1("initC: remove ValuC vgpr buffer [%u...%u) from pool"%(self.states.c.startVgprValu, self.states.c.startVgprValu+self.states.c.numVgprValu))
-    numAccvgprs = self.states.totalAgprs
-    self.agprPool.remove(0, numAccvgprs, "ValuC")
-    module.addComment1("initC: remove acc vgpr buffer [%u...%u) from pool"%(0, numAccvgprs))
+    numCAgprs = self.states.numCAgprs
+    self.agprPool.remove(0, numCAgprs, "ValuC")
+    module.addComment1("initC: remove acc vgpr buffer [%u...%u) from pool"%(0, numCAgprs))
     self.vgprPool.remove(self.states.a.startVgprValu , self.states.lastValuAB - self.states.a.startVgprValu , "ValuAB")
     module.addComment1("initC: remove ValuA/B vgpr buffer [%u...%u) from pool"%(self.states.a.startVgprValu , self.states.lastValuAB))
-    numCVgpr = max(self.states.c.numVgprValu, numAccvgprs)
+    numCVgpr = max(self.states.c.numVgprValu, numCAgprs)
 
     if kernel["LdsInitCVgprs"]:
       tmpAddr = self.vgprPool.checkOut(1,"tmp vgpr for lds init C registers")

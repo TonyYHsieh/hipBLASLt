@@ -136,7 +136,7 @@ class SignatureDefault(Signature):
                                     preloadKernArgs=kernel["PreloadKernArgs"])
 
        # General Argument info
-        signature.addArg(   "Gemm info", SVK.SIG_VALUE, "u32")
+        signature.addArg("Gemm info",    SVK.SIG_VALUE, "u32")
         signature.addArg("kernel info0", SVK.SIG_VALUE, "u32")
         signature.addArg("kernel info1", SVK.SIG_VALUE, "u32")
         signature.addArg("numWG",        SVK.SIG_VALUE, "u32")
