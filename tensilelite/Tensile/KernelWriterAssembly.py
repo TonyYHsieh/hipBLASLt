@@ -158,7 +158,7 @@ class KernelWriterAssembly(KernelWriter):
     See above definitions for how these are mapped to Free or Sum sizes
     based on the problem definition.
     """
-    idxChar= globalParameters["IndexChars"][idx]
+    idxChar = globalParameters["IndexChars"][idx]
     return sgpr("Size%s"%idxChar)
 
   def loopChar(self, kernel, loopIdx):
@@ -1358,7 +1358,7 @@ class KernelWriterAssembly(KernelWriter):
       # early stop if wgIdx exceed wg needed
       if earlyStop:
         module.addComment1("Early stop if wg exceed")
-        module.add(SCmpGeU32(src0=sgpr("WorkGroup2"), src1=sgpr("SizesFree+2")))
+        module.add(SCmpGeU32(src0=sgpr("WorkGroup2"), src1=self.sizeRef(2)))
         label_EarlyStop = Label(self.labels.getNameInc("EarlyStop_if_wg_exceed"), "")
         label_nonEarlyStop = Label(self.labels.getNameInc("NoEarlyStop_wgExceed"), "")
         module.add(SCBranchSCC0(labelName=label_nonEarlyStop.getLabelName()))
@@ -1585,15 +1585,15 @@ class KernelWriterAssembly(KernelWriter):
 
       def calculateWG():
         #### calculate numWorkGroup ####
-        qReg = self.vgprPool.checkOut(4)
-        dReg = qReg + 1
+        qReg   = self.vgprPool.checkOut(4)
+        dReg   = qReg + 1
         divReg = qReg + 2
-        rReg = qReg + 3
+        rReg   = qReg + 3
         moduleWg.add(VMovB32(dst=vgpr(divReg), src="MT0", comment="set MT0 into sgpr"))
-        moduleWg.add(VMovB32(dst=vgpr(dReg), src=sgpr("SizesFree+0"), comment="set Free0 size"))
+        moduleWg.add(VMovB32(dst=vgpr(dReg), src=self.sizeRef(0), comment="set %s size" % globalParameters["IndexChars"][0]))
         moduleWg.add(vectorUInt32CeilDivideAndRemainder(qReg=qReg, dReg=dReg, divReg=divReg, rReg=rReg, doRemainder=False))
         moduleWg.add(VMovB32(dst=vgpr(divReg), src="MT1", comment="set MT1 into sgpr"))
-        moduleWg.add(VMovB32(dst=vgpr(dReg), src=sgpr("SizesFree+1"), comment="set Free1 size"))
+        moduleWg.add(VMovB32(dst=vgpr(dReg), src=self.sizeRef(1), comment="set %s size" % globalParameters["IndexChars"][1]))
         moduleWg.add(VReadfirstlaneB32(dst=sgpr("NumWorkGroups0"), src=vgpr(qReg), comment="set back to numWorkGroup0"))
         moduleWg.add(vectorUInt32CeilDivideAndRemainder(qReg=qReg, dReg=dReg, divReg=divReg, rReg=rReg, doRemainder=False))
         if self.states.archCaps["TransOpWait"]:
@@ -1832,8 +1832,8 @@ class KernelWriterAssembly(KernelWriter):
             del labels[removeIdx]
       module.add(moduleWg)
 
-      earlyReturnModule = Module("Early stop if N(SizeFreeJ) == 0")
-      earlyReturnModule.addComment1("Early stop if N(SizeFreeJ) == 0")
+      earlyReturnModule = Module("Early stop if N(SizeJ) == 0")
+      earlyReturnModule.addComment1("Early stop if N(SizeJ) == 0")
       earlyReturnModule.add(SCmpEQU32(sgpr("SizeJ"), hex(0)))
       earlyReturnLabel = Label("EarlyStop_if_N_is_0", "")
       noEarlyReturnLabel = Label("NoEarlyStop_N0", "")
