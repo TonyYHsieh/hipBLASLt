@@ -141,7 +141,7 @@ class KernelWriterAssembly(KernelWriter):
     See above definitions for how these are mapped to Free or Sum sizes
     based on the problem definition.
     """
-    idxChar= globalParameters["IndexChars"][idx]
+    idxChar = globalParameters["IndexChars"][idx]
     return sgpr("Size%s"%idxChar)
 
   def loopChar(self, kernel, loopIdx):
@@ -1341,7 +1341,7 @@ class KernelWriterAssembly(KernelWriter):
       # early stop if wgIdx exceed wg needed
       if earlyStop:
         module.addComment1("Early stop if wg exceed")
-        module.add(SCmpGeU32(src0=sgpr("WorkGroup2"), src1=sgpr("SizesFree+2")))
+        module.add(SCmpGeU32(src0=sgpr("WorkGroup2"), src1=self.sizeRef(2)))
         label_EarlyStop = Label(self.labels.getNameInc("EarlyStop_if_wg_exceed"), "")
         label_nonEarlyStop = Label(self.labels.getNameInc("NoEarlyStop_wgExceed"), "")
         module.add(SCBranchSCC0(labelName=label_nonEarlyStop.getLabelName()))
@@ -1568,15 +1568,15 @@ class KernelWriterAssembly(KernelWriter):
 
       def calculateWG():
         #### calculate numWorkGroup ####
-        qReg = self.vgprPool.checkOut(4)
-        dReg = qReg + 1
+        qReg   = self.vgprPool.checkOut(4)
+        dReg   = qReg + 1
         divReg = qReg + 2
-        rReg = qReg + 3
+        rReg   = qReg + 3
         moduleWg.add(VMovB32(dst=vgpr(divReg), src="MT0", comment="set MT0 into sgpr"))
-        moduleWg.add(VMovB32(dst=vgpr(dReg), src=sgpr("SizesFree+0"), comment="set Free0 size"))
+        moduleWg.add(VMovB32(dst=vgpr(dReg), src=self.sizeRef(0), comment="set %s size" % globalParameters["IndexChars"][0]))
         moduleWg.add(vectorUInt32CeilDivideAndRemainder(qReg=qReg, dReg=dReg, divReg=divReg, rReg=rReg, doRemainder=False))
         moduleWg.add(VMovB32(dst=vgpr(divReg), src="MT1", comment="set MT1 into sgpr"))
-        moduleWg.add(VMovB32(dst=vgpr(dReg), src=sgpr("SizesFree+1"), comment="set Free1 size"))
+        moduleWg.add(VMovB32(dst=vgpr(dReg), src=self.sizeRef(1), comment="set %s size" % globalParameters["IndexChars"][1]))
         moduleWg.add(VReadfirstlaneB32(dst=sgpr("NumWorkGroups0"), src=vgpr(qReg), comment="set back to numWorkGroup0"))
         moduleWg.add(vectorUInt32CeilDivideAndRemainder(qReg=qReg, dReg=dReg, divReg=divReg, rReg=rReg, doRemainder=False))
         if self.states.archCaps["TransOpWait"]:
@@ -1815,8 +1815,8 @@ class KernelWriterAssembly(KernelWriter):
             del labels[removeIdx]
       module.add(moduleWg)
 
-      earlyReturnModule = Module("Early stop if N(SizeFreeJ) == 0")
-      earlyReturnModule.addComment1("Early stop if N(SizeFreeJ) == 0")
+      earlyReturnModule = Module("Early stop if N(SizeJ) == 0")
+      earlyReturnModule.addComment1("Early stop if N(SizeJ) == 0")
       earlyReturnModule.add(SCmpEQU32(sgpr("SizeJ"), hex(0)))
       earlyReturnLabel = Label("EarlyStop_if_N_is_0", "")
       noEarlyReturnLabel = Label("NoEarlyStop_N0", "")
@@ -1899,7 +1899,7 @@ class KernelWriterAssembly(KernelWriter):
       module.addComment("nwg0 = (size%s + MT%s - 1) / MT%s;" \
           % (self.states.tileChar0, self.states.tileChar0, self.states.tileChar0))
       module.add(VMovB32(dst=vgpr(tmpVgpr), src=hex(kernel["MacroTile0"]-1), comment="MT0-1"))
-      module.add(VAddCOU32(dst=vgpr(nwg0), dst1=VCC(), src0=sgpr("SizesFree+0"), \
+      module.add(VAddCOU32(dst=vgpr(nwg0), dst1=VCC(), src0=self.sizeRef(0), \
           src1=vgpr(tmpVgpr), comment="%s = size0+MT0-1"%vgpr(nwg0)))
       module.add(vectorStaticDivide(nwg0, nwg0, kernel["MacroTile0"], tmpVgprRes))
       self.vgprPool.checkIn(tmpVgpr)
@@ -2262,7 +2262,7 @@ class KernelWriterAssembly(KernelWriter):
                 args=[tmpV, lastGroVgpr, sgpr("MagicNumberSize%s"%pChar), \
                 sgpr("MagicShiftSize%s"%pChar), (sgpr("MagicAbitSize%s"%pChar) if kernel["MagicDivAlg"]==2 else "0")] ))
             module.add(VMovB32(dst=groVgpr, src=vgpr(tmpV), comment="extract gro%s%s_%u (%s)"%(tc,groChar,l,groVgpr)))
-            module.add(VMulLOU32(dst=vgpr(tmpV), src0=groVgpr, src1=sgpr("SizesFree+%u"%lastGroIdx), comment="remainder part 1"))
+            module.add(VMulLOU32(dst=vgpr(tmpV), src0=groVgpr, src1=self.sizeRef(lastGroIdx), comment="remainder part 1"))
             module.add(VSubU32(dst=lastGroVgpr, src0=lastGroVgpr, src1=vgpr(tmpV), \
                 comment="remove extracted bits from gro%s%s_%u (%s)"%(tc, globalParameters["IndexChars"][lastGroIdx], l, lastGroVgpr)))
             lastGroVgpr = groVgpr
