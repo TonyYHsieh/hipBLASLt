@@ -25,6 +25,8 @@ from ..TensileInstructions import Module, Label, RegisterPoolResource, SAddU32, 
     SCmpLtU32, SCMovB32, SSubU32, SLShiftLeftB64, SCBranchSCC0, fastdeepcopy, Instruction, SCmpLgU32, \
     SCSelectB32, SAndB32
 from ..Component import Component
+from ..Common import globalParameters
+
 import abc
 
 class GSU(Component):
@@ -369,14 +371,15 @@ class GSUOn(GSU):
                     tmpSgpr1 = tmpSgprInfo.idx+2
                     tmpSgpr2 = tmpSgprInfo.idx+0
                     tmpSgpr3 = tmpSgprInfo.idx+3
-                module.addComment("GSU Output Buffer offset: Free0 + (Free1-1)*StrideC1J + (Free2-1)*StrideCK * GSUIdx * bpe%s")
-                module.addModuleAsFlatItems(writer.s_mul_u64_u32(sgpr(tmpSgpr0), sgpr(tmpSgpr1), sgpr("SizesFree+0"), sgpr("GSUSumIdx"), "Free0"))
+                module.addComment("GSU Output Buffer offset: SizeI + (SizeJ-1)*StrideC1J + (SizeK-1)*StrideCK * GSUIdx * bpe%s")
+                module.addModuleAsFlatItems(writer.s_mul_u64_u32(sgpr(tmpSgpr0), sgpr(tmpSgpr1), writer.sizeRef(0), sgpr("GSUSumIdx"), "Size%c" % globalParameters["IndexChars"][0]))
                 for i in range(1, numDim):
-                    module.add(SSubU32(dst=sgpr(tmpSgpr2), src0=sgpr("SizesFree+%u"%i), src1=1, comment="Free%u" % i))
-                    module.add(SMulI32(dst=sgpr(tmpSgpr2), src0=sgpr(tmpSgpr2), src1=sgpr("GSUSumIdx"), comment="Free%u" % i))
-                    module.addModuleAsFlatItems(writer.s_mul_u64_u32(sgpr(tmpSgpr2), sgpr(tmpSgpr3), sgpr(tmpSgpr2), sgpr("StrideC%s"%writer.states.indexChars[i]), "Free%u" % i))
-                    module.add(SAddU32(dst=sgpr(tmpSgpr0), src0=sgpr(tmpSgpr0), src1=sgpr(tmpSgpr2), comment="Free%u" % i))
-                    module.add(SAddCU32(dst=sgpr(tmpSgpr1), src0=sgpr(tmpSgpr1), src1=sgpr(tmpSgpr3), comment="Free%u" % i))
+                    idxChar = globalParameters["IndexChars"][i]
+                    module.add(SSubU32(dst=sgpr(tmpSgpr2), src0=writer.sizeRef(i), src1=1, comment="Size%c" % idxChar))
+                    module.add(SMulI32(dst=sgpr(tmpSgpr2), src0=sgpr(tmpSgpr2), src1=sgpr("GSUSumIdx"), comment="Size%c" % idxChar))
+                    module.addModuleAsFlatItems(writer.s_mul_u64_u32(sgpr(tmpSgpr2), sgpr(tmpSgpr3), sgpr(tmpSgpr2), sgpr("StrideC%s"%writer.states.indexChars[i]), "Size%c" % idxChar))
+                    module.add(SAddU32(dst=sgpr(tmpSgpr0), src0=sgpr(tmpSgpr0), src1=sgpr(tmpSgpr2), comment="Size%c" % idxChar))
+                    module.add(SAddCU32(dst=sgpr(tmpSgpr1), src0=sgpr(tmpSgpr1), src1=sgpr(tmpSgpr3), comment="Size%c" % idxChar))
                 module.add(SLShiftLeftB64(dst=sgpr(tmpSgprX2,2), src=sgpr(tmpSgprX2,2), shiftHex=log2(writer.states.bpeCinternal), comment="scale by bpe"))
                 module.add(SAddU32(dst=sgpr("SrdD+0"), src0=sgpr("SrdD+0"), src1=sgpr(tmpSgprX2), comment="add lo GSU offset to SRD"))
                 module.add(SAddCU32(dst=sgpr("SrdD+1"), src0=sgpr("SrdD+1"), src1=sgpr(tmpSgpr1), comment="add hi GSU offset to SRD"))
