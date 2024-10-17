@@ -328,7 +328,9 @@ class StateVgprs:
 @dataclass
 class CodeModules:
   accVgprRead: Optional[Module]               = None
+  accAAMVgprRead: Optional[Module]            = None
   accVgprWrite: Optional[Module]              = None
+  accAAMVgprWrite: Optional[Module]           = None
   mulAlphaMultipleBuffer: Optional[Module]    = None
   mulAlphaOther: Optional[Module]             = None
   localWriteA: Optional[Module]               = None
@@ -4123,7 +4125,8 @@ class KernelWriter(metaclass=abc.ABCMeta):
     self.savedSgprPool = None
 
     ## accumulator Buffer for storeCinUnroll feature
-    self.agprPool = RegisterPool(self.states.numCAgprs, 'a', defaultPreventOverflow=False, printRP=0)
+    numAgprs = (self.states.numCAgprs * 2) if kernel["ProblemType"]["ActAndMul"] else self.states.numCAgprs
+    self.agprPool = RegisterPool(numAgprs, 'a', defaultPreventOverflow=False, printRP=0)
 
     ########################################
     # reads Per Iteration

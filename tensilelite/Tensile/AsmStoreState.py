@@ -329,9 +329,10 @@ class StoreState:
     # Also create an AddrCalc for each memory operation.
     ##############################################################################
     def getStoreElementsInfoForBatch(self, kernel, batchElements):
-        self.elementCoord0 = []
-        self.elementCoord1 = []
-        self.elementSumIdx = []
+        self.elementCoord0    = []
+        self.elementCoord1    = []
+        self.elementSumIdx    = []
+        self.elementSumIdxAAM = []
 
         kw = self.kernelWriter
 
@@ -409,6 +410,7 @@ class StoreState:
         self.elementDataScaleAlphaVec = []
         self.elementMask              = []  # SGPR to use for element mask
         self.elementSumIdx            = []
+        self.elementSumIdxAAM         = []
         self.elementCoord0            = []
         self.elementCoord1            = []
 
@@ -631,7 +633,8 @@ class StoreState:
                 self.elementMask.append(mask)
 
             #print "Edge=", edge, element
-            sumIdx = 0
+            sumIdx    = 0
+            sumIdxAAM = 0
             if kernel["LocalSplitU"] > 1:
                 if len(self.elementSumIdx) == 0:
                     sumIdx = kw.states.c.startVgprValu
@@ -648,9 +651,13 @@ class StoreState:
                 if kernel["EnableMatrixInstruction"]:
                     alignment = self.cfg.numVgprPerValuC * self.cfg.gwvw
                     sumIdx    = kw.vgprPool.checkOutAligned(self.cfg.numVgprPerValuC*self.cfg.gwvw, alignment, "vgprValuC") // self.cfg.numVgprPerValuC
+                    if kernel["ProblemType"]["ActAndMul"]:
+                        sumIdxAAM = kw.vgprPool.checkOutAligned(self.cfg.numVgprPerValuC*self.cfg.gwvw, alignment, "vgprValuC") // self.cfg.numVgprPerValuC
                 else:
                     sumIdx = kw.states.c.startVgprValu + vc0 + d0*kernel["VectorWidthA"] + vc1*kernel["ThreadTile0"] + d1*kernel["VectorWidthA"]*kernel["ThreadTile0"]
             self.elementSumIdx.append(sumIdx) # sumIdx is an element idx, need to div/2 for half
+            if kernel["ProblemType"]["ActAndMul"]:
+                self.elementSumIdxAAM.append(sumIdxAAM)
             self.lastCoordOffset1 = coordOffset1
         # reset flag
         self.isReset = False
@@ -664,6 +671,12 @@ class StoreState:
                 self.kernelWriter.vgprPool.checkIn(i * self.cfg.numVgprPerValuC)
                 # print("checked in vgpr %u"%i)
             self.elementSumIdx = []
+
+        if len(self.elementSumIdxAAM) > 0 and self.lsu == 1:
+            for i in self.elementSumIdxAAM:
+                self.kernelWriter.vgprPool.checkIn(i * self.cfg.numVgprPerValuC)
+                # print("checked in vgpr %u"%i)
+            self.elementSumIdxAAM = []
 
     def resetState(self):
         if not self.isReset:

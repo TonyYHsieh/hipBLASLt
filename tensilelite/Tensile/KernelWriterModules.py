@@ -198,18 +198,22 @@ def accVgprImagNumOffset(kernel):
 # MapAcctoArch
 # function to map MFMA Acc  Registers to Arch VGPR register
 ##############################################################################
-def mapAcctoArchRegs(kernel, write=False):
+def mapAcctoArchRegs(kernel, write=False, aam=False):
   acc2arch, _ = accToArchMapper(kernel)
 
   complexMultiplier = 2 if kernel["ProblemType"]["DataType"].isComplex() else 1
   imod = Module("AccVgpr{}".format("Write" if write else "Read"))
   imod.itemList = [None] * kernel["MIRegPerOut"] * complexMultiplier * len(acc2arch)
   accImOffset = accVgprImagNumOffset(kernel)
+  offset = (len(acc2arch) * complexMultiplier * kernel["MIRegPerOut"]) if aam else 0
+
   for i in range(len(acc2arch)):
     for cm in range(complexMultiplier):
       for r in range(kernel["MIRegPerOut"]):
         destIdx = (acc2arch[i]*complexMultiplier + cm) * kernel["MIRegPerOut"] + r
-        srcIdx = ((i * kernel["MIRegPerOut"] + r) + (cm*accImOffset))
+        srcIdx  = ((i * kernel["MIRegPerOut"] + r) + (cm*accImOffset))
+        destIdx = destIdx
+        srcIdx  = srcIdx + offset
         if not kernel["MIArchVgpr"]:
           accStr = accvgpr(srcIdx)
           if write:

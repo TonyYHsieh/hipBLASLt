@@ -41,20 +41,20 @@ class GlobalWriteBatchComponent(GlobalWriteComponents):
   def __call__(self, kernel: Solution, tPA, tPB, activation: ActivationModule, ss: StoreState, \
     batchIdx, applyAlpha, beta, edge, atomic, gwvw, atomicW, \
     batchElements, addrE, addrD, addrC, addrBias, addrScaleAVec, addrScaleBVec, addrScaleAlphaVec, isLocalBarrierInit: bool, \
-    tmpVgpr, cvtVgprStruct, activationSetPCStruct, activationTypeStr, batchElementSgprs, tmpSgpr, codeAccVgprRead, codeMulAlpha, \
-    packdata, parentWriter, factorDim) -> Module:
+    tmpVgpr, cvtVgprStruct, activationSetPCStruct, activationTypeStr, batchElementSgprs, tmpSgpr, codeAccVgprRead, \
+    codeAAMAccVgprRead, codeMulAlpha, packdata, parentWriter, factorDim) -> Module:
     return GlobalWriteBatchWriter(kernel, tPA, tPB, activation, ss, batchIdx, applyAlpha, \
       beta, edge, atomic, gwvw, atomicW, \
       batchElements, addrE, addrD, addrC, addrBias, addrScaleAVec, addrScaleBVec, addrScaleAlphaVec, isLocalBarrierInit, \
-      tmpVgpr, cvtVgprStruct, activationSetPCStruct, activationTypeStr, batchElementSgprs, tmpSgpr, codeAccVgprRead, codeMulAlpha, \
-      packdata, parentWriter, factorDim).emit()
+      tmpVgpr, cvtVgprStruct, activationSetPCStruct, activationTypeStr, batchElementSgprs, tmpSgpr, codeAccVgprRead, \
+      codeAAMAccVgprRead, codeMulAlpha, packdata, parentWriter, factorDim).emit()
 
 class GlobalWriteBatchWriter:
   def __init__(self, kernel: Solution, tPA, tPB, activation: ActivationModule, ss: StoreState, \
-    batchIdx, applyAlpha, beta, edge, atomic, gwvw, atomicW, \
-    batchElements, addrE, addrD, addrC, addrBias, addrScaleAVec, addrScaleBVec, addrScaleAlphaVec, isLocalBarrierInit: bool, \
-    tmpVgpr, cvtVgprStruct, activationSetPCStruct, activationTypeStr, batchElementSgprs, tmpSgpr, codeAccVgprRead, codeMulAlpha, \
-      packdata, parentWriter, factorDim):
+      batchIdx, applyAlpha, beta, edge, atomic, gwvw, atomicW, \
+      batchElements, addrE, addrD, addrC, addrBias, addrScaleAVec, addrScaleBVec, addrScaleAlphaVec, isLocalBarrierInit: bool, \
+      tmpVgpr, cvtVgprStruct, activationSetPCStruct, activationTypeStr, batchElementSgprs, tmpSgpr, codeAccVgprRead, codeAAMAccVgprRead, \
+      codeMulAlpha, packdata, parentWriter, factorDim):
     self.kernel = kernel
     self.tPA    = tPA
     self.tPB    = tPB
@@ -83,6 +83,7 @@ class GlobalWriteBatchWriter:
     self.batchElementSgprs = batchElementSgprs
     self.tmpSgpr = tmpSgpr
     self.codeAccVgprRead = codeAccVgprRead
+    self.codeAAMAccVgprRead = codeAAMAccVgprRead
     self.codeMulAlpha = codeMulAlpha
     self.packdata     = packdata
     self.parentWriter = parentWriter
@@ -535,7 +536,7 @@ class GlobalWriteBatchWriter:
       module.addComment1("rC *= alpha batchElements=%s"%self.batchElements)
       if self.codeMulAlpha is None:
         for elementIdx in range(len(self.batchElements)):
-          module.add(self._applyAlpha(self.kernel, self.gwvw, self.ss.elementSumIdx, elementIdx, self.tmpS01))
+          module.add(self._applyAlpha(self.kernel, self.gwvw, self.ss.elementSumIdx, self.ss.elementSumIdxAAM, elementIdx, self.tmpS01))
       else:
           regsPerScalar = self.parentWriter.states.bpeCinternal // self.parentWriter.states.bpr # register per scalar
           for elementIdx in range(len(self.batchElements)):
@@ -746,7 +747,7 @@ class GlobalWriteBatchWriter:
                     comment="load D (atomic) bpm=%u vaw=%u"%(bpm,self.atomicW)))
 
       if self.kernel["InterleaveAlpha"] and self.applyAlpha:
-        module.add(self._applyAlpha(self.kernel, self.gwvw, self.ss.elementSumIdx, elementIdx, self.tmpS01))
+        module.add(self._applyAlpha(self.kernel, self.gwvw, self.ss.elementSumIdx, self.ss.elementSumIdxAAM, elementIdx, self.tmpS01))
 
       if not self.kernel["BufferStore"]:
         offsetSrc = (self.tmpVgpr + 2) if self.beta else addrDVgpr
@@ -789,6 +790,8 @@ class GlobalWriteBatchWriter:
           # loop over registers within one scalar
           for rIdx in range(0, regsPerScalar):
             module.add(replaceHolder(self.codeAccVgprRead.items().pop(0), self.ss.elementSumIdx[elementIdx] * regsPerScalar + regsPerScalar * vi + rIdx - self.parentWriter.states.c.startVgprValu))
+            if self.kernel["ProblemType"]["ActAndMul"]:
+              module.add(replaceHolder(self.codeAAMAccVgprRead.items().pop(0), self.ss.elementSumIdxAAM[elementIdx] * regsPerScalar + regsPerScalar * vi + rIdx - self.parentWriter.states.c.startVgprValu))
     elif self.kernel["LocalSplitU"] > 1:
       # read from LSU VGPRs
       regsPerScalar = self.parentWriter.states.bpeCinternal // self.parentWriter.states.bpr # register per scalar
@@ -860,7 +863,7 @@ class GlobalWriteBatchWriter:
       module.addComment1("rC *= alpha batchElements=%s"%self.batchElements)
       if self.codeMulAlpha is None:
         for elementIdx in range(len(self.batchElements)):
-          module.add(self._applyAlpha(self.kernel, self.gwvw, self.ss.elementSumIdx, elementIdx, self.tmpS01))
+          module.add(self._applyAlpha(self.kernel, self.gwvw, self.ss.elementSumIdx, self.ss.elementSumIdxAAM, elementIdx, self.tmpS01))
       else:
           regsPerScalar = self.parentWriter.states.bpeCinternal // self.parentWriter.states.bpr # register per scalar
           for elementIdx in range(len(self.batchElements)):
@@ -1301,6 +1304,8 @@ class GlobalWriteBatchWriter:
       # Activation
       activationModule = None
       isActivationInsertAfter = False
+      if self.kernel["ProblemType"]["ActAndMul"]:
+        aamInput = self.ss.elementSumIdxAAM[elementIdx]
       if self.kernel["ProblemType"]["Gradient"] and (self.kernel["GlobalSplitU"] == 1):
         gradientInput = dataE
         enableValuC   = False
@@ -1322,8 +1327,10 @@ class GlobalWriteBatchWriter:
             self.activationSetPCStruct.vgprActCopy))
         activationModule.add(SSwapPCB64(dst=sgpr(self.activationSetPCStruct.sgprOffsetBack, 2), \
           src=sgpr(self.activationSetPCStruct.sgprOffsetActivation, 2)))
-        activationModule.appendModule (copyData(activationCDataType, gradientInput, self.gwvw, \
+        activationModule.appendModule(copyData(activationCDataType, gradientInput, self.gwvw, \
           self.activationSetPCStruct.vgprActCopy, 1))
+        if self.kernel["ProblemType"]["ActAndMul"]:
+          activationModule.appendModule(self._applyAAM(self.kernel, self.gwvw, gradientInput, aamInput))
       elif self.parentWriter.insertActivationAfterPacked(self.kernel, self.activationTypeStr) and (self.kernel["ProblemType"]["UseScaleAlphaVec"] == False):
         isActivationInsertAfter = True
         activationModule = self.parentWriter.getActivationDestDataType(self.kernel, self.activation, \
@@ -1815,86 +1822,150 @@ class GlobalWriteBatchWriter:
         return self.atomicW >= 2
     return True
 
+
   def _storeSyncOpt(self, module: Module):
     module.add(SSleep(self.kernel["StoreSyncOpt"] - 1, "optimization: sync and wait"))
     module.add(SBarrier())
 
-  def _applyAlpha(self, kernel, gwvw, elementSumIdx, elementIdx, tmpS01):
+
+  def _applyAAM(self, kernel, gwvw, elementSumIdx, elementSumIdxAAM):
     module = Module("applyAlpha")
 
     if kernel["_GlobalAccumulation"] == 'MultipleBuffer':
       return module
 
+    for vi in range(0, gwvw):
+      sumIdxV   = elementSumIdx + vi
+      sumIdxAAM = elementSumIdxAAM + vi
+      # Int8 (TODO- Int8x4 not checked, but should be OK)
+      if kernel["ProblemType"]["ComputeDataType"].isInt32():
+        newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
+        newSumIdxAAM = sumIdxAAM - self.parentWriter.states.c.startVgprValu
+        module.add(VMulLOU32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr("ValuC+%u"%newSumIdxAAM), src1=vgpr("ValuC+%u"%newSumIdxV), comment="act(val1) * val2" ))
+      # sgemm, HPA-bfgemm(b,b,b,b,s,s), and HPA-hgemm(h,h,h,h,s,s)
+      # (h,h,h,h,h,h) + HPA (will be converted to (h,h,h,h,s,s)), internal alpha is single
+      elif kernel["ProblemType"]["ComputeDataType"].isSingle() or (kernel["ProblemType"]["ComputeDataType"].isHalf() and kernel["ProblemType"]["HighPrecisionAccumulate"]):
+        if kernel["ProblemType"]["DataType"].isInt8() and kernel["ProblemType"]["HighPrecisionAccumulate"]:
+          module.add(VCvtI32toF32(dst=vgpr("ValuC+%u"%sumIdxV), src=vgpr("ValuC+%u"%sumIdxV), comment="convert to fp32" ))
+          module.add(VCvtI32toF32(dst=vgpr("ValuC+%u"%sumIdxAAM), src=vgpr("ValuC+%u"%sumIdxAAM), comment="convert to fp32" ))
+        newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
+        newSumIdxAAM = sumIdxAAM - self.parentWriter.states.c.startVgprValu
+        module.add(VMulF32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr("ValuC+%u"%newSumIdxAAM), src1=vgpr("ValuC+%u"%newSumIdxV), comment="act(val1) * val2" ))
+      # dgemm
+      elif kernel["ProblemType"]["ComputeDataType"].isDouble():
+        newSumIdxV = sumIdxV * 2 - self.parentWriter.states.c.startVgprValu
+        newSumIdxAAM = sumIdxAAM * 2 - self.parentWriter.states.c.startVgprValu
+        module.add(VMulF64(dst=vgpr("ValuC+%u"%(newSumIdxV),2), src0=vgpr("ValuC+%u"%(newSumIdxAAM),2), src1=vgpr("ValuC+%u"%(newSumIdxV),2), comment="*= alpha"))
+      # single precision complex
+      elif kernel["ProblemType"]["ComputeDataType"].isSingleComplex():
+        newSumIdxV = sumIdxV * 2 - self.parentWriter.states.c.startVgprValu
+        newSumIdxAAM = sumIdxAAM * 2 - self.parentWriter.states.c.startVgprValu
+        tmpVgpr = self.parentWriter.vgprPool.checkOut(1)
+        module.add(VMovB32(dst=vgpr(tmpVgpr), src=vgpr("ValuC+%u"%(newSumIdxV)), comment="store Cr"))
+        module.add(VMulF32(dst=vgpr("ValuC+%u"%(newSumIdxV)), src0=vgpr("ValuC+%u"%(newSumIdxAAM)), src1=vgpr("ValuC+%u"%(newSumIdxV)), comment="*= alpha ( Cr = Ar * Cr)"))
+        module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV)), src0=(vgpr("ValuC+%u"%(newSumIdxAAM+1)).getMinus()), src1=vgpr("ValuC+%u"%(newSumIdxV+1)), comment="*= alpha ( Cr += -Ai * Ci )"))
+        module.add(VMulF32(dst=vgpr("ValuC+%u"%(newSumIdxV+1)), src0=vgpr("ValuC+%u"%(newSumIdxAAM)), src1=vgpr("ValuC+%u"%(newSumIdxV+1)), comment="*= alpha ( Ci = Ar * Ci)"))
+        module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV+1)), src0=vgpr("ValuC+%u"%(newSumIdxAAN+1)), src1=vgpr(tmpVgpr), comment="*= alpha ( Ci += Ai * Cr_backup )"))
+        self.parentWriter.vgprPool.checkIn(tmpVgpr)
+      # double precision complex
+      elif kernel["ProblemType"]["ComputeDataType"].isDoubleComplex():
+        newSumIdxV = sumIdxV * 4 - self.parentWriter.states.c.startVgprValu
+        newSumIdxAAM = sumIdxV * 4 - self.parentWriter.states.c.startVgprValu
+        vtmp1 = self.parentWriter.vgprPool.checkOutAligned(2, 2)
+        vtmp2 = self.parentWriter.vgprPool.checkOutAligned(2, 2)
+        # tmp1 = a.real * b.real
+        module.add(VMulF64(dst=vgpr(vtmp1,2), src0=vgpr("ValuC+%u"%(newSumIdxAAM+0),2), src1=vgpr("ValuC+%u"%(newSumIdxV+0),2)))
+        # tmp2 = a.imag * b.real
+        module.add(VMulF64(dst=vgpr(vtmp2,2), src0=vgpr("ValuC+%u"%(newSumIdxAAM+2),2), src1=vgpr("ValuC+%u"%(newSumIdxV+0),2)))
+        # c.real = a.real * b.real - a.imag * b.imag = tmp1 - a.imag * b.imag
+        module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdxV+0),2), src0=sgpr("ValuC+%u"%(newSumIdxAAM+2),2), src1=vgpr("ValuC+%u"%(newSumIdxV+2),2), src2=vgpr(vtmp1,2)))
+        # c.imag = a.real * b.imag + a.imag * b.real = a.real * b.imag + tmp2
+        module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdxV+2),2), src0=sgpr("ValuC+%u"%(newSumIdxAAM+0),2), src1=vgpr("ValuC+%u"%(newSumIdxV+2),2), src2=vgpr(vtmp2,2)))
+        self.parentWriter.vgprPool.checkIn(vtmp1)
+        self.parentWriter.vgprPool.checkIn(vtmp2)
+    return module
+
+
+  def _applyAlpha(self, kernel, gwvw, elementSumIdx, elementSumIdxAAM, elementIdx, tmpS01):
+    module = Module("applyAlpha")
+
+    if kernel["_GlobalAccumulation"] == 'MultipleBuffer':
+      return module
+
+    actAndMulLoop = 2 if kernel["ProblemType"]["ActAndMul"] else  1
+
     if self.parentWriter.do["ApplyAlpha"]:
-      for vi in range(0, gwvw):
-        sumIdxV = elementSumIdx[elementIdx] + vi
+      for aam in range(actAndMulLoop):
+        sumIdxList = elementSumIdxAAM if aam else elementSumIdx
+        for vi in range(0, gwvw):
+          sumIdxV = sumIdxList[elementIdx] + vi
 
-        if kernel["ProblemType"]["ComputeDataType"].isHalf() and not kernel["ProblemType"]["HighPrecisionAccumulate"]:
-          # (h,h,h,h,h,h), internal alpha is f16 (2-16bits)
-          if sumIdxV%2:
-            newSumIdx = sumIdxV // 2 - self.parentWriter.states.c.startVgprValu
-            module.add(VMulPKF16(dst=vgpr("ValuC+%u"%(newSumIdx)), src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%(newSumIdx)), comment="*= alpha sumIdx=%u vi=%u"%(elementSumIdx[elementIdx], vi)))
+          if kernel["ProblemType"]["ComputeDataType"].isHalf() and not kernel["ProblemType"]["HighPrecisionAccumulate"]:
+            # (h,h,h,h,h,h), internal alpha is f16 (2-16bits)
+            if sumIdxV%2:
+              newSumIdx = sumIdxV // 2 - self.parentWriter.states.c.startVgprValu
+              module.add(VMulPKF16(dst=vgpr("ValuC+%u"%(newSumIdx)), src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%(newSumIdx)), comment="*= alpha sumIdx=%u vi=%u"%(elementSumIdx[elementIdx], vi)))
 
-        # Int8 (TODO- Int8x4 not checked, but should be OK)
-        elif kernel["ProblemType"]["ComputeDataType"].isInt32():
-          newSumIdx = sumIdxV - self.parentWriter.states.c.startVgprValu
-          # below assume we use v_mul_lo_u32. Could also use v_mul_i32_i24.
-          # module.add(VMulI32I24(dst=vgpr("ValuC+%u"%newSumIdx), src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%newSumIdx), comment="*= alpha" )_
-          module.add(VMulLOU32(dst=vgpr("ValuC+%u"%newSumIdx), src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%newSumIdx), comment="*= alpha" ))
-          if self.parentWriter.db["ForceExpectedValue"]:
-            module.add(VMovB32(dst=vgpr("ValuC+%u"%newSumIdx), src=self.parentWriter.db["ValueCExpectedValue"], comment="force expected value" ))
-          if self.parentWriter.db["CheckValueC"]:
-            module.add(SMovB32(dst=sgpr(tmpS01), src=self.parentWriter.db["ValueCExpectedValue"], comment="Move expected value"))
-            module.add(self.parentWriter.getCmpAssert(self.parentWriter.asmAssert.eq, vgpr("ValuC+%u"%newSumIdx), sgpr(tmpS01)))
+          # Int8 (TODO- Int8x4 not checked, but should be OK)
+          elif kernel["ProblemType"]["ComputeDataType"].isInt32():
+            newSumIdx = sumIdxV - self.parentWriter.states.c.startVgprValu
+            # below assume we use v_mul_lo_u32. Could also use v_mul_i32_i24.
+            # module.add(VMulI32I24(dst=vgpr("ValuC+%u"%newSumIdx), src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%newSumIdx), comment="*= alpha" )_
+            module.add(VMulLOU32(dst=vgpr("ValuC+%u"%newSumIdx), src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%newSumIdx), comment="*= alpha" ))
+            if self.parentWriter.db["ForceExpectedValue"]:
+              module.add(VMovB32(dst=vgpr("ValuC+%u"%newSumIdx), src=self.parentWriter.db["ValueCExpectedValue"], comment="force expected value" ))
+            if self.parentWriter.db["CheckValueC"]:
+              module.add(SMovB32(dst=sgpr(tmpS01), src=self.parentWriter.db["ValueCExpectedValue"], comment="Move expected value"))
+              module.add(self.parentWriter.getCmpAssert(self.parentWriter.asmAssert.eq, vgpr("ValuC+%u"%newSumIdx), sgpr(tmpS01)))
 
-        # sgemm, HPA-bfgemm(b,b,b,b,s,s), and HPA-hgemm(h,h,h,h,s,s)
-        # (h,h,h,h,h,h) + HPA (will be converted to (h,h,h,h,s,s)), internal alpha is single
-        elif kernel["ProblemType"]["ComputeDataType"].isSingle() or (kernel["ProblemType"]["ComputeDataType"].isHalf() and kernel["ProblemType"]["HighPrecisionAccumulate"]):
+          # sgemm, HPA-bfgemm(b,b,b,b,s,s), and HPA-hgemm(h,h,h,h,s,s)
+          # (h,h,h,h,h,h) + HPA (will be converted to (h,h,h,h,s,s)), internal alpha is single
+          elif kernel["ProblemType"]["ComputeDataType"].isSingle() or (kernel["ProblemType"]["ComputeDataType"].isHalf() and kernel["ProblemType"]["HighPrecisionAccumulate"]):
 
-          if kernel["ProblemType"]["DataType"].isInt8() and kernel["ProblemType"]["HighPrecisionAccumulate"]:
-            module.add(VCvtI32toF32(dst=vgpr("ValuC+%u"%sumIdxV), src=vgpr("ValuC+%u"%sumIdxV), comment="convert to fp32" ))
+            if kernel["ProblemType"]["DataType"].isInt8() and kernel["ProblemType"]["HighPrecisionAccumulate"]:
+              module.add(VCvtI32toF32(dst=vgpr("ValuC+%u"%sumIdxV), src=vgpr("ValuC+%u"%sumIdxV), comment="convert to fp32" ))
 
-          newSumIdx = sumIdxV - self.parentWriter.states.c.startVgprValu
-          module.add(VMulF32(dst=vgpr("ValuC+%u"%newSumIdx), src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%newSumIdx), comment="*= alpha" ))
-          if self.parentWriter.db["ForceExpectedValue"]:
-            module.add(VMovB32(dst=vgpr("ValuC+%u"%newSumIdx), src=self.parentWriter.db["ValueCExpectedValue"], comment="force expected value" ))
-          if self.parentWriter.db["ForceVSerial"]:
-            module.add(VMovB32(dst=vgpr("ValuC+%u"%newSumIdx), src=vgpr("Serial"), comment="force expected value to serial" ))
-          if self.parentWriter.db["CheckValueC"]:
-            module.add(SMovB32(dst=sgpr(tmpS01), src=self.parentWriter.db["ValueCExpectedValue"], comment="Move expected value"))
-            module.add(self.parentWriter.getCmpAssert(self.parentWriter.asmAssert.eq, vgpr("ValuC+%u"%newSumIdx), sgpr(tmpS01)))
+            newSumIdx = sumIdxV - self.parentWriter.states.c.startVgprValu
+            module.add(VMulF32(dst=vgpr("ValuC+%u"%newSumIdx), src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%newSumIdx), comment="*= alpha" ))
+            if self.parentWriter.db["ForceExpectedValue"]:
+              module.add(VMovB32(dst=vgpr("ValuC+%u"%newSumIdx), src=self.parentWriter.db["ValueCExpectedValue"], comment="force expected value" ))
+            if self.parentWriter.db["ForceVSerial"]:
+              module.add(VMovB32(dst=vgpr("ValuC+%u"%newSumIdx), src=vgpr("Serial"), comment="force expected value to serial" ))
+            if self.parentWriter.db["CheckValueC"]:
+              module.add(SMovB32(dst=sgpr(tmpS01), src=self.parentWriter.db["ValueCExpectedValue"], comment="Move expected value"))
+              module.add(self.parentWriter.getCmpAssert(self.parentWriter.asmAssert.eq, vgpr("ValuC+%u"%newSumIdx), sgpr(tmpS01)))
 
-        # dgemm
-        elif kernel["ProblemType"]["ComputeDataType"].isDouble():
-          newSumIdx = sumIdxV * 2 - self.parentWriter.states.c.startVgprValu
-          module.add(VMulF64(dst=vgpr("ValuC+%u"%(newSumIdx),2), src0=sgpr("Alpha",2), src1=vgpr("ValuC+%u"%(newSumIdx),2), comment="*= alpha"))
+          # dgemm
+          elif kernel["ProblemType"]["ComputeDataType"].isDouble():
+            newSumIdx = sumIdxV * 2 - self.parentWriter.states.c.startVgprValu
+            module.add(VMulF64(dst=vgpr("ValuC+%u"%(newSumIdx),2), src0=sgpr("Alpha",2), src1=vgpr("ValuC+%u"%(newSumIdx),2), comment="*= alpha"))
 
-        # single precision complex
-        elif kernel["ProblemType"]["ComputeDataType"].isSingleComplex():
-          newSumIdx = sumIdxV * 2 - self.parentWriter.states.c.startVgprValu
-          tmpVgpr = self.parentWriter.vgprPool.checkOut(1)
-          module.add(VMovB32(dst=vgpr(tmpVgpr), src=vgpr("ValuC+%u"%(newSumIdx)), comment="store Cr"))
-          module.add(VMulF32(dst=vgpr("ValuC+%u"%(newSumIdx)), src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%(newSumIdx)), comment="*= alpha ( Cr = Ar * Cr)"))
-          module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdx)), src0=(sgpr("Alpha+1").getMinus()), src1=vgpr("ValuC+%u"%(newSumIdx+1)), comment="*= alpha ( Cr += -Ai * Ci )"))
-          module.add(VMulF32(dst=vgpr("ValuC+%u"%(newSumIdx+1)), src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%(newSumIdx+1)), comment="*= alpha ( Ci = Ar * Ci)"))
-          module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdx+1)), src0=sgpr("Alpha+1"), src1=vgpr(tmpVgpr), comment="*= alpha ( Ci += Ai * Cr_backup )"))
-          self.parentWriter.vgprPool.checkIn(tmpVgpr)
+          # single precision complex
+          elif kernel["ProblemType"]["ComputeDataType"].isSingleComplex():
+            newSumIdx = sumIdxV * 2 - self.parentWriter.states.c.startVgprValu
+            tmpVgpr = self.parentWriter.vgprPool.checkOut(1)
+            module.add(VMovB32(dst=vgpr(tmpVgpr), src=vgpr("ValuC+%u"%(newSumIdx)), comment="store Cr"))
+            module.add(VMulF32(dst=vgpr("ValuC+%u"%(newSumIdx)), src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%(newSumIdx)), comment="*= alpha ( Cr = Ar * Cr)"))
+            module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdx)), src0=(sgpr("Alpha+1").getMinus()), src1=vgpr("ValuC+%u"%(newSumIdx+1)), comment="*= alpha ( Cr += -Ai * Ci )"))
+            module.add(VMulF32(dst=vgpr("ValuC+%u"%(newSumIdx+1)), src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%(newSumIdx+1)), comment="*= alpha ( Ci = Ar * Ci)"))
+            module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdx+1)), src0=sgpr("Alpha+1"), src1=vgpr(tmpVgpr), comment="*= alpha ( Ci += Ai * Cr_backup )"))
+            self.parentWriter.vgprPool.checkIn(tmpVgpr)
 
-        # double precision complex
-        elif kernel["ProblemType"]["ComputeDataType"].isDoubleComplex():
-          newSumIdx = sumIdxV * 4 - self.parentWriter.states.c.startVgprValu
-          vtmp1 = self.parentWriter.vgprPool.checkOutAligned(2, 2)
-          vtmp2 = self.parentWriter.vgprPool.checkOutAligned(2, 2)
-          # tmp1 = a.real * b.real
-          module.add(VMulF64(dst=vgpr(vtmp1,2), src0=sgpr("Alpha+0",2), src1=vgpr("ValuC+%u"%(newSumIdx+0),2)))
-          # tmp2 = a.imag * b.real
-          module.add(VMulF64(dst=vgpr(vtmp2,2), src0=sgpr("Alpha+2",2), src1=vgpr("ValuC+%u"%(newSumIdx+0),2)))
-          # c.real = a.real * b.real - a.imag * b.imag = tmp1 - a.imag * b.imag
-          module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdx+0),2), src0=sgpr("Alpha+2",2), src1=vgpr("ValuC+%u"%(newSumIdx+2),2), src2=vgpr(vtmp1,2)))
-          # c.imag = a.real * b.imag + a.imag * b.real = a.real * b.imag + tmp2
-          module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdx+2),2), src0=sgpr("Alpha+0",2), src1=vgpr("ValuC+%u"%(newSumIdx+2),2), src2=vgpr(vtmp2,2)))
-          self.parentWriter.vgprPool.checkIn(vtmp1)
-          self.parentWriter.vgprPool.checkIn(vtmp2)
+          # double precision complex
+          elif kernel["ProblemType"]["ComputeDataType"].isDoubleComplex():
+            newSumIdx = sumIdxV * 4 - self.parentWriter.states.c.startVgprValu
+            vtmp1 = self.parentWriter.vgprPool.checkOutAligned(2, 2)
+            vtmp2 = self.parentWriter.vgprPool.checkOutAligned(2, 2)
+            # tmp1 = a.real * b.real
+            module.add(VMulF64(dst=vgpr(vtmp1,2), src0=sgpr("Alpha+0",2), src1=vgpr("ValuC+%u"%(newSumIdx+0),2)))
+            # tmp2 = a.imag * b.real
+            module.add(VMulF64(dst=vgpr(vtmp2,2), src0=sgpr("Alpha+2",2), src1=vgpr("ValuC+%u"%(newSumIdx+0),2)))
+            # c.real = a.real * b.real - a.imag * b.imag = tmp1 - a.imag * b.imag
+            module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdx+0),2), src0=sgpr("Alpha+2",2), src1=vgpr("ValuC+%u"%(newSumIdx+2),2), src2=vgpr(vtmp1,2)))
+            # c.imag = a.real * b.imag + a.imag * b.real = a.real * b.imag + tmp2
+            module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdx+2),2), src0=sgpr("Alpha+0",2), src1=vgpr("ValuC+%u"%(newSumIdx+2),2), src2=vgpr(vtmp2,2)))
+            self.parentWriter.vgprPool.checkIn(vtmp1)
+            self.parentWriter.vgprPool.checkIn(vtmp2)
     return module
 
   def _addSumAlphaWithCBeta(self, kernel, ss, gwvw, elementIdx, vc0, tmpVgpr, cvtVgprStruct):

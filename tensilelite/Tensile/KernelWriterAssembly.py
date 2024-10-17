@@ -1612,9 +1612,9 @@ class KernelWriterAssembly(KernelWriter):
       moduleWg.addComment0("init: add vgpr [%u...%u) to pool" % \
                           (self.states.c.startVgprValu, self.states.c.startVgprValu+self.states.c.numVgprValu))
 
-      numCAgprs = self.states.numCAgprs
-      self.agprPool.add(0, numCAgprs, "ValuC-Block")
-      moduleWg.addComment0("init: add agpr [%u...%u) to pool" % (0, numCAgprs))
+      numAgprs = (self.states.numCAgprs * 2) if kernel["ProblemType"]["ActAndMul"] else self.states.numCAgprs
+      self.agprPool.add(0, numAgprs, "ValuC-Block")
+      moduleWg.addComment0("init: add agpr [%u...%u) to pool" % (0, numAgprs))
 
       if kernel["StreamK"] == 0:
         moduleWg.add(self.localReadAddresses(kernel, tPA, tPB, tPM))
@@ -3717,12 +3717,12 @@ class KernelWriterAssembly(KernelWriter):
     module = Module("initC")
     self.vgprPool.remove(self.states.c.startVgprValu, self.states.c.numVgprValu, "ValuC")
     module.addComment1("initC: remove ValuC vgpr buffer [%u...%u) from pool"%(self.states.c.startVgprValu, self.states.c.startVgprValu+self.states.c.numVgprValu))
-    numCAgprs = self.states.numCAgprs
-    self.agprPool.remove(0, numCAgprs, "ValuC")
-    module.addComment1("initC: remove acc vgpr buffer [%u...%u) from pool"%(0, numCAgprs))
+    numAgprs = (self.states.numCAgprs * 2) if kernel["ProblemType"]["ActAndMul"] else self.states.numCAgprs
+    self.agprPool.remove(0, numAgprs, "ValuC")
+    module.addComment1("initC: remove acc vgpr buffer [%u...%u) from pool"%(0, numAgprs))
     self.vgprPool.remove(self.states.a.startVgprValu , self.states.lastValuAB - self.states.a.startVgprValu , "ValuAB")
     module.addComment1("initC: remove ValuA/B vgpr buffer [%u...%u) from pool"%(self.states.a.startVgprValu , self.states.lastValuAB))
-    numCVgpr = max(self.states.c.numVgprValu, numCAgprs)
+    numCVgpr = max(self.states.c.numVgprValu, self.states.numCAgprs)
 
     if kernel["LdsInitCVgprs"]:
       tmpAddr = self.vgprPool.checkOut(1,"tmp vgpr for lds init C registers")
@@ -4861,9 +4861,11 @@ class KernelWriterAssembly(KernelWriter):
       #instCycles = kernel["MatrixInstM"] // 2 # 32x32 is 64 cycles, 16x16 is 32 cycles, 4x4 is 8 cycles
       #module.add(SNop(waitState=instCycles))
       module.addComment1("Mapping of Acc register -> C Vgpr register")
-      self.codes.accVgprRead = mapAcctoArchRegs(kernel, write=False)
+      self.codes.accVgprRead    = mapAcctoArchRegs(kernel, write=False, aam=False)
+      if kernel["ProblemType"]["ActAndMul"]:
+        self.codes.accAAMVgprRead = mapAcctoArchRegs(kernel, write=False, aam=True)
       if kernel["StreamK"] > 0 and kernel["StreamKAtomic"] == 0:
-        self.codes.accVgprWrite = mapAcctoArchRegs(kernel, write=True)
+        self.codes.accVgprWrite = mapAcctoArchRegs(kernel, write=True, aam=False)
       if kernel["MIArchVgpr"]:
         module.addComment1("Multiply MI out register with Alpha -> C Vgpr register")
         self.codes.mulAlphaMultipleBuffer = moveMIoutToArch(kernel, self.states.startVgprAlphaTmp)
@@ -9920,6 +9922,7 @@ class KernelWriterAssembly(KernelWriter):
         actTempSgpr = tmpSgpr # Get sgpr start address, should always be the same
         elementSgprs = tmpSgpr + ss.cfg.numTempSgprPerBatch
         codeAccVgprRead = deepcopy(self.codes.accVgprRead) if self.states.serializedStore else None
+        codeAAMAccVgprRead = deepcopy(self.codes.accAAMVgprRead) if self.states.serializedStore else None
         mulAlpha = self.codes.mulAlphaMultipleBuffer if (kernel["_GlobalAccumulation"] == 'MultipleBuffer' or kernel["_GlobalAccumulation"] == 'MultipleBufferSingleKernel') else self.codes.mulAlphaOther
         codeMulAlpha = deepcopy(mulAlpha) if self.states.serializedStore else None
 
@@ -9957,7 +9960,7 @@ class KernelWriterAssembly(KernelWriter):
               elementsThisBatch, self.vgprs.addrE, self.vgprs.addrD, self.vgprs.addrC, self.vgprs.addrBias, \
               self.vgprs.addrScaleAVec, self.vgprs.addrScaleBVec, self.vgprs.addrScaleAlphaVec, \
               biasLocalBarrierInit, tmpVgpr, cvtVgprStruct, activationSetPCStruct, \
-              activationTypeStr, elementSgprs, tmpSgpr, codeAccVgprRead, codeMulAlpha, factorDim))
+              activationTypeStr, elementSgprs, tmpSgpr, codeAccVgprRead, codeAAMAccVgprRead, codeMulAlpha, factorDim))
           biasLocalBarrierInit = True
 
         ss.resetState()
@@ -10497,7 +10500,7 @@ class KernelWriterAssembly(KernelWriter):
       batchElements, addrE, addrD, addrC, addrBias, \
       addrScaleAVec, addrScaleBVec, addrScaleAlphaVec, biasLocalBarrierInit: bool, \
       tmpVgpr, cvtVgprStruct, activationSetPCStruct, activationTypeStr, \
-      batchElementSgprs, tmpSgpr, codeAccVgprRead, codeMulAlpha, factorDim) -> Module:
+      batchElementSgprs, tmpSgpr, codeAccVgprRead, codeAAMAccVgprRead, codeMulAlpha, factorDim) -> Module:
       packdata = Component.PackData.find(self)
       gwriter  = Component.GlobalWriteComponents.find(self)
       return gwriter(kernel, tPA, tPB, activation, ss, \
@@ -10505,7 +10508,7 @@ class KernelWriterAssembly(KernelWriter):
         batchElements, addrE, addrD, addrC, addrBias, \
         addrScaleAVec, addrScaleBVec, addrScaleAlphaVec, biasLocalBarrierInit, \
         tmpVgpr, cvtVgprStruct, activationSetPCStruct, activationTypeStr, \
-        batchElementSgprs, tmpSgpr, codeAccVgprRead, codeMulAlpha, packdata, self, factorDim)
+        batchElementSgprs, tmpSgpr, codeAccVgprRead, codeAAMAccVgprRead, codeMulAlpha, packdata, self, factorDim)
 
   ##############################################################################
   def openPrefetchGlobalRead2(self, kernel):
