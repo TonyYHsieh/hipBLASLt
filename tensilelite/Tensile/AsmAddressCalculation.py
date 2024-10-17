@@ -546,8 +546,8 @@ class AddrCalculation:
                 SAndX = SAndB64 if wavefrontSize == 64 else SAndB32
                 module.add(SAndX(dst=sgpr(mask,laneSGPRCount), src0=sgpr(tmpS01,laneSGPRCount), src1=sgpr(mask,laneSGPRCount), comment="in0 && in1" ))
         else:
-            module.add(VCmpLtU32(dst=sgpr(tmpS01,laneSGPRCount), src0=vgpr(self.coord0Vgpr), src1=sgpr("SizesFree+0"), comment="coord0 < size0" ))
-            module.add(VCmpLtU32(dst=sgpr(tmpS23,laneSGPRCount), src0=vgpr(self.coord1Vgpr), src1=sgpr("SizesFree+1"), comment="coord1 < size1" ))
+            module.add(VCmpLtU32(dst=sgpr(tmpS01,laneSGPRCount), src0=vgpr(self.coord0Vgpr), src1=kw.sizeRef(0), comment="coord0 < size0" ))
+            module.add(VCmpLtU32(dst=sgpr(tmpS23,laneSGPRCount), src0=vgpr(self.coord1Vgpr), src1=kw.sizeRef(1), comment="coord1 < size1" ))
             SAndX = SAndB64 if wavefrontSize == 64 else SAndB32
             module.add(SAndX(dst=sgpr(mask,laneSGPRCount), src0=sgpr(tmpS01,laneSGPRCount), src1=sgpr(tmpS23,laneSGPRCount), comment="in0 && in1" ))
 
@@ -643,15 +643,15 @@ class AddrCalculation:
                 sTmp2 = tmpS01+sgprCnt
                 # check conditions
                 module.add(VBfiB32(dst=vgpr(vTmp1), src0=vw-1, src1=0, src2=vgpr(self.coord1Vgpr), comment="coord1 & ~(vw-1)"))
-                module.add(VBfiB32(dst=vgpr(vTmp2), src0=vw-1, src1=0, src2=sgpr("SizesFree+%u"%tPB["idx"]), comment="sizeFree & ~(vw-1)"))
+                module.add(VBfiB32(dst=vgpr(vTmp2), src0=vw-1, src1=0, src2=self.kernelWriter.sizeRef(tPB["idx"]) , comment="sizeFree & ~(vw-1)"))
                 module.add(VCmpEQU32(dst=sgpr(sTmp1,sgprCnt), src0=vgpr(vTmp1), src1=vgpr(vTmp2), comment="if coord1 is in edge glvw"))
-                module.add(VAndB32(dst=vgpr(vTmp2), src0=sgpr("SizesFree+%u"%tPB["idx"]), src1=vw-1, comment="sizeFree mod VW"))
+                module.add(VAndB32(dst=vgpr(vTmp2), src0=self.kernelWriter.sizeRef(tPB["idx"]), src1=vw-1, comment="sizeFree mod VW"))
                 module.add(VCmpGtU32(dst=sgpr(sTmp2,sgprCnt), src0=vgpr(vTmp2), src1=0, comment="this problem is not multiple size of glvw"))
                 SAndBX = SAndB64 if waveSize == 64 else SAndB32
                 module.add(SAndBX(dst=sgpr(sTmp1,sgprCnt), src0=sgpr(sTmp1,sgprCnt), src1=sgpr(sTmp2,sgprCnt), comment="AND both conditions"))
                 # calculate new coord
                 module.add(VAddU32(dst=vgpr(vTmp1), src0=vgpr(self.coord1Vgpr), src1=vgpr(vTmp2), comment="shift coord1"))
-                module.add(VBfiB32(dst=vgpr(vTmp1), src0=vw-1, src1=vgpr(vTmp1), src2=sgpr("SizesFree+%u"%tPB["idx"]), comment="new coord1 = (shift coord1 & (vw-1)) |  (sizeFree & ~(vw-1))"))
+                module.add(VBfiB32(dst=vgpr(vTmp1), src0=vw-1, src1=vgpr(vTmp1), src2=self.kernelWriter.sizeRef(tPB["idx"]), comment="new coord1 = (shift coord1 & (vw-1)) |  (sizeFree & ~(vw-1))"))
                 module.add(VSubI32(dst=vgpr(vTmp2), src0=vgpr(vTmp1), src1=vgpr(self.coord1Vgpr), comment="shift how many column"))
                 module.add(VCndMaskB32(dst=vgpr(self.coord1Vgpr), src0=vgpr(self.coord1Vgpr), src1=vgpr(vTmp1), \
                               src2=sgpr(sTmp1,sgprCnt), comment="set new coord1 if meet conditions" ))
