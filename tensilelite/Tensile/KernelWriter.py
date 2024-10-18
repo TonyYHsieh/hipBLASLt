@@ -3949,6 +3949,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
     if kernel["BufferStore"] and (kernel["GlobalSplitUAlgorithm"] == 'MultipleBufferSingleKernel'):
       self.defineSgpr("WSDstart", 2, 2)
 
+    if kernel["ProblemType"]["ActAndMul"]:
+      self.defineSgpr("SizeIHalf", 1)
+
     # Calculate numSgpr preload
     self.states.preloadGuard = []
     self.states.numSgprPreload = 0

@@ -627,14 +627,16 @@ class AddrCalculation:
                 sizeBoundary[1] = \
                     sgpr("PackedSize1") if len(kernel["PackedC1IndicesX"]) > 1 \
                     else kw.sizeRef(kernel["ProblemType"]["Index1"])
+                if kernel["ProblemType"]["ActAndMul"]:
+                    sizeBoundary[0] = sgpr("SizeIHalf")
 
                 module.add(VCmpLtU32(dst=sgpr(tmpS01,laneSGPRCount), src0=vgpr(self.coord0Vgpr), src1=sizeBoundary[0], comment="coord0 < size0" ))
                 module.add(VCmpLtU32(dst=sgpr(mask,laneSGPRCount), src0=vgpr(self.coord1Vgpr), src1=sizeBoundary[1], comment="coord1 < size1" ))
                 SAndX = SAndB64 if wavefrontSize == 64 else SAndB32
                 module.add(SAndX(dst=sgpr(mask,laneSGPRCount), src0=sgpr(tmpS01,laneSGPRCount), src1=sgpr(mask,laneSGPRCount), comment="in0 && in1" ))
         else:
-            module.add(VCmpLtU32(dst=sgpr(tmpS01,laneSGPRCount), src0=vgpr(self.coord0Vgpr), src1=sgpr("SizesFree+0"), comment="coord0 < size0" ))
-            module.add(VCmpLtU32(dst=sgpr(tmpS23,laneSGPRCount), src0=vgpr(self.coord1Vgpr), src1=sgpr("SizesFree+1"), comment="coord1 < size1" ))
+            module.add(VCmpLtU32(dst=sgpr(tmpS01,laneSGPRCount), src0=vgpr(self.coord0Vgpr), src1=sgpr("SizeI"), comment="coord0 < size0" ))
+            module.add(VCmpLtU32(dst=sgpr(tmpS23,laneSGPRCount), src0=vgpr(self.coord1Vgpr), src1=sgpr("SizeJ"), comment="coord1 < size1" ))
             SAndX = SAndB64 if wavefrontSize == 64 else SAndB32
             module.add(SAndX(dst=sgpr(mask,laneSGPRCount), src0=sgpr(tmpS01,laneSGPRCount), src1=sgpr(tmpS23,laneSGPRCount), comment="in0 && in1" ))
 

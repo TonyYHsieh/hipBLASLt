@@ -479,8 +479,6 @@ class KernelWriterAssembly(KernelWriter):
       numberOfSgpr = self.states.a.numVgprGlobalReadOffsets if needFirstSgprOffset else (self.states.a.numVgprGlobalReadOffsets-1)
       if numberOfSgpr > 0:
         module.add(self.defineSgpr("ScalarGlobalReadOffsetA", numberOfSgpr))
-        if kernel["ProblemType"]["ActAndMul"]:
-          module.add(self.defineSgpr("ScalarGlobalReadOffsetAAM", numberOfSgpr))
 
       needFirstSgprOffset = kernel["DirectToLdsB"] and kernel["UseInstOffsetForGRO"]
       numberOfSgpr = self.states.b.numVgprGlobalReadOffsets if needFirstSgprOffset else (self.states.b.numVgprGlobalReadOffsets-1)
@@ -1635,8 +1633,13 @@ class KernelWriterAssembly(KernelWriter):
         dReg   = qReg + 1
         divReg = qReg + 2
         rReg   = qReg + 3
+
+        sizeI = sgpr("SizeI")
+        if kernel["ProblemType"]["ActAndMul"]:
+          moduleWg.add(SLShiftRightB32(dst=sgpr("SizeIHalf"), src=sgpr("SizeI"), shiftHex=1, comment="extract abit"))
+          sizeI = sgpr("SizeIHalf")
         moduleWg.add(VMovB32(dst=vgpr(divReg), src="MT0", comment="set MT0 into sgpr"))
-        moduleWg.add(VMovB32(dst=vgpr(dReg), src=self.sizeRef(0), comment="set %s size" % globalParameters["IndexChars"][0]))
+        moduleWg.add(VMovB32(dst=vgpr(dReg), src=sizeI, comment="set %s size" % globalParameters["IndexChars"][0]))
         moduleWg.add(vectorUInt32CeilDivideAndRemainder(qReg=qReg, dReg=dReg, divReg=divReg, rReg=rReg, doRemainder=False))
         moduleWg.add(VMovB32(dst=vgpr(divReg), src="MT1", comment="set MT1 into sgpr"))
         moduleWg.add(VMovB32(dst=vgpr(dReg), src=self.sizeRef(1), comment="set %s size" % globalParameters["IndexChars"][1]))
@@ -2530,7 +2533,8 @@ class KernelWriterAssembly(KernelWriter):
   def graFinalOffsets(self, kernel, tP):
     module = Module("graFinalOffsets")
     tc = tP["tensorChar"]
-    tmp = self.vgprPool.checkOut(3, "tmp", self.states.preventVgprOverflowDuringNewTile)
+    vgprTmp = self.vgprPool.checkOut(3, "vgprTmp", self.states.preventVgprOverflowDuringNewTile)
+    sgprTmp = self.sgprPool.checkOut(1, "sgprTmp")
     swapPerpPara = (((tP["isA"] or tP["isB"]) and kernel["DirectToVgpr%s"%tc]) and (not tP["tlu"]) and tP["nrp"] > 1)
 
     if not swapPerpPara:
@@ -2540,7 +2544,7 @@ class KernelWriterAssembly(KernelWriter):
           for para in range(0, tP["nrc"]):
             for sPara in range(0, tP["nrcv"]//tP["nrcvpi"]):
               # single loop
-              singleModule, graIdx = self.graFinalOffsetsSingleLoop(kernel, tP, tc, tmp, graIdx, perp, sPerp, para, sPara)
+              singleModule, graIdx = self.graFinalOffsetsSingleLoop(kernel, tP, tc, vgprTmp, graIdx, perp, sPerp, para, sPara)
               module.add(singleModule)
     else:
       # swap para and perp
@@ -2550,7 +2554,7 @@ class KernelWriterAssembly(KernelWriter):
           for perp in range(0, tP["nrp"]):
             for sPerp in range(0, tP["nrpv"]):
               # single loop
-              singleModule, graIdx = self.graFinalOffsetsSingleLoop(kernel, tP, tc, tmp, graIdx, perp, sPerp, para, sPara)
+              singleModule, graIdx = self.graFinalOffsetsSingleLoop(kernel, tP, tc, vgprTmp, graIdx, perp, sPerp, para, sPara)
               module.add(singleModule)
 
     if kernel["ProblemType"]["ActAndMul"] and tP["isA"]:
@@ -2559,9 +2563,8 @@ class KernelWriterAssembly(KernelWriter):
       size    = self.sizeRef(idx0)
       stride  = self.strideRef(tc, idx0)
       module.addComment1("global read addresses: final offsets aam")
-      module.add(SLShiftRightB32(dst=sgpr(tmp), src=size, shiftHex=0x1, comment="(Size%c / 2) * Stride%c * BpeGRA" % (idxChar, idxChar)))
-      module.add(SMulI32(dst=sgpr(tmp), src0=sgpr(tmp), src1=stride, comment="(Size%c / 2) * Stride%c * BpeGRA" % (idxChar, idxChar)))
-      module.add(SMulI32(dst=sgpr(tmp), src0=sgpr(tmp), src1=tP["bpeGR"], comment="(Size%c / 2) * Stride%c * BpeGRA" % (idxChar, idxChar)))
+      module.add(SMulI32(dst=sgpr(sgprTmp), src0=sgpr("SizeIHalf"), src1=stride, comment="SizeIHalf * StrideI * BpeGRA"))
+      module.add(SMulI32(dst=sgpr(sgprTmp), src0=sgpr(sgprTmp), src1=tP["bpeGR"], comment="SizeIHalf * StrideI * BpeGRA"))
 
       graIdx = 0
       for perp in range(0, tP["nrp"] * tP["nrpv"] * tP["nrc"] * (tP["nrcv"]//tP["nrcvpi"])):
@@ -2569,7 +2572,7 @@ class KernelWriterAssembly(KernelWriter):
           if kernel["BufferLoad"]:
             src = "GlobalReadOffsetA+%u" % graIdx
             dst = "GlobalReadOffsetAAM+%u" % graIdx
-            module.add(VAddU32(dst=vgpr(dst), src0=vgpr(src), src1=sgpr(tmp), comment="Add ActAndMul offset"))
+            module.add(VAddU32(dst=vgpr(dst), src0=vgpr(src), src1=sgpr(sgprTmp), comment="Add ActAndMul offset"))
         graIdx += self.states.rpgo if kernel["BufferLoad"] else self.states.rpga
 
     self.vgprPool.checkIn(tP["gpr"]["lwoT"])
@@ -2601,7 +2604,8 @@ class KernelWriterAssembly(KernelWriter):
       self.vgprPool.checkIn(tP["vgprPackedOffsets"])
       tP["vgprPackedOffsets"] = None
 
-    self.vgprPool.checkIn(tmp)
+    self.vgprPool.checkIn(vgprTmp)
+    self.sgprPool.checkIn(sgprTmp)
     #if tP["isB"]:
     #  module.add(self.getBomb(0x100))
 
@@ -5051,6 +5055,7 @@ class KernelWriterAssembly(KernelWriter):
             vgprPerSet0Group = 4
           else:
             vgprPerSet0Group = 2
+
           numSet0GroupA = vgprPerInputA//vgprPerSet0Group
           for group in range(0, numSet0GroupA):
             if numSet0GroupA > 1 or (is_wmma_v2 and vgprPerInputA > 2):
@@ -5098,6 +5103,25 @@ class KernelWriterAssembly(KernelWriter):
                 for iui in range(0, innerUnroll):
                   bStr = vgpr(self.generateSrcStrForMFMA(kernel, tPB, innerUnroll, vregSetIdx, vgprPerInputB, m, u, iui, b, bk=bk + group*vgprPerSet0Group), 1)
                   shiftK.add(VCndMaskB32(dst=bStr, src0=bStr, src1=hex(0), src2=sgpr(tmpSgprX2, self.states.laneSGPRCount), comment="set 0 if K_idx >= sizeL"))
+
+          if kernel["ProblemType"]["ActAndMul"]:
+            tPA["ActAndMul"] = True
+            numSet0GroupA = vgprPerInputA//vgprPerSet0Group
+            for group in range(0, numSet0GroupA):
+              if numSet0GroupA > 1 or (is_wmma_v2 and vgprPerInputA > 2):
+                if group == 0:
+                  shiftK.add(staticMultiply(vgpr(kReg), vgpr(kReg), numMIInput, tmpSgprInfo))
+                else:
+                  shiftK.add(VAddU32(vgpr(kReg), vgpr(kReg), numMIInput//numSet0GroupA, "add part of K"))
+                if kernel["LocalSplitU"] > 1:
+                  shiftK.add(SMinI32(dst=sgpr(loopCntSgpr), src0=sgpr(loopCounterName), src1=sgpr("LSUTailLoopOffset"), comment="check lsu bound"))
+                shiftK.add(VCmpGEI32(dst=sgpr(tmpSgprX2, self.states.laneSGPRCount), src0=vgpr(kReg), src1=sgpr(loopCntSgpr), comment="check K index >= Size L"))
+              for bk in range(0, vgprPerSet0Group):
+                for a in range(0, kernel["MIWaveTileA"]):
+                  for iui in range(0, innerUnroll):
+                    aStr = vgpr(self.generateSrcStrForMFMA(kernel, tPA, innerUnroll, vregSetIdx, vgprPerInputA, m, u, iui, a, bk=bk + group * vgprPerSet0Group), 1)
+                    shiftK.add(VCndMaskB32(dst=aStr, src0=aStr, src1=hex(0), src2=sgpr(tmpSgprX2, self.states.laneSGPRCount), comment="set 0 if K_idx >= sizeL"))
+            tPA["ActAndMul"] = False
 
           # replace 0 for same thread
           if numMIInput > 1 and kernel["AssertSummationElementMultiple"] < 8:
@@ -5998,6 +6022,7 @@ class KernelWriterAssembly(KernelWriter):
 
     def globalReadGuardKBody(tP):
       tc = tP["tensorChar"]
+      tcAAM = "AAM" if tP["ActAndMul"] else tc
       self.vgprs.globalReadRegisters[tc] = []
       tcDataType = "" if tc == "Metadata" else tc
       graIdx = 0
@@ -6109,9 +6134,9 @@ class KernelWriterAssembly(KernelWriter):
                   # of the srd limit - so base+limit stays constant and also points at maximum
                   # element that should be accessed.
                   if kernel["_UseSgprForGRO"]:
-                    offsetVgpr = "GlobalReadOffset%s+0"%(tc)
+                    offsetVgpr = "GlobalReadOffset%s+0"%(tcAAM)
                   else:
-                    offsetVgpr = "GlobalReadOffset%s+%u"%(tc, graIdx)
+                    offsetVgpr = "GlobalReadOffset%s+%u"%(tcAAM, graIdx)
 
                   # Vgpr for GRO
                   if not kernel["_UseSgprForGRO"]:
@@ -6170,7 +6195,7 @@ class KernelWriterAssembly(KernelWriter):
                     destVgpr=0
                     self.vgprs.globalReadRegisters[tc].append(0)
                   else:
-                    destVgpr="G2L%s+%u+%u"%(tc, g2lIdx + tP["shiftGR"] if not tP["isM"] else graIdx, regIdx+eccOffset)
+                    destVgpr="G2L%s+%u+%u"%(tcAAM, g2lIdx + tP["shiftGR"] if not tP["isM"] else graIdx, regIdx+eccOffset)
                     self.vgprs.globalReadRegisters[tc].append( (g2lIdx + tP["shiftGR"] if not tP["isM"] else graIdx) + regIdx+eccOffset)
 
                   offset = r * tP["bpeGR"] + instOffset
@@ -6228,7 +6253,7 @@ class KernelWriterAssembly(KernelWriter):
                       src1=vgpr(maxAddrVgpr,2), \
                       comment="addr < maxAddr"))
                   hi16=(kernel["ProblemType"]["DataType%s"%tcDataType].isHalf() or kernel["ProblemType"]["DataType%s"%tcDataType].isBFloat16()) and r%2==1
-                  destVgpr="G2L%s+%u+%u"%(tc, g2lIdx, regIdx)
+                  destVgpr="G2L%s+%u+%u"%(tcAAM, g2lIdx, regIdx)
                   # load one element from address
                   module.add(self.chooseGlobalRead(False, \
                             tP["bpeGR"], destVgpr=destVgprHi if (hi16 and destVgprHi != None) else destVgpr, \
@@ -6346,6 +6371,13 @@ class KernelWriterAssembly(KernelWriter):
     if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
       if tP["is_sparse"]:
           globalReadGuardKBody(tP["tpsMetadata"])
+
+    if kernel["ProblemType"]["ActAndMul"] and tP["isA"]:
+      tP["ActAndMul"] = True
+      globalReadGuardKBody(tP)
+      if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"] and tP["is_sparse"]:
+        globalReadGuardKBody(tP["tpsMetadata"])
+      tP["ActAndMul"] = False
 
     if self.db["ConservativeWaitCnt"] & 0x1:
         module.add(SBarrier(comment="debug"))
@@ -6504,10 +6536,10 @@ class KernelWriterAssembly(KernelWriter):
                   soffset = "0"
                 # instruction offset with Sgpr for GRO
                 elif kernel["DirectToLds%s"%tc] and kernel["UseInstOffsetForGRO"]:
-                  soffset = sgpr("ScalarGlobalReadOffset%s+%u"%(tcAAM, graIdx))
+                  soffset = sgpr("ScalarGlobalReadOffset%s+%u"%(tc, graIdx))
                 # Sgpr for GRO
                 else:
-                  soffset = "0" if graIdx == 0 else sgpr("ScalarGlobalReadOffset%s+%u"%(tcAAM, graIdx-1))
+                  soffset = "0" if graIdx == 0 else sgpr("ScalarGlobalReadOffset%s+%u"%(tc, graIdx-1))
 
                 unrollMirrorWithSoffset = kernel["ProblemType"]["IndicesSummation"][self.states.unrollIdx] in problemType["MirrorDims%s"%tc] and soffset != "0"
                 # ScalarGlobalReadOffset should be negative value with unroll mirroring.
@@ -6848,7 +6880,7 @@ class KernelWriterAssembly(KernelWriter):
     offsetBytes += tP["localWriteSwapByteOffset"]
 
     if tP["ActAndMul"] and tP["isA"]:
-      offsetBytes =+ kernel["LdsNumElementsAlignedAAM"]
+      offsetBytes += kernel["LdsNumElementsAlignedAAM"]
 
     #print("offsetBytes", offsetBytes)
     #print "offset", offset
@@ -8927,6 +8959,9 @@ class KernelWriterAssembly(KernelWriter):
     sizeBoundary[1] = \
         sgpr("PackedSize1") if len(kernel["PackedC1IndicesX"]) > 1 \
         else self.sizeRef(kernel["ProblemType"]["Index1"])
+
+    if kernel["ProblemType"]["ActAndMul"]:
+      sizeBoundary[0] = sgpr("SizeIHalf")
 
     module.add(scalarStaticDivideAndRemainder(tmpS1, tmpS0, sizeBoundary[0], kernel["MacroTile0"], \
       RegisterPoolResource(tmpS23, 2), 2))
