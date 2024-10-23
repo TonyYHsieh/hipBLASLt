@@ -4017,6 +4017,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
     self.defineSgpr("NumWorkGroups0", 1)
     self.defineSgpr("NumWorkGroups1", 1)
 
+    if kernel["ActivationFuncCall"]:
+      self.defineSgpr("ActBack", 2, 2)
+
     if kernel["BufferStore"] and (kernel["GlobalSplitUAlgorithm"] == 'MultipleBufferSingleKernel'):
       self.defineSgpr("WSDstart", 2, 2)
 
@@ -4042,7 +4045,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     # Get kernel argument start here
     ###################################
     # get aligned Sgpr index for wider s_load
-    self.defineSgpr("SizesFree", self.states.numSgprSizesFree,4)
+    self.defineSgpr("SizesFree", self.states.numSgprSizesFree, 4)
     # fill empty Sgpr slot caused by Sgpr alignment,
     # because we need following defineSgpr use continuous sgpr
     SgprSlot = []
