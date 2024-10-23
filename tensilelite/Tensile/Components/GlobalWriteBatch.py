@@ -576,6 +576,7 @@ class GlobalWriteBatchWriter:
       addrScaleAlphaVecVgpr = addrCalc.addrScaleAlphaVecVgpr
       data     = self.ss.elementData[elementIdx]
       dataBeta = self.ss.elementData[elementIdx]
+      dataAAM  = self.ss.elementDataAAM[elementIdx] if self.kernel["ProblemType"]["ActAndMul"] else None
       dataE    = self.ss.elementDataE[elementIdx]
       dataBias = self.ss.elementDataBias[elementIdx]
       dataScaleAVec = self.ss.elementDataScaleAVec[elementIdx]
@@ -592,25 +593,27 @@ class GlobalWriteBatchWriter:
         if self.kernel["_GlobalAccumulation"] == "MultipleBufferSingleKernel":
           module.addComment1("edge Protect")
       # create code Module to push mov vgpr,acc instructions
+      issued = ceil(self.kernel["ProblemType"]["DestDataType"].numBytes() * self.gwvw / 16)
+      issued = (issued * 2) if self.kernel["ProblemType"]["ActAndMul"] else issued
       if self.beta:
         module.add(addrCalc.emitLdChange(self.kernel, self.ss, 'C', self.edge, self.beta, mask, bufferOOB, (elementIdx == 0), self.tmpVgpr, self.tmpSgpr, addrCVgpr, self.addrC, 0))
         if dataBeta not in loadedDataBeta:
           if self.kernel["GroupLoadStore"]:
-            loadInputCode.add(self.parentWriter.readInput(self.kernel, self.ss, 'C', self.kernel["ProblemType"]["DestDataType"], addrCalc, vc0, data, self.gwvw, addrCVgpr, self.tmpS01))
+            loadInputCode.add(self.parentWriter.readInput(self.kernel, self.ss, 'C', self.kernel["ProblemType"]["DestDataType"], addrCalc, vc0, data, dataAAM, self.gwvw, addrCVgpr, self.tmpS01))
           else:
-            module.add(self.parentWriter.readInput(self.kernel, self.ss, 'C', self.kernel["ProblemType"]["DestDataType"], addrCalc, vc0, data, self.gwvw, addrCVgpr, self.tmpS01))
-          loadedDataBeta[dataBeta] = ceil(self.kernel["ProblemType"]["DestDataType"].numBytes() * self.ss.cfg.gwvw / 16)
-          self.loadsBetaIssued += ceil(self.kernel["ProblemType"]["DestDataType"].numBytes() * self.gwvw / 16)
-      self.betaLoadIssued.append(len(loadedDataBeta) * ceil(self.kernel["ProblemType"]["DestDataType"].numBytes() * self.ss.cfg.gwvw / 16))
+            module.add(self.parentWriter.readInput(self.kernel, self.ss, 'C', self.kernel["ProblemType"]["DestDataType"], addrCalc, vc0, data, dataAAM, self.gwvw, addrCVgpr, self.tmpS01))
+          loadedDataBeta[dataBeta] = issued
+          self.loadsBetaIssued += issued
+      self.betaLoadIssued.append(len(loadedDataBeta) * issued)
 
       if (self.kernel["ProblemType"]["UseE"] and self.kernel["ProblemType"]["Gradient"] and self.kernel["ProblemType"]["ActivationType"] != 'none') and (self.kernel["GlobalSplitU"] == 1):
         module.add(addrCalc.emitLdChange(self.kernel, self.ss, 'E', self.edge, self.beta, mask, bufferOOB, (elementIdx == 0), self.tmpVgpr, self.tmpSgpr, addrEVgpr, self.addrE, 0))
         if dataE not in loadedDataE:
           loadOffset = int((self.kernel["ProblemType"]["ComputeDataType"].numRegisters() - self.kernel["ProblemType"]["DataTypeE"].numRegisters()) * self.ss.cfg.gwvw)
           if self.kernel["GroupLoadStore"]:
-            loadInputCode.add(self.parentWriter.readInput(self.kernel, self.ss, 'E', self.kernel["ProblemType"]["DataTypeE"], addrCalc, vc0, dataE + loadOffset, self.gwvw, addrEVgpr, self.tmpS01))
+            loadInputCode.add(self.parentWriter.readInput(self.kernel, self.ss, 'E', self.kernel["ProblemType"]["DataTypeE"], addrCalc, vc0, dataE + loadOffset, None, self.gwvw, addrEVgpr, self.tmpS01))
           else:
-            module.add(self.parentWriter.readInput(self.kernel, self.ss, 'E', self.kernel["ProblemType"]["DataTypeE"], addrCalc, vc0, dataE + loadOffset, self.gwvw, addrEVgpr, self.tmpS01))
+            module.add(self.parentWriter.readInput(self.kernel, self.ss, 'E', self.kernel["ProblemType"]["DataTypeE"], addrCalc, vc0, dataE + loadOffset, None, self.gwvw, addrEVgpr, self.tmpS01))
           loadedDataE[dataE] = ceil(self.kernel["ProblemType"]["DataTypeE"].numBytes() * self.ss.cfg.gwvw / 16)
           self.loadsEIssued += ceil(self.kernel["ProblemType"]["DataTypeE"].numBytes() * self.gwvw / 16)
         self.loadE = True
@@ -873,6 +876,7 @@ class GlobalWriteBatchWriter:
   def _epilog(self, module: Module):
     # return registers to pool:
     lastDataD       = -1
+    lastDataAAM     = -1
     lastDataE       = -1
     checkedDataBias = {}
     checkedDataScaleAVec = {}
@@ -911,6 +915,13 @@ class GlobalWriteBatchWriter:
         if data != lastDataD:
           self.parentWriter.vgprPool.checkIn(data)
         lastDataD = data
+
+      if self.kernel["ProblemType"]["ActAndMul"]:
+        dataAAM = self.ss.elementDataAAM[elementIdx]
+        if dataAAM != 0:
+          if dataAAM != lastDataAAM:
+            self.parentWriter.vgprPool.checkIn(dataAAM)
+          lastDataAAM = dataAAM
 
       dataBias = self.ss.elementDataBias[elementIdx]
       if dataBias != 0:
@@ -1968,174 +1979,185 @@ class GlobalWriteBatchWriter:
             self.parentWriter.vgprPool.checkIn(vtmp2)
     return module
 
+  def _addSumAlphaWithCBetaPerElement(self, kernel, ss, gwvw, elementData, elementSumIdx, elementIdx,  vc0, vi, tmpVgpr, cvtVgprStruct):
+    module = Module("addSumAlphaWithCBetaPerElement #elementIdx%u, vc0 %u vi %u"%(elementIdx, vc0, vi))
+
+    dataV = elementData[elementIdx] + int(vi*ss.cfg.numVgprsPerDataPerVI)
+    sumIdxV = elementSumIdx[elementIdx] + vi
+
+    if kernel["ProblemType"]["DestDataType"].isHalf():
+      if not kernel["ProblemType"]["HighPrecisionAccumulate"]:
+        if self.parentWriter.states.asmCaps["HasWMMA_V1"] and kernel["EnableMatrixInstruction"]:
+          dataV = elementData[elementIdx] + int(vi / 2 * ss.cfg.numVgprsPerDataPerVI)
+          if (vi % 2) == 0:
+            module.add(VMulPKF16(dst=vgpr(dataV), src0=sgpr("Beta"), src1=vgpr(dataV+0), \
+                  comment="%s = C*beta ei=%u vi=%u"%(vgpr(dataV),elementIdx, vi)))
+          else:
+            module.add(VLShiftRightB32(dst=vgpr(dataV), shiftHex=16, src=vgpr(dataV), \
+                  comment="shift 16bit to get next half of packed ValueC"))
+          # dataV+0 = new c = old c*beta + rC
+          module.add(VAddPKF16(dst=vgpr("ValuC+%u"%(sumIdxV)), src0=vgpr(dataV), src1=vgpr("ValuC+%u"%(sumIdxV)), \
+              comment="sum*alpha + C*beta"))
+        elif sumIdxV%2==0 or (not ss.cfg.halfDataRegPerVI and gwvw==1):
+          newSumIdxV = sumIdxV // 2 - self.parentWriter.states.c.startVgprValu
+          # dataV+0 = new c = old c*beta
+          module.add(VMulPKF16(dst=vgpr(dataV), src0=sgpr("Beta"), src1=vgpr(dataV+0), \
+              comment="%s = C*beta ei=%u vi=%u"%(vgpr(dataV),elementIdx, vi)))
+          # dataV+0 = new c = old c*beta + rC
+          module.add(VAddPKF16(dst=vgpr("ValuC+%u"%(newSumIdxV)), src0=vgpr(dataV), src1=vgpr("ValuC+%u"%(newSumIdxV)), \
+              comment="sum*alpha + C*beta"))
+        else:
+          pass # add will have been done previously
+      else: # HPA
+        newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
+        # dataV+0 = new c = old c*beta + rC
+        # src0 = beta = f32 = opsel 00
+        # src1 = dataV = f16.lo = opsel 10 or 11 depending on even/odd
+        # src2 = sumIdxV = f32 = opsel 00
+        dataCExternal = elementData[elementIdx] + vi//2
+        hi16 = (vi + gwvw*vc0) % 2
+        module.add(self.parentWriter.states.mixinst(dst=vgpr("ValuC+%u"%newSumIdxV), src0=sgpr("Beta"), \
+            src1=vgpr(dataCExternal), src2=vgpr("ValuC+%u"%newSumIdxV), \
+            vop3=VOP3PModifiers(op_sel=[0,hi16,0], op_sel_hi=[0,1,0]),
+            comment="//C*=beta"))
+
+    elif kernel["ProblemType"]["DestDataType"].isBFloat16():
+      if kernel["ProblemType"]["HighPrecisionAccumulate"]:
+        # dataV+0 = new c = old c*beta + rC
+        # src0 = beta = f32 = opsel 00
+        # src1 = dataV = f16.lo = opsel 10 or 11 depending on even/odd
+        # src2 = sumIdxV = f32 = opsel 00
+        dataCExternal = elementData[elementIdx] + vi//2
+        module.add(VCvtBF16toFP32(dst=(tmpVgpr), src=(dataCExternal), vgprMask=(cvtVgprStruct.vgprBf16Mask), vi=(vi)))
+        newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
+        module.add(VMacF32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(tmpVgpr), src1=sgpr("Beta"), \
+            comment="finalSum = sum*alpha + C*beta"))
+    elif kernel["ProblemType"]["DestDataType"].isSingle():
+      newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
+      module.add(VMacF32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(dataV+0), src1=sgpr("Beta"), \
+          comment="finalSum = sum*alpha + C*beta"))
+
+    elif kernel["ProblemType"]["DestDataType"].isInt8():
+      if kernel["ProblemType"]["HighPrecisionAccumulate"]:
+        if (vi%4) != 3:
+          module.add(VMovB32(dst=vgpr(tmpVgpr+1), src=hex(vi * 8), comment="value = %u"%(vi * 8)))
+          module.add(VBfeI32(dst=vgpr(tmpVgpr), src0=vgpr(dataV+0), src1=vgpr(tmpVgpr+1), src2=8, comment="int8 to int32"))
+        else:
+          module.add(VAShiftRightI32(dst=vgpr(tmpVgpr), shiftHex=24, src=vgpr(dataV+0), comment="int8 to int32"))
+
+        newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
+        if kernel["ProblemType"]["ComputeDataType"].isSingle():
+          module.add(VCvtI32toF32(dst=vgpr(tmpVgpr), src=vgpr(tmpVgpr), comment="convert to fp32" ))
+          module.add(VMacF32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(tmpVgpr), src1=sgpr("Beta"), \
+                             comment="finalSum = sum*alpha + C*beta"))
+        else:
+          module.add(VMulLOU32(dst=vgpr(tmpVgpr), src0=sgpr("Beta"), src1=vgpr(tmpVgpr), comment="C = C*beta"))
+          module.add(VAddU32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(tmpVgpr), src1=vgpr("ValuC+%u"%newSumIdxV), comment="finalSum = sum*alpha + C*beta"))
+
+    elif kernel["ProblemType"]["DestDataType"].isInt32():
+      newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
+      if kernel["ProblemType"]["ComputeDataType"].isSingle():
+        module.add(VCvtI32toF32(dst=vgpr(dataV+0), src=vgpr(dataV+0), comment="convert to fp32" ))
+        module.add(VMacF32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(dataV+0), src1=sgpr("Beta"), comment="finalSum = sum*alpha + C*beta"))
+      else:
+        # assume we will need to replace v_mac_f32 with v_add_u32 and s_mul_lo_i32
+        # v_mad_i32_i24
+        # module.add(VMadI32I24(dst=vgpr("ValuC+%u"%sumIdxV), src0=vgpr(dataV+0), src1=sgpr("Beta"), src2=vgpr("ValuC+%u"%sumIdxV), \
+        #     comment="finalSum = sum*alpha + C*beta"))
+        module.add(VMulLOU32(dst=vgpr(dataV+0), src0=sgpr("Beta"), src1=vgpr(dataV+0), comment="C = C*beta"))
+        module.add(VAddU32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(dataV+0), src1=vgpr("ValuC+%u"%newSumIdxV), comment="finalSum = sum*alpha + C*beta"))
+
+    elif kernel["ProblemType"]["DestDataType"].isDouble():
+      newSumIdxV = sumIdxV * 2 - self.parentWriter.states.c.startVgprValu
+      # dataV+0 = new c = old c*beta
+      module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdxV),2), src0=vgpr(dataV+0,2), src1=sgpr("Beta",2), src2=vgpr("ValuC+%u"%(newSumIdxV),2), \
+          comment="finalSum = sum*alpha + C*beta"))
+
+    # single precision complex
+    elif kernel["ProblemType"]["DestDataType"].isSingleComplex():
+      newSumIdxV = sumIdxV * 2 - self.parentWriter.states.c.startVgprValu
+      module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV)), src0=vgpr(dataV+0), src1=sgpr("Beta"), comment="finalSum Cr += old Cr * Br"))
+      module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV)), src0=vgpr(dataV+1), src1=sgpr("Beta+1").getMinus(), comment="finalSum Cr += old Ci * -Bi"))
+      module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV+1)), src0=vgpr(dataV+1), src1=sgpr("Beta"), comment="finalSum Ci += old Ci * Br"))
+      module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV+1)), src0=vgpr(dataV+0), src1=sgpr("Beta+1"), comment="finalSum Ci += old Cr * Bi"))
+
+    # double precision complex
+    elif kernel["ProblemType"]["DestDataType"].isDoubleComplex():
+      newSumIdxV = sumIdxV * 4 - self.parentWriter.states.c.startVgprValu
+      module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdxV+0),2), src0=vgpr(dataV+0,2), src1=sgpr("Beta+0",2), src2=vgpr("ValuC+%u"%(newSumIdxV+0),2), comment="c.real += a.real * b.real"))
+      module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdxV+0),2), src0=vgpr(dataV+2,2), src1=sgpr("Beta+2",2), src2=vgpr("ValuC+%u"%(newSumIdxV+0),2), comment="c.real -= a.imag * b.imag"))
+      module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdxV+2),2), src0=vgpr(dataV+0,2), src1=sgpr("Beta+2",2), src2=vgpr("ValuC+%u"%(newSumIdxV+2),2), comment="c.imag += a.real * b.imag"))
+      module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdxV+2),2), src0=vgpr(dataV+2,2), src1=sgpr("Beta+0",2), src2=vgpr("ValuC+%u"%(newSumIdxV+2),2), comment="c.imag += a.imag * b.real"))
+
+    # float8 precision
+    elif kernel["ProblemType"]["DestDataType"].isFloat8():
+      if kernel["ProblemType"]["HighPrecisionAccumulate"]:
+        newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
+        # Generate single f32 code if edge is detected.
+        isPK = False
+        if ((vi + 1) == self.gwvw) and ((self.gwvw % 2) == 1):
+          if self.parentWriter.states.archCaps["NoSDWA"]: #cm review
+            sb = 0 if self.gwvw == 1 else 1
+            module.add(VCvtFP8toF32(dst=vgpr(tmpVgpr), src=vgpr(dataV), vop3=VOP3PModifiers(op_sel=[0,sb])))
+          else:
+            sb = SelectBit.BYTE_0 if self.gwvw == 1 else SelectBit.BYTE_2
+            module.add(VCvtFP8toF32(dst=vgpr(tmpVgpr), src=vgpr(dataV), sdwa=SDWAModifiers(src0_sel=sb)))
+        # Original packed route
+        elif vi%2 == 1:
+          return module
+        else:
+          isPK = True
+          if self.parentWriter.states.archCaps["NoSDWA"]: #cm review
+            sb = 0 if vi ==0 else 1
+            module.add(VCvtPkFP8toF32(dst=vgpr(tmpVgpr, 2), src=vgpr(dataV), vop3=VOP3PModifiers(op_sel=[sb])))
+          else:
+            sb = SelectBit.WORD_0 if vi == 0 else SelectBit.WORD_1
+            module.add(VCvtPkFP8toF32(dst=vgpr(tmpVgpr, 2), src=vgpr(dataV), sdwa=SDWAModifiers(src0_sel=sb)))
+        module.add(SNop(waitState=0))
+        if kernel["ProblemType"]["ComputeDataType"].isSingle():
+          module.add(VMacF32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(tmpVgpr), src1=sgpr("Beta"), comment="finalSum = sum*alpha + C*beta"))
+          if isPK:
+            module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV+1)), src0=vgpr(tmpVgpr+1), src1=sgpr("Beta"), comment="finalSum = sum*alpha + C*beta (PK)"))
+    # bfloat8 precision
+    elif kernel["ProblemType"]["DestDataType"].isBFloat8():
+      if kernel["ProblemType"]["HighPrecisionAccumulate"]:
+        newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
+        # Generate single f32 code if edge is detected.
+        isPK = False
+        if ((vi + 1) == self.gwvw) and ((self.gwvw % 2) == 1):
+          if self.parentWriter.states.archCaps["NoSDWA"]: #cm review
+            sb = 0 if self.gwvw == 1 else 1
+            module.add(VCvtFP8toF32(dst=vgpr(tmpVgpr), src=vgpr(dataV), vop3=VOP3PModifiers(op_sel=[0,sb])))
+          else:
+            sb = SelectBit.BYTE_0 if self.gwvw == 1 else SelectBit.BYTE_2
+            module.add(VCvtBF8toF32(dst=vgpr(tmpVgpr), src=vgpr(dataV), sdwa=SDWAModifiers(src0_sel=sb)))
+        # Original packed route
+        elif vi%2 == 1:
+          return module
+        else:
+          isPK = True
+          if self.parentWriter.states.archCaps["NoSDWA"]: #cm review
+            sb = 0 if vi ==0 else 1
+            module.add(VCvtPkFP8toF32(dst=vgpr(tmpVgpr, 2), src=vgpr(dataV), vop3=VOP3PModifiers(op_sel=[sb])))
+          else:
+            sb = SelectBit.WORD_0 if vi == 0 else SelectBit.WORD_1
+            module.add(VCvtPkBF8toF32(dst=vgpr(tmpVgpr, 2), src=vgpr(dataV), sdwa=SDWAModifiers(src0_sel=sb)))
+        module.add(SNop(waitState=0))
+        if kernel["ProblemType"]["ComputeDataType"].isSingle():
+          module.add(VMacF32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(tmpVgpr), src1=sgpr("Beta"), comment="finalSum = sum*alpha + C*beta"))
+          if isPK:
+            module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV+1)), src0=vgpr(tmpVgpr+1), src1=sgpr("Beta"), comment="finalSum = sum*alpha + C*beta (PK)"))
+    return module
+
+
   def _addSumAlphaWithCBeta(self, kernel, ss, gwvw, elementIdx, vc0, tmpVgpr, cvtVgprStruct):
     module = Module("addSumAlphaWithCBeta #elementIdx%u, vc0 %u"%(elementIdx, vc0))
     for vi in range(0, gwvw):
-      dataV = ss.elementData[elementIdx] + int(vi*ss.cfg.numVgprsPerDataPerVI)
-      sumIdxV = ss.elementSumIdx[elementIdx] + vi
-      if kernel["ProblemType"]["DestDataType"].isHalf():
-        if not kernel["ProblemType"]["HighPrecisionAccumulate"]:
-          if self.parentWriter.states.asmCaps["HasWMMA_V1"] and kernel["EnableMatrixInstruction"]:
-            dataV = ss.elementData[elementIdx] + int(vi / 2 * ss.cfg.numVgprsPerDataPerVI)
-            if (vi % 2) == 0:
-              module.add(VMulPKF16(dst=vgpr(dataV), src0=sgpr("Beta"), src1=vgpr(dataV+0), \
-                    comment="%s = C*beta ei=%u vi=%u"%(vgpr(dataV),elementIdx, vi)))
-            else:
-              module.add(VLShiftRightB32(dst=vgpr(dataV), shiftHex=16, src=vgpr(dataV), \
-                    comment="shift 16bit to get next half of packed ValueC"))
-            # dataV+0 = new c = old c*beta + rC
-            module.add(VAddPKF16(dst=vgpr("ValuC+%u"%(sumIdxV)), src0=vgpr(dataV), src1=vgpr("ValuC+%u"%(sumIdxV)), \
-                comment="sum*alpha + C*beta"))
-          elif sumIdxV%2==0 or (not ss.cfg.halfDataRegPerVI and gwvw==1):
-            newSumIdxV = sumIdxV // 2 - self.parentWriter.states.c.startVgprValu
-            # dataV+0 = new c = old c*beta
-            module.add(VMulPKF16(dst=vgpr(dataV), src0=sgpr("Beta"), src1=vgpr(dataV+0), \
-                comment="%s = C*beta ei=%u vi=%u"%(vgpr(dataV),elementIdx, vi)))
-            # dataV+0 = new c = old c*beta + rC
-            module.add(VAddPKF16(dst=vgpr("ValuC+%u"%(newSumIdxV)), src0=vgpr(dataV), src1=vgpr("ValuC+%u"%(newSumIdxV)), \
-                comment="sum*alpha + C*beta"))
-          else:
-            pass # add will have been done previously
-        else: # HPA
-          newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
-          # dataV+0 = new c = old c*beta + rC
-          # src0 = beta = f32 = opsel 00
-          # src1 = dataV = f16.lo = opsel 10 or 11 depending on even/odd
-          # src2 = sumIdxV = f32 = opsel 00
-          dataCExternal = ss.elementData[elementIdx] + vi//2
-          hi16 = (vi + gwvw*vc0) % 2
-          module.add(self.parentWriter.states.mixinst(dst=vgpr("ValuC+%u"%newSumIdxV), src0=sgpr("Beta"), \
-              src1=vgpr(dataCExternal), src2=vgpr("ValuC+%u"%newSumIdxV), \
-              vop3=VOP3PModifiers(op_sel=[0,hi16,0], op_sel_hi=[0,1,0]),
-              comment="//C*=beta"))
-
-      elif kernel["ProblemType"]["DestDataType"].isBFloat16():
-        if kernel["ProblemType"]["HighPrecisionAccumulate"]:
-          # dataV+0 = new c = old c*beta + rC
-          # src0 = beta = f32 = opsel 00
-          # src1 = dataV = f16.lo = opsel 10 or 11 depending on even/odd
-          # src2 = sumIdxV = f32 = opsel 00
-          dataCExternal = ss.elementData[elementIdx] + vi//2
-          module.add(VCvtBF16toFP32(dst=(tmpVgpr), src=(dataCExternal), vgprMask=(cvtVgprStruct.vgprBf16Mask), vi=(vi)))
-          newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
-          module.add(VMacF32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(tmpVgpr), src1=sgpr("Beta"), \
-              comment="finalSum = sum*alpha + C*beta"))
-      elif kernel["ProblemType"]["DestDataType"].isSingle():
-        newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
-        module.add(VMacF32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(dataV+0), src1=sgpr("Beta"), \
-            comment="finalSum = sum*alpha + C*beta"))
-
-      elif kernel["ProblemType"]["DestDataType"].isInt8():
-        if kernel["ProblemType"]["HighPrecisionAccumulate"]:
-          if (vi%4) != 3:
-            module.add(VMovB32(dst=vgpr(tmpVgpr+1), src=hex(vi * 8), comment="value = %u"%(vi * 8)))
-            module.add(VBfeI32(dst=vgpr(tmpVgpr), src0=vgpr(dataV+0), src1=vgpr(tmpVgpr+1), src2=8, comment="int8 to int32"))
-          else:
-            module.add(VAShiftRightI32(dst=vgpr(tmpVgpr), shiftHex=24, src=vgpr(dataV+0), comment="int8 to int32"))
-
-          newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
-          if kernel["ProblemType"]["ComputeDataType"].isSingle():
-            module.add(VCvtI32toF32(dst=vgpr(tmpVgpr), src=vgpr(tmpVgpr), comment="convert to fp32" ))
-            module.add(VMacF32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(tmpVgpr), src1=sgpr("Beta"), \
-                               comment="finalSum = sum*alpha + C*beta"))
-          else:
-            module.add(VMulLOU32(dst=vgpr(tmpVgpr), src0=sgpr("Beta"), src1=vgpr(tmpVgpr), comment="C = C*beta"))
-            module.add(VAddU32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(tmpVgpr), src1=vgpr("ValuC+%u"%newSumIdxV), comment="finalSum = sum*alpha + C*beta"))
-
-      elif kernel["ProblemType"]["DestDataType"].isInt32():
-        newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
-        if kernel["ProblemType"]["ComputeDataType"].isSingle():
-          module.add(VCvtI32toF32(dst=vgpr(dataV+0), src=vgpr(dataV+0), comment="convert to fp32" ))
-          module.add(VMacF32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(dataV+0), src1=sgpr("Beta"), comment="finalSum = sum*alpha + C*beta"))
-        else:
-          # assume we will need to replace v_mac_f32 with v_add_u32 and s_mul_lo_i32
-          # v_mad_i32_i24
-          # module.add(VMadI32I24(dst=vgpr("ValuC+%u"%sumIdxV), src0=vgpr(dataV+0), src1=sgpr("Beta"), src2=vgpr("ValuC+%u"%sumIdxV), \
-          #     comment="finalSum = sum*alpha + C*beta"))
-          module.add(VMulLOU32(dst=vgpr(dataV+0), src0=sgpr("Beta"), src1=vgpr(dataV+0), comment="C = C*beta"))
-          module.add(VAddU32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(dataV+0), src1=vgpr("ValuC+%u"%newSumIdxV), comment="finalSum = sum*alpha + C*beta"))
-
-      elif kernel["ProblemType"]["DestDataType"].isDouble():
-        newSumIdxV = sumIdxV * 2 - self.parentWriter.states.c.startVgprValu
-        # dataV+0 = new c = old c*beta
-        module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdxV),2), src0=vgpr(dataV+0,2), src1=sgpr("Beta",2), src2=vgpr("ValuC+%u"%(newSumIdxV),2), \
-            comment="finalSum = sum*alpha + C*beta"))
-
-      # single precision complex
-      elif kernel["ProblemType"]["DestDataType"].isSingleComplex():
-        newSumIdxV = sumIdxV * 2 - self.parentWriter.states.c.startVgprValu
-        module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV)), src0=vgpr(dataV+0), src1=sgpr("Beta"), comment="finalSum Cr += old Cr * Br"))
-        module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV)), src0=vgpr(dataV+1), src1=sgpr("Beta+1").getMinus(), comment="finalSum Cr += old Ci * -Bi"))
-        module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV+1)), src0=vgpr(dataV+1), src1=sgpr("Beta"), comment="finalSum Ci += old Ci * Br"))
-        module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV+1)), src0=vgpr(dataV+0), src1=sgpr("Beta+1"), comment="finalSum Ci += old Cr * Bi"))
-
-      # double precision complex
-      elif kernel["ProblemType"]["DestDataType"].isDoubleComplex():
-        newSumIdxV = sumIdxV * 4 - self.parentWriter.states.c.startVgprValu
-        module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdxV+0),2), src0=vgpr(dataV+0,2), src1=sgpr("Beta+0",2), src2=vgpr("ValuC+%u"%(newSumIdxV+0),2), comment="c.real += a.real * b.real"))
-        module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdxV+0),2), src0=vgpr(dataV+2,2), src1=sgpr("Beta+2",2), src2=vgpr("ValuC+%u"%(newSumIdxV+0),2), comment="c.real -= a.imag * b.imag"))
-        module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdxV+2),2), src0=vgpr(dataV+0,2), src1=sgpr("Beta+2",2), src2=vgpr("ValuC+%u"%(newSumIdxV+2),2), comment="c.imag += a.real * b.imag"))
-        module.add(VFmaF64(dst=vgpr("ValuC+%u"%(newSumIdxV+2),2), src0=vgpr(dataV+2,2), src1=sgpr("Beta+0",2), src2=vgpr("ValuC+%u"%(newSumIdxV+2),2), comment="c.imag += a.imag * b.real"))
-
-      # float8 precision
-      elif kernel["ProblemType"]["DestDataType"].isFloat8():
-        if kernel["ProblemType"]["HighPrecisionAccumulate"]:
-          newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
-          # Generate single f32 code if edge is detected.
-          isPK = False
-          if ((vi + 1) == self.gwvw) and ((self.gwvw % 2) == 1):
-            if self.parentWriter.states.archCaps["NoSDWA"]: #cm review
-              sb = 0 if self.gwvw == 1 else 1
-              module.add(VCvtFP8toF32(dst=vgpr(tmpVgpr), src=vgpr(dataV), vop3=VOP3PModifiers(op_sel=[0,sb])))
-            else:
-              sb = SelectBit.BYTE_0 if self.gwvw == 1 else SelectBit.BYTE_2
-              module.add(VCvtFP8toF32(dst=vgpr(tmpVgpr), src=vgpr(dataV), sdwa=SDWAModifiers(src0_sel=sb)))
-          # Original packed route
-          elif vi%2 == 1:
-            continue
-          else:
-            isPK = True
-            if self.parentWriter.states.archCaps["NoSDWA"]: #cm review
-              sb = 0 if vi ==0 else 1
-              module.add(VCvtPkFP8toF32(dst=vgpr(tmpVgpr, 2), src=vgpr(dataV), vop3=VOP3PModifiers(op_sel=[sb])))
-            else:
-              sb = SelectBit.WORD_0 if vi == 0 else SelectBit.WORD_1
-              module.add(VCvtPkFP8toF32(dst=vgpr(tmpVgpr, 2), src=vgpr(dataV), sdwa=SDWAModifiers(src0_sel=sb)))
-          module.add(SNop(waitState=0))
-          if kernel["ProblemType"]["ComputeDataType"].isSingle():
-            module.add(VMacF32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(tmpVgpr), src1=sgpr("Beta"), comment="finalSum = sum*alpha + C*beta"))
-            if isPK:
-              module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV+1)), src0=vgpr(tmpVgpr+1), src1=sgpr("Beta"), comment="finalSum = sum*alpha + C*beta (PK)"))
-      # bfloat8 precision
-      elif kernel["ProblemType"]["DestDataType"].isBFloat8():
-        if kernel["ProblemType"]["HighPrecisionAccumulate"]:
-          newSumIdxV = sumIdxV - self.parentWriter.states.c.startVgprValu
-          # Generate single f32 code if edge is detected.
-          isPK = False
-          if ((vi + 1) == self.gwvw) and ((self.gwvw % 2) == 1):
-            if self.parentWriter.states.archCaps["NoSDWA"]: #cm review
-              sb = 0 if self.gwvw == 1 else 1
-              module.add(VCvtFP8toF32(dst=vgpr(tmpVgpr), src=vgpr(dataV), vop3=VOP3PModifiers(op_sel=[0,sb])))
-            else:
-              sb = SelectBit.BYTE_0 if self.gwvw == 1 else SelectBit.BYTE_2
-              module.add(VCvtBF8toF32(dst=vgpr(tmpVgpr), src=vgpr(dataV), sdwa=SDWAModifiers(src0_sel=sb)))
-          # Original packed route
-          elif vi%2 == 1:
-            continue
-          else:
-            isPK = True
-            if self.parentWriter.states.archCaps["NoSDWA"]: #cm review
-              sb = 0 if vi ==0 else 1
-              module.add(VCvtPkFP8toF32(dst=vgpr(tmpVgpr, 2), src=vgpr(dataV), vop3=VOP3PModifiers(op_sel=[sb])))
-            else:
-              sb = SelectBit.WORD_0 if vi == 0 else SelectBit.WORD_1
-              module.add(VCvtPkBF8toF32(dst=vgpr(tmpVgpr, 2), src=vgpr(dataV), sdwa=SDWAModifiers(src0_sel=sb)))
-          module.add(SNop(waitState=0))
-          if kernel["ProblemType"]["ComputeDataType"].isSingle():
-            module.add(VMacF32(dst=vgpr("ValuC+%u"%newSumIdxV), src0=vgpr(tmpVgpr), src1=sgpr("Beta"), comment="finalSum = sum*alpha + C*beta"))
-            if isPK:
-              module.add(VMacF32(dst=vgpr("ValuC+%u"%(newSumIdxV+1)), src0=vgpr(tmpVgpr+1), src1=sgpr("Beta"), comment="finalSum = sum*alpha + C*beta (PK)"))
+      module.add(self._addSumAlphaWithCBetaPerElement(kernel, ss, gwvw, ss.elementData, ss.elementSumIdx, elementIdx, vc0, vi, tmpVgpr, cvtVgprStruct))
+      if kernel["ProblemType"]["ActAndMul"]:
+        module.add(self._addSumAlphaWithCBetaPerElement(kernel, ss, gwvw, ss.elementDataAAM, ss.elementSumIdxAAM, elementIdx, vc0, vi, tmpVgpr, cvtVgprStruct))
     return module
+
 
 def copyData(computeDataType, elementSumIdx, gwvw, vgprStart, direction=0):
   module = Module("Copy Data")

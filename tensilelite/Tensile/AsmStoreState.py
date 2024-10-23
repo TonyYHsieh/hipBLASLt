@@ -404,6 +404,7 @@ class StoreState:
         self.elementAddr              = []
         self.elementDataE             = []
         self.elementData              = []  # VGPR to use for element data, needed for atomic or beta
+        self.elementDataAAM           = []  # VGPR to use for element data, needed for atomic or beta
         self.elementDataBias          = []
         self.elementDataScaleAVec     = []
         self.elementDataScaleBVec     = []
@@ -536,6 +537,7 @@ class StoreState:
             # if numVgprsPerDataPerVI == 0.5, then two consecutive elements
             # should have same data pointer, next should move.
 
+            # elementData
             if self.cfg.numVgprsPerDataPerVI > 0:
                 if self.cfg.halfDataRegPerVI:
                     # TODO- check (H,H,H,H,S,S)
@@ -559,12 +561,41 @@ class StoreState:
                     else:
                         data = kw.vgprPool.checkOutAligned(int(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw), \
                               int(ceil(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw)), "writeBatch-data for ei=%u"%elementIdx, preventOverflow=False)
-                    #data = kw.vgprPool.checkOut(int(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw), \
-                    #      "writeBatch-data for ei=%u"%elementIdx, preventOverflow=False)
             else:
                 data = 0
 
             self.elementData.append(data)
+
+            # elementDataAAM
+            if self.kernel["ProblemType"]["ActAndMul"]:
+              if self.cfg.numVgprsPerDataPerVI > 0:
+                  if self.cfg.halfDataRegPerVI:
+                      # TODO- check (H,H,H,H,S,S)
+                      if kernel["ProblemType"]["HighPrecisionAccumulate"] and \
+                         (dataType.isBFloat16() or dataType.isHalf()):
+                          data = kw.vgprPool.checkOutAligned(int(2*self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw), \
+                                int(ceil(int(2*self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw))), "writeBatch-data for ei=%u and ei=%u"%(elementIdx,elementIdx+1), preventOverflow=not isOptNLL)
+                      else:
+                          if elementIdx%2 == 0:
+                              # allocate for two elements:
+                              data = kw.vgprPool.checkOutAligned(int(2*self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw), \
+                                     int(ceil(int(2*self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw))), "writeBatch-data for ei=%u and ei=%u"%(elementIdx,elementIdx+1), preventOverflow=not isOptNLL)
+                              lastData = data
+                          else:
+                              data = lastData
+                              del lastData
+                  else:
+                      if self.cfg.numVgprsPerDataPerVI == 0.5 or self.cfg.numVgprsPerDataPerVI == 0.25:
+                          data = kw.vgprPool.checkOutAligned(int(ceil(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw)), \
+                                int(ceil(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw)), "writeBatch-data for ei=%u"%elementIdx, preventOverflow=False)
+                      else:
+                          data = kw.vgprPool.checkOutAligned(int(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw), \
+                                int(ceil(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw)), "writeBatch-data for ei=%u"%elementIdx, preventOverflow=False)
+              else:
+                  data = 0
+
+              self.elementDataAAM.append(data)
+
 
             if self.useBias == DataDirection.READ:
                 coordOffset = coordOffset0 if factorDim == 0 else coordOffset1

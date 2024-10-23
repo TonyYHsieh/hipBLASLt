@@ -10463,7 +10463,7 @@ class KernelWriterAssembly(KernelWriter):
   ##############################################################################
   # Global Read Input
   ##############################################################################
-  def readInput(self, kernel, ss, tc: str, dataType, addrCalc, vc0, data, gwvw, addr, tmpS01):
+  def readInput(self, kernel, ss, tc: str, dataType, addrCalc, vc0, data, dataAAM, gwvw, addr, tmpS01):
     module = Module("read%sInput"%tc)
     bps = dataType.numBytes() * gwvw
     useBuffer = kernel["BufferStore"]
@@ -10524,6 +10524,33 @@ class KernelWriterAssembly(KernelWriter):
                 addr0, addr1, soffset=soffset, offset=globalOffset, \
                 glc=isGlc, slc=isSlc, nt=isNT, lds=False, \
                 comment="load %s"%tc))
+
+    if kernel["ProblemType"]["ActAndMul"] and (tc == 'C'):
+      soffset = sgpr(tmpS01)
+      module.add(SLShiftLeftB32(soffset, log2(dataType.numBytes()), sgpr("SizeIHalf")))
+
+      if dataType.isHalf():
+        hi16 = 0 if self.states.HHH_WMMA else (vc0 % 2)
+        module.add(self.chooseGlobalRead(useBuffer, bps, dataAAM, \
+            addr0, addr1, soffset=soffset, offset=globalOffset, \
+            glc=isGlc, slc=isSlc, nt=isNT, lds=False, hi16=hi16, \
+            comment="load %s AAM"%tc))
+      elif dataType.isInt8() or dataType.is8bitFloat():
+       module.add(self.chooseGlobalRead(useBuffer, bps, dataAAM, \
+            addr0, addr1, soffset=soffset, offset=globalOffset, \
+            glc=isGlc, slc=isSlc, nt=isNT, lds=False, \
+            #hi16=vc0 % 4,
+            comment="load %s AAM"%tc))
+      elif dataType.isBFloat16() or \
+           dataType.isInt32() or \
+           dataType.isSingle() or \
+           dataType.isDouble() or \
+           dataType.isSingleComplex() or \
+           dataType.isDoubleComplex():
+        module.add(self.chooseGlobalRead(useBuffer, bps, dataAAM, \
+                  addr0, addr1, soffset=soffset, offset=globalOffset, \
+                  glc=isGlc, slc=isSlc, nt=isNT, lds=False, \
+                  comment="load %s AAM"%tc))
 
     return module
 

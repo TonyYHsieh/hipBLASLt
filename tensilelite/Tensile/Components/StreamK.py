@@ -1161,7 +1161,7 @@ class StreamK(Component):
                 increment = (kernel["WavefrontSize"] * 4) * storeWidth * writer.states.bpeCinternal
                 module.add(SAddU32(dst=sgpr(tmpS01), src0=sgpr(tmpS01), src1=increment, comment="Inc sgpr offset"))
 
-            module.add(writer.readInput(kernel, ss, 'WS', kernel["ProblemType"]["ComputeDataType"], addrCalc, vc0, data, gwvw, addrCVgpr, sgpr(tmpS01)))
+            module.add(writer.readInput(kernel, ss, 'WS', kernel["ProblemType"]["ComputeDataType"], addrCalc, vc0, data, None, gwvw, addrCVgpr, sgpr(tmpS01)))
             loadsIssued += 1
 
         ########################################
