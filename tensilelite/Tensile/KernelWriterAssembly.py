@@ -8938,7 +8938,7 @@ class KernelWriterAssembly(KernelWriter):
 
   class ActivationSetPCStruct(NamedTuple):
     sgprOffsetActivation: int = -1
-    sgprOffsetBack: int = -1
+    sgprOffsetBack: str = ""
     vgprActCopy: int = -1
 
   def globalWriteElements(self, kernel, tPA, tPB, vectorWidths_2, vectorWidths_1, elements_2, elements_1,
@@ -9480,7 +9480,7 @@ class KernelWriterAssembly(KernelWriter):
       isInsertActFunctionCallAddrCalc = True
       if kernel["ActivationFuncCall"]:
         sgprOffsetActivation = self.sgprPool.checkOutAligned(2, 2, preventOverflow=0)
-        sgprOffsetBack = self.sgprPool.checkOutAligned(2, 2, preventOverflow=0)
+        sgprOffsetBack = "ActBack"
         activationSetPCStruct = self.ActivationSetPCStruct(sgprOffsetActivation=sgprOffsetActivation, \
           sgprOffsetBack=sgprOffsetBack, vgprActCopy=tmpVgpr)
         activationCDataType = kernel["ProblemType"]["ActivationComputeDataType"]
@@ -9618,7 +9618,6 @@ class KernelWriterAssembly(KernelWriter):
             actModules.add(actModule)
           module.add(actModules)
         self.sgprPool.checkIn(activationSetPCStruct.sgprOffsetActivation)
-        self.sgprPool.checkIn(activationSetPCStruct.sgprOffsetBack)
 
       module.add(skComponent.writePartials(self, kernel, skPartialsLabel, vectorWidths_1, elements_1, tmpVgpr, cvtVgprStruct, endLabel))
 
