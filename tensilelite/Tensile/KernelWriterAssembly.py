@@ -9921,7 +9921,7 @@ class KernelWriterAssembly(KernelWriter):
     #  numVectorsPerBatch = numElementsPerBatch / kernel["GlobalWriteVectorWidth"]
     #  #print "  NumVectorsPerBatch", numVectorsPerBatch
     #  numElementsPerBatch = numVectorsPerBatch * kernel["GlobalWriteVectorWidth"]
-    numBatches = max(1, ceilDivide(len(elements[edgeI]),numElementsPerBatch))
+    numBatches = max(1, ceilDivide(len(elements[edgeI]), numElementsPerBatch))
 
     numSgprs = ss.cfg.numTempSgprPerBatch + ss.cfg.numMaskSgprPerBatch + ss.cfg.numMaskSgprPerElement * numElementsPerBatch
 

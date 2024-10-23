@@ -282,6 +282,7 @@ class StoreState:
         # Calculate numVgprsPerElement
         # print("numVgprsPerAddr=%u, numVgprsPerDataPerVI=%u, numVgprPerValuC=%u"%(self.cfg.numVgprsPerAddr, self.cfg.numVgprsPerDataPerVI, self.cfg.numVgprPerValuC))
         self.numVgprsPerElement = self.cfg.numVgprPerValuC*gwvw + self.cfg.numVgprsPerAddr + int(ceil(self.cfg.numVgprsPerDataPerVI * gwvw))
+
         # TODO STREAM-K Update numVgprsPerElement for workspace
         if kernel["GroupLoadStore"] and kernel["ProblemType"]["UseBeta"]:
             self.numVgprsPerElement += self.cfg.numVgprsPerAddr
@@ -308,6 +309,9 @@ class StoreState:
             self.numVgprsPerElement += self.cfg.numVgprsPerAddr * 2  # ScaleAVec + ScaleBVec address
             numVgprs = int(ceil(kernel["ProblemType"]["ComputeDataType"].numRegisters()))
             self.numVgprsPerElement += numVgprs * gwvw + (numVgprs * min(gwvw, 2)) # Loaded data
+
+        if self.kernel["ProblemType"]["ActAndMul"]:
+            self.numVgprsPerElement = self.numVgprsPerElement * 2
 
         # Calculate align
         self.align = 1
