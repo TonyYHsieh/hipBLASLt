@@ -2108,10 +2108,10 @@ class GlobalWriteBatchWriter:
         else:
           isPK = True
           if self.parentWriter.states.archCaps["NoSDWA"]: #cm review
-            sb = 0 if vi ==0 else 1
+            sb = 0 if (((vi//2) % 2) == 0) else 1
             module.add(VCvtPkFP8toF32(dst=vgpr(tmpVgpr, 2), src=vgpr(dataV), vop3=VOP3PModifiers(op_sel=[sb])))
           else:
-            sb = SelectBit.WORD_0 if vi == 0 else SelectBit.WORD_1
+            sb = SelectBit.WORD_0 if (((vi//2) % 2) == 0) else SelectBit.WORD_1
             module.add(VCvtPkFP8toF32(dst=vgpr(tmpVgpr, 2), src=vgpr(dataV), sdwa=SDWAModifiers(src0_sel=sb)))
         module.add(SNop(waitState=0))
         if kernel["ProblemType"]["ComputeDataType"].isSingle():
@@ -2137,10 +2137,10 @@ class GlobalWriteBatchWriter:
         else:
           isPK = True
           if self.parentWriter.states.archCaps["NoSDWA"]: #cm review
-            sb = 0 if vi ==0 else 1
+            sb = 0 if (((vi//2) % 2) == 0) else 1
             module.add(VCvtPkFP8toF32(dst=vgpr(tmpVgpr, 2), src=vgpr(dataV), vop3=VOP3PModifiers(op_sel=[sb])))
           else:
-            sb = SelectBit.WORD_0 if vi == 0 else SelectBit.WORD_1
+            sb = SelectBit.WORD_0 if (((vi//2) % 2) == 0) else SelectBit.WORD_1
             module.add(VCvtPkBF8toF32(dst=vgpr(tmpVgpr, 2), src=vgpr(dataV), sdwa=SDWAModifiers(src0_sel=sb)))
         module.add(SNop(waitState=0))
         if kernel["ProblemType"]["ComputeDataType"].isSingle():
