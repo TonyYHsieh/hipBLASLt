@@ -2643,7 +2643,7 @@ namespace Tensile
 
                 virtual bool operator()(ContractionProblemGemm const& problem) const override
                 {
-                    return problem.actAndMul() == value;
+                    return (problem.actAndMul() == value) && ((problem.size(0) % 2) == 0);
                 }
 
                 virtual bool debugEval(ContractionProblemGemm const& problem,
@@ -2651,8 +2651,9 @@ namespace Tensile
                 {
                     bool rv = (*this)(problem);
 
-                    stream << *this << ": prob: " << problem.actAndMul()
-                           << ", Is sol support: " << value << std::endl;
+                    stream << *this << ": prob size 0  " << problem.size(0)
+                           << " actAndMul " << problem.actAndMul()
+                           << " Is sol support actAndMul " << value << std::endl;
                     return rv;
                 }
             };
