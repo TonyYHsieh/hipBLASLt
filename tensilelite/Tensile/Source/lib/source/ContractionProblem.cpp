@@ -996,9 +996,7 @@ namespace Tensile
             {
                 aUseCount[free.i]++;
                 TENSILE_ASSERT_EXC(free.i < aTensor.dimensions());
-                if (m_actAndMul)
-                    TENSILE_ASSERT_EXC(aTensor.sizes()[free.i] == (dTensor.sizes()[free.d] * 2));
-                else
+                if (!m_actAndMul)
                     TENSILE_ASSERT_EXC(aTensor.sizes()[free.i] == dTensor.sizes()[free.d]);
             }
             else
