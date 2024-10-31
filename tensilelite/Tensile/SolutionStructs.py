@@ -3497,9 +3497,11 @@ class Solution(collections.abc.Mapping):
       # Should be able to support as long as NO scheduleLocalWrite
       if (not state["ScheduleIterAlg"] == 2) and (not state["ScheduleIterAlg"] == 3) and (state["ScheduleLocalWrite"]):
         reject(state, "1LDSBuffer only support SIA2 or SIA3, or SIA1 without SLW")
-      state["LdsOffsetB"] = ldsNumBytesAlignedA
-      state["LdsOffsetMetadata"] = state["LdsOffsetB"] + ldsNumBytesAlignedB
-      ldsNumBytesAB = ldsNumBytesAlignedA + ldsNumBytesAlignedB + ldsNumBytesMetadata
+      state["LdsOffsetA"]        = 0
+      state["LdsOffsetAAM"]      = state["LdsOffsetA"] + state["LdsNumElementsAlignedA"]
+      state["LdsOffsetMetadata"] = state["LdsOffsetAAM"] + state["LdsNumElementsAlignedAAM"]
+      state["LdsOffsetB"]        = state["LdsOffsetMetadata"] + state["LdsNumElementsAlignedMetadata"]
+      ldsNumBytesAB              = state["LdsOffsetB"] + ldsNumBytesB
 
     # lds size is the greater of the two
     ldsNumBytes = max(ldsNumBytesAB, ldsNumBytesReduction, ldsNumBytesOccupancy)
