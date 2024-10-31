@@ -1160,6 +1160,9 @@ namespace Tensile
         for(auto size : m_boundSizes)
             rv *= size;
 
+        if (m_actAndMul)
+            rv *= 2;
+
         return rv;
     }
 
