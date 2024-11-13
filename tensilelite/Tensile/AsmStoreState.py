@@ -362,6 +362,9 @@ class StoreState:
             numVgprs = int(ceil(kernel["ProblemType"]["ComputeDataType"].numRegisters()))
             self.numVgprsPerElement += numVgprs * gwvw + (numVgprs * min(gwvw, 2)) # Loaded data
 
+        if self.kernel["ProblemType"]["ActAndMul"]:
+            self.numVgprsPerElement = self.numVgprsPerElement * 2
+
         # Calculate align
         self.align = 1
         # align adjustment
@@ -382,9 +385,10 @@ class StoreState:
     # Also create an AddrCalc for each memory operation.
     ##############################################################################
     def getStoreElementsInfoForBatch(self, kernel, batchElements):
-        self.elementCoord0 = []
-        self.elementCoord1 = []
-        self.elementSumIdx = []
+        self.elementCoord0    = []
+        self.elementCoord1    = []
+        self.elementSumIdx    = []
+        self.elementSumIdxAAM = []
 
         kw = self.kernelWriter
 
@@ -456,12 +460,14 @@ class StoreState:
         self.elementAddr              = []
         self.elementDataE             = []
         self.elementData              = []  # VGPR to use for element data, needed for atomic or beta
+        self.elementDataAAM           = []  # VGPR to use for element data, needed for atomic or beta
         self.elementDataBias          = []
         self.elementDataScaleAVec     = []
         self.elementDataScaleBVec     = []
         self.elementDataScaleAlphaVec = []
         self.elementMask              = []  # SGPR to use for element mask
         self.elementSumIdx            = []
+        self.elementSumIdxAAM         = []
         self.elementCoord0            = []
         self.elementCoord1            = []
 
@@ -605,6 +611,7 @@ class StoreState:
             # if numVgprsPerDataPerVI == 0.5, then two consecutive elements
             # should have same data pointer, next should move.
 
+            # elementData
             if self.cfg.numVgprsPerDataPerVI > 0:
                 if self.cfg.halfDataRegPerVI:
                     # TODO- check (H,H,H,H,S,S)
@@ -628,12 +635,39 @@ class StoreState:
                     else:
                         data = kw.vgprPool.checkOutAligned(int(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw), \
                               int(ceil(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw)), "writeBatch-data for ei=%u"%elementIdx, preventOverflow=False)
-                    #data = kw.vgprPool.checkOut(int(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw), \
-                    #      "writeBatch-data for ei=%u"%elementIdx, preventOverflow=False)
             else:
                 data = 0
 
             self.elementData.append(data)
+
+            # elementDataAAM
+            if self.kernel["ProblemType"]["ActAndMul"]:
+                if self.cfg.numVgprsPerDataPerVI > 0:
+                    if self.cfg.halfDataRegPerVI:
+                        # TODO- check (H,H,H,H,S,S)
+                        if kernel["ProblemType"]["HighPrecisionAccumulate"] and \
+                           (dataType.isBFloat16() or dataType.isHalf()):
+                            data = kw.vgprPool.checkOutAligned(int(2*self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw), \
+                                  int(ceil(int(2*self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw))), "writeBatch-data for ei=%u and ei=%u"%(elementIdx,elementIdx+1), preventOverflow=not isOptNLL)
+                        else:
+                            if elementIdx%2 == 0:
+                                # allocate for two elements:
+                                data = kw.vgprPool.checkOutAligned(int(2*self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw), \
+                                       int(ceil(int(2*self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw))), "writeBatch-data for ei=%u and ei=%u"%(elementIdx,elementIdx+1), preventOverflow=not isOptNLL)
+                                lastData = data
+                            else:
+                                data = lastData
+                                del lastData
+                    else:
+                        if self.cfg.numVgprsPerDataPerVI == 0.5 or self.cfg.numVgprsPerDataPerVI == 0.25:
+                            data = kw.vgprPool.checkOutAligned(int(ceil(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw)), \
+                                  int(ceil(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw)), "writeBatch-data for ei=%u"%elementIdx, preventOverflow=False)
+                        else:
+                            data = kw.vgprPool.checkOutAligned(int(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw), \
+                                  int(ceil(self.cfg.numVgprsPerDataPerVI*self.cfg.gwvw)), "writeBatch-data for ei=%u"%elementIdx, preventOverflow=False)
+                else:
+                    data = 0
+                self.elementDataAAM.append(data)
 
             if self.useBias == DataDirection.READ:
                 coordOffset = coordOffset0 if factorDim == 0 else coordOffset1
@@ -703,6 +737,7 @@ class StoreState:
 
             #print "Edge=", edge, element
             sumIdx = 0
+            sumIdxAAM = 0
             if kernel["LocalSplitU"] > 1:
                 if len(self.elementSumIdx) == 0:
                     sumIdx = kw.states.c.startVgprValu
@@ -719,9 +754,13 @@ class StoreState:
                 if kernel["EnableMatrixInstruction"]:
                     alignment = self.cfg.numVgprPerValuC * self.cfg.gwvw
                     sumIdx    = kw.vgprPool.checkOutAligned(self.cfg.numVgprPerValuC*self.cfg.gwvw, alignment, "vgprValuC") // self.cfg.numVgprPerValuC
+                    if kernel["ProblemType"]["ActAndMul"]:
+                        sumIdxAAM = kw.vgprPool.checkOutAligned(self.cfg.numVgprPerValuC*self.cfg.gwvw, alignment, "vgprValuC") // self.cfg.numVgprPerValuC
                 else:
                     sumIdx = kw.states.c.startVgprValu + vc0 + d0*kernel["VectorWidthA"] + vc1*kernel["ThreadTile0"] + d1*kernel["VectorWidthA"]*kernel["ThreadTile0"]
             self.elementSumIdx.append(sumIdx) # sumIdx is an element idx, need to div/2 for half
+            if kernel["ProblemType"]["ActAndMul"]:
+                self.elementSumIdxAAM.append(sumIdxAAM)
             self.lastCoordOffset1 = coordOffset1
         # reset flag
         self.isReset = False
@@ -735,6 +774,12 @@ class StoreState:
                 self.kernelWriter.vgprPool.checkIn(i * self.cfg.numVgprPerValuC)
                 # print("checked in vgpr %u"%i)
             self.elementSumIdx = []
+
+        if len(self.elementSumIdxAAM) > 0 and self.lsu == 1:
+            for i in self.elementSumIdxAAM:
+                self.kernelWriter.vgprPool.checkIn(i * self.cfg.numVgprPerValuC)
+                # print("checked in vgpr %u"%i)
+            self.elementSumIdxAAM = []
 
     def resetState(self):
         if not self.isReset:

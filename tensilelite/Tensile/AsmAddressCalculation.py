@@ -541,6 +541,9 @@ class AddrCalculation:
                     sgpr("PackedSize1") if len(kernel["PackedC1IndicesX"]) > 1 \
                     else kw.sizeRef(kernel["ProblemType"]["Index1"])
 
+                if kernel["ProblemType"]["ActAndMul"]:
+                    sizeBoundary[0] = sgpr("SizeIHalf")
+
                 module.add(VCmpLtU32(dst=sgpr(tmpS01,laneSGPRCount), src0=vgpr(self.coord0Vgpr), src1=sizeBoundary[0], comment="coord0 < size0" ))
                 module.add(VCmpLtU32(dst=sgpr(mask,laneSGPRCount), src0=vgpr(self.coord1Vgpr), src1=sizeBoundary[1], comment="coord1 < size1" ))
                 SAndX = SAndB64 if wavefrontSize == 64 else SAndB32
