@@ -195,6 +195,7 @@ class StateValues:
   e: MatrixInfo                          = field(default_factory=MatrixInfo)
   bias: MatrixInfo                       = field(default_factory=MatrixInfo)
   m: ABMatrixInfo                        = field(default_factory=ABMatrixInfo)       # For Sparse Metadata
+  aam: ABMatrixInfo                      = field(default_factory=ABMatrixInfo)       # For ActAndMul
   numCAgprs: int                        = 0
   totalVgprs: int                        = 0
   totalSgprs: int                        = 0
@@ -329,7 +330,9 @@ class StateVgprs:
 @dataclass
 class CodeModules:
   accVgprRead: Optional[Module]               = None
+  accAAMVgprRead: Optional[Module]            = None
   accVgprWrite: Optional[Module]              = None
+  accAAMVgprWrite: Optional[Module]           = None
   mulAlphaMultipleBuffer: Optional[Module]    = None
   mulAlphaOther: Optional[Module]             = None
   localWriteA: Optional[Module]               = None
@@ -3080,6 +3083,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     if kernel["ScheduleIterAlg"] == 3 or kernel["ScheduleIterAlg"] == 2:
       self.states.numMfmaPerIter = kernel["MIWaveTile"][0] * kernel["MIWaveTile"][1] * kernel["InnerUnroll"]
       if kernel["ProblemType"]["DataType"].isComplex(): self.states.numMfmaPerIter *= 4
+      if kernel["ProblemType"]["ActAndMul"]: self.states.numMfmaPerIter *= 2
 
     # NamedTuple is immutable
     class intermediateTPValues(NamedTuple):
@@ -3427,6 +3431,10 @@ class KernelWriter(metaclass=abc.ABCMeta):
       if self.states.lrvwTileB > 1 and tensorParametersB["bpe"] < 4:
         self.states.b.numVgprValu = self.states.b.numVgprValuPerBlock * kernel["InnerUnroll"]
 
+      if kernel["ProblemType"]["ActAndMul"]:
+        self.states.aam.numVgprValuPerBlock = self.states.a.numVgprValuPerBlock
+        self.states.aam.numVgprValu         = self.states.a.numVgprValu
+
     else: # mac instruction
       valuBlocksA = (1 + kernel["PrefetchLocalRead"]) * kernel["InnerUnroll"]
       valuBlocksB = (1 + kernel["PrefetchLocalRead"]) * kernel["InnerUnroll"]
@@ -3490,6 +3498,10 @@ class KernelWriter(metaclass=abc.ABCMeta):
         self.states.a.numVgprG2L *= (bpeA // bpeGRA)
         self.states.a.numVgprG2LAllocated *= (bpeA // bpeGRA)
 
+    if kernel["ProblemType"]["ActAndMul"]:
+      self.states.aam.numVgprG2L          = self.states.a.numVgprG2L
+      self.states.aam.numVgprG2LAllocated = self.states.a.numVgprG2LAllocated
+
     self.states.b.numVgprG2L = 0
     numVgprG2Local = 0
     numVgprG2LAllocatedLocal = 0
@@ -3549,6 +3561,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
     if kernel["DirectToVgprB"]:
       self.states.b.numVgprLocalReadAddr = 0
 
+    if kernel["ProblemType"]["ActAndMul"]:
+      self.states.aam.numVgprLocalReadAddr = self.states.a.numVgprLocalReadAddr
+
     ####################################
     # num vgprs: local write addresses
     #numLocalWritesA = kernel["NumLoadsCoalescedA"] \
@@ -3571,6 +3586,8 @@ class KernelWriter(metaclass=abc.ABCMeta):
       self.states.a.numVgprLocalWriteAddr = 0
     if kernel["DirectToVgprB"]:
       self.states.b.numVgprLocalWriteAddr = 0
+    if kernel["ProblemType"]["ActAndMul"]:
+      self.states.aam.numVgprLocalWriteAddr = self.states.a.numVgprLocalWriteAddr
 
     ####################################
     # num vgprs: global read addresses
@@ -3601,6 +3618,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
     else:
       numVgprGlobalReadIncsA = 0
       numVgprGlobalReadIncsB = 0
+
+    if kernel["ProblemType"]["ActAndMul"]:
+      self.states.aam.numVgprGlobalReadOffsets = self.states.a.numVgprGlobalReadOffsets
 
     if tensorParametersM is not None:
       numGlobalReadsMetadata = kernel["NumLoadsCoalescedMetadata"] \
@@ -3679,6 +3699,34 @@ class KernelWriter(metaclass=abc.ABCMeta):
         vgprIdx = self.states.a.startVgprValu  \
             + max(self.states.a.numVgprValu + numVgprValuPackA, self.states.a.numVgprG2LAllocated)
 
+    if kernel["ProblemType"]["ActAndMul"]:
+      self.states.aam.startVgprValu  = vgprIdx
+      vgprIdx += self.states.aam.numVgprValu
+      numVgprValuPackA = 0
+      if tensorParametersA["bpe"] < 4 and not kernel["UnrollMajorLDSA"]:
+        self.states.aam.startVgprValuPack = vgprIdx
+        if self.states.lrvwTileA > 1:
+          numVgprValuPackA = ceil(kernel["VectorWidthA"] * tensorParametersA["bpe"] / self.states.bpr) * kernel["MIWaveTileA"] // kernel["VectorWidthA"] * kernel["InnerUnroll"] * self.states.numVgprBuffer * kernel["MIInputPerThreadA"]
+          if self.states.packDTVA:
+            # pack DTV case, double the number
+            numVgprValuPackA *= 2
+        else:
+          numVgprValuPackA = self.states.aam.numVgprValuPerBlock * kernel["InnerUnroll"] * self.states.numVgprBufferPackA * (int(4/tensorParametersA["bpeDS"]) - 1)
+      vgprIdx += numVgprValuPackA
+      self.states.aam.startVgprG2L = None
+      if not kernel["DirectToLdsA"] or self.do["KeepDirectToLdsAlloc"]:
+        # DirectToVgpr + pack or input conversion case, overlap G2L and ValuPack
+        if self.states.packDTVA:
+          self.states.aam.startVgprG2L = self.states.aam.startVgprValuPack
+        elif self.states.convDTVA:
+          self.states.aam.startVgprG2L = self.states.aam.startVgprValu
+        # if PGR = True, PAP could be possibly enabled, we move G2LA later to prevent it from being reclaimed
+        # otherwise, put G2L here since it can overlap valu
+        if (not kernel["PrefetchGlobalRead"]): # g2l can overlap valu
+          self.states.aam.startVgprG2L = self.states.aam.startVgprValu
+          vgprIdx = self.states.aam.startVgprValu  \
+              + max(self.states.aam.numVgprValu + numVgprValuPackA, self.states.aam.numVgprG2LAllocated)
+
     # TODO: alignment hack, figure out a better solution
     vgprIdx = ((vgprIdx+1)//2)*2
     if(self.states.archCaps["VgprBank"]):
@@ -3727,13 +3775,19 @@ class KernelWriter(metaclass=abc.ABCMeta):
         and (kernel["ProblemType"]["DataType"].isInt8() or kernel["ProblemType"]["DataType"].is8bitFloat()):
       self.states.a.startVgprValuPackTemp = vgprIdx
       self.states.b.startVgprValuPackTemp = vgprIdx
+      if kernel["ProblemType"]["ActAndMul"]:
+        self.states.aam.startVgprValuPackTemp = vgprIdx
       vgprIdx += 1
 
     if kernel["ConvertAfterDS"]:
       self.states.a.startVgprValuCvtTemp = -1
       self.states.b.startVgprValuCvtTemp = -1
+      if kernel["ProblemType"]["ActAndMul"]:
+        self.states.aam.startVgprValuCvtTemp = -1
       if ((tensorParametersA["bpe"] > tensorParametersA["bpeDS"]) and kernel["ProblemType"]["DataTypeA"].is8bitFloat()):
         self.states.a.startVgprValuCvtTemp = vgprIdx
+        if kernel["ProblemType"]["ActAndMul"]:
+          self.states.aam.startVgprValuCvtTemp = vgprIdx
       if ((tensorParametersB["bpe"] > tensorParametersB["bpeDS"]) and kernel["ProblemType"]["DataTypeB"].is8bitFloat()):
         self.states.b.startVgprValuCvtTemp = vgprIdx
       if self.states.a.startVgprValuCvtTemp != -1 or self.states.b.startVgprValuCvtTemp != -1:
@@ -3796,6 +3850,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
     if kernel["BufferLoad"]:
       self.startVgprGlobalReadOffsetA = vgprIdx
       vgprIdx += 1 if kernel["_UseSgprForGRO"] else self.states.a.numVgprGlobalReadOffsets
+      if kernel["ProblemType"]["ActAndMul"]:
+        self.startVgprGlobalReadOffsetAAM = vgprIdx
+        vgprIdx += 1 if kernel["_UseSgprForGRO"] else self.states.aam.numVgprGlobalReadOffsets
       self.startVgprGlobalReadOffsetB = vgprIdx
       vgprIdx += 1 if kernel["_UseSgprForGRO"] else self.states.b.numVgprGlobalReadOffsets
       if kernel["ProblemType"]["Sparse"]:
@@ -3830,6 +3887,15 @@ class KernelWriter(metaclass=abc.ABCMeta):
         vgprIdx += self.states.a.numVgprG2LAllocated*2
       else:
         vgprIdx += self.states.a.numVgprG2LAllocated
+
+    if kernel["ProblemType"]["ActAndMul"] and self.states.aam.startVgprG2L is None and self.states.aam.numVgprG2LAllocated > 0:
+      # TODO: alignment hack, figure out a better solution
+      vgprIdx = ((vgprIdx+1)//2)*2
+      self.states.aam.startVgprG2L = vgprIdx;
+      if kernel["ULSGRODoubleG2L"] == 1:
+        vgprIdx += self.states.aam.numVgprG2LAllocated*2
+      else:
+        vgprIdx += self.states.aam.numVgprG2LAllocated
 
     if self.states.b.startVgprG2L is None and self.states.b.numVgprG2LAllocated > 0:
       # TODO: alignment hack, figure out a better solution
@@ -3929,6 +3995,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
         self.states.m.numSgprStrides -= 1
     else:
       self.states.m.numSgprStrides = 0
+
     self.states.numSgprSizesSum = kernel["ProblemType"]["NumIndicesSummation"]
     self.states.numSgprSizesFree = kernel["ProblemType"]["NumIndicesC"]
     self.states.numActivationTypeArgSize = 0 # Will change to 1 if activationType == All
@@ -4022,6 +4089,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
     if kernel["BufferStore"] and (kernel["GlobalSplitUAlgorithm"] == 'MultipleBufferSingleKernel'):
       self.defineSgpr("WSDstart", 2, 2)
+
+    if kernel["ProblemType"]["ActAndMul"]:
+      self.defineSgpr("SizeIHalf", 1)
 
     # Calculate numSgpr preload
     self.states.preloadGuard = []
@@ -4204,7 +4274,8 @@ class KernelWriter(metaclass=abc.ABCMeta):
     self.savedSgprPool = None
 
     ## accumulator Buffer for storeCinUnroll feature
-    self.agprPool = RegisterPool(self.states.numCAgprs, 'a', defaultPreventOverflow=False, printRP=0)
+    numAgprs = (self.states.numCAgprs * 2) if kernel["ProblemType"]["ActAndMul"] else self.states.numCAgprs
+    self.agprPool = RegisterPool(numAgprs, 'a', defaultPreventOverflow=False, printRP=0)
 
     ########################################
     # reads Per Iteration

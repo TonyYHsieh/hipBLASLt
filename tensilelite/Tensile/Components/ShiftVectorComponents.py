@@ -271,7 +271,12 @@ class ShiftVectorComponentsMFMA(ShiftVectorComponents):
                         module.add(SCBranchVCCNZ(labelName=VWBlockLabels[r-1][mb][vw].getLabelName(), comment="branch to shift d%u r%u mb%u vw%u" % (tP["idx"], r, mb, vw)))
 
             # blocks for handle M_size % vector width
-            tReg  = writer.vgprPool.checkOut(min(glvw, allContOutCoal))
+            numMovReg = min(glvw, allContOutCoal)
+            actLoop = 2 if kernel["ProblemType"]["ActAndMul"] else 1
+            numValCOffset = writer.states.numCAgprs
+            MovRegOffset = numMovReg if kernel["ProblemType"]["ActAndMul"] else 0
+            numMovReg = (numMovReg * 2) if kernel["ProblemType"]["ActAndMul"] else numMovReg
+            tReg  = writer.vgprPool.checkOut(numMovReg)
             for r in range(1, glvw):
                 for tt in range(0, miOuterTTCoal):
                     for bm in range(0, matrixInstBCoal):
@@ -292,12 +297,15 @@ class ShiftVectorComponentsMFMA(ShiftVectorComponents):
                                             vgprOffsetForSCIU = 0
                                             copyInst = VAccvgprReadB32 if not kernel["MIArchVgpr"] else VMovB32
                                             for e in range(min(r, allContOutCoal)):
-                                                src = (e+(glvw-r)) % allContOutCoal
-                                                srcVgpr = (src + (vw * glvw) + allContOutCoal * mb) * regStrideCoal
-                                                srcVgpr = srcVgpr + ot * regStridePrep
-                                                srcVgpr = arch2acc[srcVgpr] * regPerElem + nr + c * accImOffset + vgprOffsetForSCIU
-                                                srcVal  = accvgpr(srcVgpr) if not kernel["MIArchVgpr"] else vgpr(srcVgpr)
-                                                module.add(copyInst(dst=vgpr(tReg+e), src=srcVal, comment="glvw %u mb %u tt1 %u r %u" % (r, mb, ot, nr)))
+                                                for act in range(actLoop):
+                                                    src = (e+(glvw-r)) % allContOutCoal
+                                                    srcVgpr = (src + (vw * glvw) + allContOutCoal * mb) * regStrideCoal
+                                                    srcVgpr = srcVgpr + ot * regStridePrep
+                                                    srcVgpr = arch2acc[srcVgpr] * regPerElem + nr + c * accImOffset + vgprOffsetForSCIU
+                                                    srcVgpr = srcVgpr + (act * numValCOffset)
+                                                    srcVal  = accvgpr(srcVgpr) if not kernel["MIArchVgpr"] else vgpr(srcVgpr)
+                                                    detVgpr = tReg + e + (act * MovRegOffset)
+                                                    module.add(copyInst(dst=vgpr(detVgpr), src=srcVal, comment="glvw %u mb %u tt1 %u r %u" % (r, mb, ot, nr)))
 
                                             if not kernel["MIArchVgpr"]:
                                                 module.add(SNop(waitState=1, comment="v_accvgpr read vgpr after write vgpr: 2 wait states"))
@@ -306,20 +314,25 @@ class ShiftVectorComponentsMFMA(ShiftVectorComponents):
                                             for e in range(min(r, allContOutCoal)):
                                                 crossThread = (e+(glvw-r)) // allContOutCoal
                                                 if crossThread != 0:
-                                                    ds = DSModifiers(na=1, offset=crossThread*threadInterval*4)
-                                                    module.add(DSBPermuteB32(dst=vgpr(tReg+e), src0=vgpr(tmpVgpr), src1=vgpr(tReg+e), ds=ds, comment="permute edge values"))
-                                                    needWait = True
+                                                    for act in range(actLoop):
+                                                        dstVgpr = tReg + e + (act * MovRegOffset)
+                                                        ds = DSModifiers(na=1, offset=crossThread*threadInterval*4)
+                                                        module.add(DSBPermuteB32(dst=vgpr(dstVgpr), src0=vgpr(tmpVgpr), src1=vgpr(dstVgpr), ds=ds, comment="permute edge values"))
+                                                        needWait = True
 
                                             if needWait:
                                                 module.add(SWaitCnt(waitAll=True, comment="wait for swizzle operation"))
 
                                             copyInst = VAccvgprWriteB32 if not kernel["MIArchVgpr"] else VMovB32
                                             for e in range(min(r, allContOutCoal)):
-                                                dstVgpr = (e + (vw * glvw) + allContOutCoal * mb) * regStrideCoal
-                                                dstVgpr = dstVgpr + ot * regStridePrep
-                                                dstVgpr = arch2acc[dstVgpr] * regPerElem + nr + c * accImOffset + vgprOffsetForSCIU
-                                                dstStr = accvgpr(dstVgpr) if not kernel["MIArchVgpr"] else vgpr(dstVgpr)
-                                                module.add(copyInst(dst=dstStr, src=vgpr(tReg+e)))
+                                                for act in range(actLoop):
+                                                    srcVgpr = tReg + e + (act * MovRegOffset)
+                                                    dstVgpr = (e + (vw * glvw) + allContOutCoal * mb) * regStrideCoal
+                                                    dstVgpr = dstVgpr + ot * regStridePrep
+                                                    dstVgpr = arch2acc[dstVgpr] * regPerElem + nr + c * accImOffset + vgprOffsetForSCIU
+                                                    dstVgpr = dstVgpr + (act * numValCOffset)
+                                                    dstStr = accvgpr(dstVgpr) if not kernel["MIArchVgpr"] else vgpr(dstVgpr)
+                                                    module.add(copyInst(dst=dstStr, src=vgpr(srcVgpr)))
 
                                 # end shift reset mask and jump out
                                 all1mask = "0xFFFFFFFF" if (kernel["WavefrontSize"] == 32) else "0xFFFFFFFFFFFFFFFF"
@@ -479,8 +492,13 @@ class ShiftVectorComponentsMFMA(ShiftVectorComponents):
 
             permuteIndexReg = writer.vgprPool.checkOut(1)
             threadIdInCoalReg = writer.vgprPool.checkOut(1)
+            numMovReg = numContOutCoal * numOutputsPrep
+            actLoop = 2 if kernel["ProblemType"]["ActAndMul"] else 1
+            numValCOffset = writer.states.numCAgprs
+            MovRegOffset = numMovReg if kernel["ProblemType"]["ActAndMul"] else 0
+            numMovReg = (numMovReg * 2) if kernel["ProblemType"]["ActAndMul"] else numMovReg
             movReg = writer.vgprPool.checkOut(numContOutCoal*numOutputsPrep)
-            module.addComment2("Reg %d-%d"%(movReg, movReg+15))
+            module.addComment2("Reg %d-%d"%(movReg, movReg+numMovReg))
             for shift in range(1, glvw):
                 for tt in range(0, miOuterTTCoal):
                     for glvwBlk in range(0, glvwBlkInMIB):
@@ -505,12 +523,14 @@ class ShiftVectorComponentsMFMA(ShiftVectorComponents):
                                         srcThreadId = (src // numContOutCoal) % numThreadInCoal
                                         srcMbblkId  = src // (numContOutCoal * numThreadInCoal)
                                         for ot in range(numOutputsPrep):
-                                            movRegId    = movReg + dstContId + ot * numContOutCoal
-                                            srcGpr      = srcContId + srcMbblkId * numContOutCoal + glvwBlk * numRegInGlvwblkCoal + tt * numRegInMIBCoal
-                                            srcGpr      = srcGpr * regStrideCoal + ot * regStridePrep
-                                            srcGpr      = arch2acc[srcGpr]
-                                            srcGprStr   = accvgpr(srcGpr) if not kernel["MIArchVgpr"] else vgpr(srcGpr)
-                                            module.add(copyInst(dst=vgpr(movRegId), src=srcGprStr, comment=""))
+                                            for act in range(actLoop):
+                                                movRegId    = movReg + dstContId + ot * numContOutCoal
+                                                movRegId    = movRegId + act * MovRegOffset
+                                                srcGpr      = srcContId + srcMbblkId * numContOutCoal + glvwBlk * numRegInGlvwblkCoal + tt * numRegInMIBCoal
+                                                srcGpr      = srcGpr * regStrideCoal + ot * regStridePrep
+                                                srcGpr      = arch2acc[srcGpr] + act * numValCOffset
+                                                srcGprStr   = accvgpr(srcGpr) if not kernel["MIArchVgpr"] else vgpr(srcGpr)
+                                                module.add(copyInst(dst=vgpr(movRegId), src=srcGprStr, comment=""))
 
                                 if not skip:
                                      module.add(SNop(waitState=1, comment="v_accvgpr read vgpr after write vgpr: 2 wait states"))
@@ -528,9 +548,11 @@ class ShiftVectorComponentsMFMA(ShiftVectorComponents):
                                             needWait = True
                                             permuteOffset = (((srcThreadId - dstThreadId) * threadInterval) % kernel["WavefrontSize"]) * 4
                                             for ot in range(numOutputsPrep):
-                                                movRegId    = movReg + dstContId + ot * numContOutCoal
-                                                ds = DSModifiers(na=1, offset=permuteOffset)
-                                                module.add(DSBPermuteB32(dst=vgpr(movRegId), src0=vgpr(permuteIndexReg), src1=vgpr(movRegId), ds=ds, comment="permute edge values"))
+                                                for act in range(actLoop):
+                                                    movRegId = movReg + dstContId + ot * numContOutCoal
+                                                    movRegId = movRegId + act * MovRegOffset
+                                                    ds = DSModifiers(na=1, offset=permuteOffset)
+                                                    module.add(DSBPermuteB32(dst=vgpr(movRegId), src0=vgpr(permuteIndexReg), src1=vgpr(movRegId), ds=ds, comment="permute edge values"))
 
                                 if needWait:
                                     module.add(SWaitCnt(lgkmcnt=0, comment="wait for swizzle operation"))
@@ -546,12 +568,14 @@ class ShiftVectorComponentsMFMA(ShiftVectorComponents):
                                     src = dst + (glvw - shift)
                                     if (src < glvw):
                                         for ot in range(numOutputsPrep):
-                                            movRegId    = movReg + dstContId + ot * numContOutCoal
-                                            dstGpr      = dstContId + dstMbblkId * numContOutCoal + glvwBlk * numRegInGlvwblkCoal + tt * numRegInMIBCoal
-                                            dstGpr      = dstGpr * regStrideCoal + ot * regStridePrep
-                                            dstGpr      = arch2acc[dstGpr]
-                                            dstGprStr   = accvgpr(dstGpr) if not kernel["MIArchVgpr"] else vgpr(dstGpr)
-                                            module.add(copyInst(dst=dstGprStr, src=vgpr(movRegId), comment=""))
+                                            for act in range(actLoop):
+                                                movRegId    = movReg + dstContId + ot * numContOutCoal
+                                                movRegId    = movRegId + act * MovRegOffset
+                                                dstGpr      = dstContId + dstMbblkId * numContOutCoal + glvwBlk * numRegInGlvwblkCoal + tt * numRegInMIBCoal
+                                                dstGpr      = dstGpr * regStrideCoal + ot * regStridePrep
+                                                dstGpr      = arch2acc[dstGpr] + act * numValCOffset
+                                                dstGprStr   = accvgpr(dstGpr) if not kernel["MIArchVgpr"] else vgpr(dstGpr)
+                                                module.add(copyInst(dst=dstGprStr, src=vgpr(movRegId), comment=""))
 
                                 if not skip:
                                     all1mask = "0xFFFFFFFF" if (kernel["WavefrontSize"] == 32) else "0xFFFFFFFFFFFFFFFF"
