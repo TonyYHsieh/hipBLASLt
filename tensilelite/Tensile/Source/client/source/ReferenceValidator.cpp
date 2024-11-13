@@ -511,11 +511,11 @@ namespace TensileLite
             {
                 // If the pointers are the same, only print the buffer once.
                 HIP_CHECK_EXC(hipMemcpy(m_cpuResultBuffer.get(),
-                                        result.c,
-                                        problem.c().totalAllocatedBytes(),
+                                        result.d,
+                                        problem.d().totalAllocatedBytes(),
                                         hipMemcpyDeviceToHost));
                 m_reporter->logTensor(
-                    LogLevel::Verbose, "C_D", m_cpuResultBuffer.get(), problem.c(), result.c);
+                    LogLevel::Verbose, "C_D", m_cpuResultBuffer.get(), problem.c(), result.d);
             }
             else
             {
