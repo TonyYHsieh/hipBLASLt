@@ -3829,9 +3829,6 @@ class KernelWriter(metaclass=abc.ABCMeta):
     if not kernel["LocalWriteUseSgprA"]:
       self.states.a.startVgprLocalWriteAddr = vgprIdx
       vgprIdx += self.states.a.numVgprLocalWriteAddr
-      if kernel["ProblemType"]["ActAndMul"]:
-        self.states.aam.startVgprLocalWriteAddr = vgprIdx
-        vgprIdx += self.states.aam.numVgprLocalWriteAddr
 
     if not kernel["LocalWriteUseSgprB"]:
       self.states.b.startVgprLocalWriteAddr = vgprIdx
@@ -3918,10 +3915,6 @@ class KernelWriter(metaclass=abc.ABCMeta):
     self.states.a.startVgprLocalReadAddr = vgprIdx
     vgprIdx += self.states.a.numVgprLocalReadAddr
 
-    if kernel["ProblemType"]["ActAndMul"]:
-      self.states.aam.startVgprLocalReadAddr = vgprIdx
-      vgprIdx += self.states.aam.numVgprLocalReadAddr
-
     self.states.b.startVgprLocalReadAddr = vgprIdx
     vgprIdx += self.states.b.numVgprLocalReadAddr
 
@@ -3989,15 +3982,12 @@ class KernelWriter(metaclass=abc.ABCMeta):
     self.states.c.numSgprStrides = kernel["ProblemType"]["NumIndicesC"]
     self.states.a.numSgprStrides = len(kernel["ProblemType"]["IndexAssignmentsA"])
     self.states.b.numSgprStrides = len(kernel["ProblemType"]["IndexAssignmentsB"])
-    if kernel["ProblemType"]["ActAndMul"]:
-      self.states.aam.numSgprStrides = len(kernel["ProblemType"]["IndexAssignmentsA"])
     if not kernel["ProblemType"]["UseInitialStridesCD"]:
       self.states.e.numSgprStrides -= 1
       self.states.d.numSgprStrides -= 1
       self.states.c.numSgprStrides -= 1
     if not kernel["ProblemType"]["UseInitialStridesAB"]:
       self.states.a.numSgprStrides -= 1
-      self.states.aam.numSgprStrides -= 1
       self.states.b.numSgprStrides -= 1
     if kernel["ProblemType"]["Sparse"]:
       self.states.m.numSgprStrides = len(kernel["ProblemType"]["IndexAssignmentsMetadata"])
@@ -4005,8 +3995,6 @@ class KernelWriter(metaclass=abc.ABCMeta):
         self.states.m.numSgprStrides -= 1
     else:
       self.states.m.numSgprStrides = 0
-    if kernel["ProblemType"]["ActAndMul"]:
-      self.states.aam.numSgprStrides = self.states.a.numSgprStrides
 
     self.states.numSgprSizesSum = kernel["ProblemType"]["NumIndicesSummation"]
     self.states.numSgprSizesFree = kernel["ProblemType"]["NumIndicesC"]
@@ -4025,9 +4013,6 @@ class KernelWriter(metaclass=abc.ABCMeta):
       self.states.a.numSgprGlobalReadIncs = kernel["ProblemType"]["NumIndicesSummation"] * self.states.rpgo
       self.states.b.numSgprGlobalReadIncs = kernel["ProblemType"]["NumIndicesSummation"] * self.states.rpgo
       self.states.m.numSgprGlobalReadIncs = kernel["ProblemType"]["NumIndicesSummation"] * self.states.rpgo
-
-    if kernel["ProblemType"]["ActAndMul"]:
-      self.states.aam.numSgprGlobalReadIncs = self.states.a.numSgprGlobalReadIncs
 
     ########################################
     # SGPR Assignment according to AMDGPU-ABI

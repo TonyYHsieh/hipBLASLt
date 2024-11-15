@@ -429,8 +429,6 @@ class KernelWriterAssembly(KernelWriter):
       module.add(self.defineSgpr("WrapUMetadata", 2))  # Bytes to add to SrdMetadata to reset address from N-1 iter to AddressMetadata
 
     module.add(self.defineSgpr("GlobalReadIncsA", self.states.a.numSgprGlobalReadIncs))
-    if kernel["ProblemType"]["ActAndMul"]:
-      module.add(self.defineSgpr("GlobalReadIncsAAM", self.states.aam.numSgprGlobalReadIncs))
     module.add(self.defineSgpr("GlobalReadIncsB", self.states.b.numSgprGlobalReadIncs))
     if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
       module.add(self.defineSgpr("GlobalReadIncsMetadata", self.states.m.numSgprGlobalReadIncs))
@@ -702,9 +700,6 @@ class KernelWriterAssembly(KernelWriter):
     else:
       module.add(RegSet("v", "vgprGlobalReadAddrA", \
           self.startVgprGlobalReadAddressesA))
-      if kernel["ProblemType"]["ActAndMul"]:
-        module.add(RegSet("v", "vgprGlobalReadAddrAAM", \
-            self.startVgprGlobalReadAddressesAAM))
       module.add(RegSet("v", "vgprGlobalReadAddrB", \
           self.startVgprGlobalReadAddressesB))
 
