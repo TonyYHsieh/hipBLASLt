@@ -655,6 +655,9 @@ namespace TensileLite
         {
             numWG.x *= m_freeSizesA.at(i);
         }
+        if (m_actAndMul)
+            numWG.x /= 2;
+
         for(size_t i = 0; i < m_freeIndicesB.size(); i++)
         {
             numWG.y *= m_freeSizesB.at(i);
@@ -710,6 +713,9 @@ namespace TensileLite
         {
             numWG.x *= m_freeSizesA.at(i);
         }
+        if (m_actAndMul)
+            numWG.x /= 2;
+
         for(size_t i = 0; i < m_freeIndicesB.size(); i++)
         {
             numWG.y *= m_freeSizesB.at(i);
@@ -796,7 +802,7 @@ namespace TensileLite
 
         for(int i = 0; i < m_freeIndices.size(); i++)
         {
-            size_t mySize = dTensor.sizes()[m_freeIndices[i].d];
+            size_t mySize = cTensor.sizes()[m_freeIndices[i].d];
             if(m_freeIndices[i].isA)
             {
                 m_freeIndicesA.push_back(m_freeIndices[i]);
@@ -1161,9 +1167,6 @@ namespace TensileLite
 
         for(auto size : m_boundSizes)
             rv *= size;
-
-        if (m_actAndMul)
-            rv *= 2;
 
         return rv;
     }

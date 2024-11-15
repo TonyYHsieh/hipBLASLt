@@ -231,7 +231,8 @@ namespace TensileLite
                 {
                     // WorkGroup numbers x number of global write instruction x Wave numbers
                     // M/MT0 x N/MT1 x NumElementsPerThread/StoreVectorWidth x x Wavenumbers
-                    bool ret = (std::ceil(static_cast<float>(problem.freeSizeA(0)) / value[0])
+                    size_t m0 = problem.actAndMul() ? (problem.freeSizeA(0) / 2) : problem.freeSizeA(0);
+                    bool ret = (std::ceil(static_cast<float>(m0) / value[0])
                                 * std::ceil(static_cast<float>(problem.freeSizeB(0)) / value[1]))
                                    * (value[2]) * (value[4] / 64) * value[3]
                                <= 40960;
@@ -244,11 +245,12 @@ namespace TensileLite
                 virtual bool debugEval(ContractionProblemGemm const& problem,
                                        std::ostream&                 stream) const override
                 {
+                    size_t m0 = problem.actAndMul() ? (problem.freeSizeA(0) / 2) : problem.freeSizeA(0);
                     return debugEvalCmp(
                         problem,
                         stream,
                         "prob",
-                        (std::ceil(static_cast<float>(problem.freeSizeA(0)) / value[0])
+                        (std::ceil(static_cast<float>(m0) / value[0])
                          * std::ceil(static_cast<float>(problem.freeSizeB(0)) / value[1]))
                             * (value[2]) * (value[4] / 64) * value[3],
                         "==",
