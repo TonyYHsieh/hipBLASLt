@@ -162,7 +162,8 @@ namespace TensileLite
 
             virtual float operator()(ContractionProblemGemm const& problem) const
             {
-                float numTiles = problem.freeSizeA(0) * value;
+                size_t m0 = problem.actAndMul() ? (problem.freeSizeA(0) / 2) : problem.freeSizeA(0);
+                float numTiles = m0 * value;
                 return ContractionSolution::computeGranularity(numTiles);
             }
         };

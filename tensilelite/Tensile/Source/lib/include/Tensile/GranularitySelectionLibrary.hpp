@@ -94,7 +94,7 @@ namespace TensileLite
             const bool debug = Debug::Instance().printPropertyEvaluation();
 
             std::vector<size_t> key;
-            size_t              M = problem.freeSizeA(0);
+            size_t M = problem.freeSizeA(0);
             key.push_back(M);
             size_t N = problem.freeSizeB(0);
             key.push_back(N);
