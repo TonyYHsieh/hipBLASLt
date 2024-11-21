@@ -1655,12 +1655,13 @@ namespace Tensile
 
                 virtual bool operator()(ContractionProblemGemm const& problem) const override
                 {
-                    size_t minK
-                        = (problem.getParams().gsu() > 0 ? problem.getParams().gsu() : value[1]);
-                    if(minK == 1)
-                        minK = 0;
-                    minK *= value[0];
-                    return problem.boundSize(0) >= minK;
+                    return true;
+//                    size_t minK
+//                        = (problem.getParams().gsu() > 0 ? problem.getParams().gsu() : value[1]);
+//                    if(minK == 1)
+//                        minK = 0;
+//                    minK *= value[0];
+//                    return problem.boundSize(0) >= minK;
                 }
 
                 virtual bool debugEval(ContractionProblemGemm const& problem,

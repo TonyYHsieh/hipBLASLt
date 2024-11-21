@@ -736,18 +736,18 @@ namespace Tensile
 
         if(gsu > 1 && sizeMapping.globalAccumulation && sizeMapping.streamK == 0)
         {
-            size_t wsStride = startStrideCD ? d.sizes()[0] : 1;
-            for(size_t i = startStrideCD; i < d.dimensions(); i++)
+            size_t wsStride = startStrideCD ? c.sizes()[0] : 1;
+            for(size_t i = startStrideCD; i < c.dimensions(); i++)
             {
                 args.template append<uint32_t>(concatenate_if<T_Debug>("strideW_D", i), wsStride);
-                wsStride *= d.sizes()[i];
+                wsStride *= c.sizes()[i];
             }
 
-            wsStride = startStrideCD ? d.sizes()[0] : 1;
+            wsStride = startStrideCD ? c.sizes()[0] : 1;
             for(size_t i = startStrideCD; i < c.dimensions(); i++)
             {
                 args.template append<uint32_t>(concatenate_if<T_Debug>("strideW_C", i), wsStride);
-                wsStride *= d.sizes()[i];
+                wsStride *= c.sizes()[i];
             }
         }
         else
@@ -1734,11 +1734,11 @@ namespace Tensile
         for(size_t i = 1; i < d.dimensions(); i++)
             args.template append<uint32_t>(concatenate_if<T_Debug>("strideD", i), d.strides()[i]);
 
-        uint32_t wsStride = d.sizes()[0];
-        for(size_t i = 1; i < d.dimensions(); i++)
+        uint32_t wsStride = c.sizes()[0];
+        for(size_t i = 1; i < c.dimensions(); i++)
         {
             args.template append<uint32_t>(concatenate_if<T_Debug>("strideW", i), wsStride);
-            wsStride *= d.sizes()[i];
+            wsStride *= c.sizes()[i];
         }
 
         for(size_t i = 1; i < c.dimensions(); i++)
@@ -1793,16 +1793,19 @@ namespace Tensile
             wiY *= problem.freeSizeB(i);
         for(size_t i = 0; i < problem.batchIndices().size(); i++)
             wiZ *= problem.batchSize(i);
+        if (problem.actAndMul())
+            wiX /= 2;
 
         size_t vw = 1;
         if(wiX * wiY * wiZ > 2048)
         {
             //reach threashhold to trigger wider load
-            if(problem.freeSizeA(0) % 4 == 0
+            size_t freeSizeD0 = problem.actAndMul() ? (problem.freeSizeA(0) / 2) : problem.freeSizeA(0);
+            if(freeSizeD0 % 4 == 0
                && DataTypeInfo::Get(problemType.aType).elementSize
                       < DataTypeInfo::Get(DataType::Double).elementSize)
                 vw = 4;
-            else if(problem.freeSizeA(0) % 2 == 0)
+            else if(freeSizeD0 % 2 == 0)
                 vw = 2;
         }
 

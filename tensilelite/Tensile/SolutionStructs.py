@@ -2864,23 +2864,23 @@ class Solution(collections.abc.Mapping):
             % (state["MacroTile0"]*state["MacroTile1"], state["NumThreads"]))
         return
 
-    # GlobalSplitU doesn't work with some other things:
-    if state["GlobalSplitU"] > 1:
-      if state["ProblemType"]["DestDataType"].isFloat8() or state["ProblemType"]["DestDataType"].isBFloat8():
-        reject(state, "GlobalSplitU currently does not support GSU > 1 for f8 and b8.")
-        return
-      # added GSU support for DGEMM
-      supported = \
-        (state["ProblemType"]["DataType"].isSingle()) or \
-        (state["ProblemType"]["DataType"].isDouble() and state["BufferStore"]) or \
-        (state["ProblemType"]["DestDataType"].isInt32()) or \
-        (state["KernelLanguage"] == "Assembly" and
-            (state["ProblemType"]["DataType"].isHalf() and not state["ProblemType"]["HighPrecisionAccumulate"]) or
-            (state["_GlobalAccumulation"])
-        )
-      if not supported:
-        reject(state, "GlobalSplitU only compatible with single or asm and (half or mixed) precision")
-        return
+#    # GlobalSplitU doesn't work with some other things:
+#    if state["GlobalSplitU"] > 1:
+#      if state["ProblemType"]["DestDataType"].isFloat8() or state["ProblemType"]["DestDataType"].isBFloat8():
+#        reject(state, "GlobalSplitU currently does not support GSU > 1 for f8 and b8.")
+#        return
+#      # added GSU support for DGEMM
+#      supported = \
+#        (state["ProblemType"]["DataType"].isSingle()) or \
+#        (state["ProblemType"]["DataType"].isDouble() and state["BufferStore"]) or \
+#        (state["ProblemType"]["DestDataType"].isInt32()) or \
+#        (state["KernelLanguage"] == "Assembly" and
+#            (state["ProblemType"]["DataType"].isHalf() and not state["ProblemType"]["HighPrecisionAccumulate"]) or
+#            (state["_GlobalAccumulation"])
+#        )
+#      if not supported:
+#        reject(state, "GlobalSplitU only compatible with single or asm and (half or mixed) precision")
+#        return
 
     if state["ProblemType"]["DataType"].isHalf() and state["KernelLanguage"] == "Assembly":
       if state["GlobalSplitU"] > 1 and (not state["_GlobalAccumulation"]):

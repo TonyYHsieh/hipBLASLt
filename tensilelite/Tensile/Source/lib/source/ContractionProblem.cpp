@@ -795,7 +795,7 @@ namespace Tensile
 
         for(int i = 0; i < m_freeIndices.size(); i++)
         {
-            size_t mySize = dTensor.sizes()[m_freeIndices[i].d];
+            size_t mySize = cTensor.sizes()[m_freeIndices[i].d];
 
             if(m_freeIndices[i].isA)
             {
