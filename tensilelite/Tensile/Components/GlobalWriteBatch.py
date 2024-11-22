@@ -891,11 +891,11 @@ class GlobalWriteBatchWriter:
         if (self.kernel["ProblemType"]["UseE"] and not self.kernel["ProblemType"]["Gradient"]) and (self.kernel["GlobalSplitU"] == 1):
           vgprIdx = self.ss.elementSumIdx[elementIdx] - self.parentWriter.states.c.startVgprValu
           vgprDst = self.activationSetPCStruct.vgprActCopy if mergeActFuncCall else "ValuC+%d"%vgprIdx
-          module.add(self.parentWriter.addStore(self.kernel, self.ss, 'E', addrCalc, vgprDst, self.tmpS01, self.edge, comment="store E"))
+          module.add(self.parentWriter.addStore(self.kernel, self.ss, 'E', addrCalc, vgprDst, None, self.tmpS01, self.edge, comment="store E"))
 
         sumIdx = self.ss.elementSumIdx[elementIdx]
         if not self.kernel["StoreRemapVectorWidth"]:
-          tmpStoreCode = self.parentWriter.addStore(self.kernel, self.ss, 'D', addrCalc, sumIdx, self.tmpS01, self.edge, comment="store D %u" %sumIdx) #here
+          tmpStoreCode = self.parentWriter.addStore(self.kernel, self.ss, 'D', addrCalc, sumIdx, None, self.tmpS01, self.edge, comment="store D %u" %sumIdx) #here
           if self.kernel["GroupLoadStore"]:
             storeCodeGSUSK.add(tmpStoreCode)
           else:
@@ -1112,6 +1112,7 @@ class GlobalWriteBatchWriter:
       mask = self.ss.elementMask[elementIdx]
       vc0 = element[3]
       sumIdx = self.ss.elementSumIdx[elementIdx]
+      sumIdxAAM = self.ss.elementSumIdxAAM[elementIdx]
 
       # print(str(element)+" rowInc="+str(addrCalc.rowInc))
       # Already write wave column block into LDS
@@ -1271,7 +1272,7 @@ class GlobalWriteBatchWriter:
         else:
           printExit("Unsupport compute type for E output. (%s)"%self.kernel["ProblemType"]["ComputeDataType"].toEnum())
 
-        module.add(self.parentWriter.addStore(self.kernel, self.ss, 'E', addrCalc, vgprDst, self.tmpS01, self.edge, comment="store E"))
+        module.add(self.parentWriter.addStore(self.kernel, self.ss, 'E', addrCalc, vgprDst, None, self.tmpS01, self.edge, comment="store E"))
 
       SaturateTypeInt8 = SaturateCastType.NORMAL
 
@@ -1424,7 +1425,7 @@ class GlobalWriteBatchWriter:
       biasReductionModule = Module("biasReductionModule")
       if self.storeBiasD == 1:
         vgprIdx = self.ss.elementSumIdx[elementIdx] - self.parentWriter.states.c.startVgprValu
-        biasReductionModule.add(self.parentWriter.addStore(self.kernel, self.ss, 'Bias', addrCalc, "ValuC+%d"%vgprIdx, self.tmpS01, self.edge, comment="store Bias"))
+        biasReductionModule.add(self.parentWriter.addStore(self.kernel, self.ss, 'Bias', addrCalc, "ValuC+%d"%vgprIdx, None, self.tmpS01, self.edge, comment="store Bias"))
 
       if isActivationInsertAfter:
         module.add(convertModule)
@@ -1441,9 +1442,9 @@ class GlobalWriteBatchWriter:
 
       if not self.kernel["StoreRemapVectorWidth"]:
         if self.kernel["_GlobalAccumulation"] == "MultipleBufferSingleKernel":#GSUGSU
-          tmpStoreCode = self.parentWriter.addStore(self.kernel, self.ss, 'TD', addrCalc, sumIdx, self.tmpS01, self.edge, comment="store TD not StoreRemapVectorWidth")
+          tmpStoreCode = self.parentWriter.addStore(self.kernel, self.ss, 'TD', addrCalc, sumIdx, None, self.tmpS01, self.edge, comment="store TD not StoreRemapVectorWidth")
         else:
-          tmpStoreCode = self.parentWriter.addStore(self.kernel, self.ss, 'D', addrCalc, sumIdx, self.tmpS01, self.edge, comment="store D")
+          tmpStoreCode = self.parentWriter.addStore(self.kernel, self.ss, 'D', addrCalc, sumIdx, sumIdxAAM, self.tmpS01, self.edge, comment="store D")
         if self.kernel["GroupLoadStore"]:
           storeCode.add(tmpStoreCode)
         else:
@@ -1462,7 +1463,7 @@ class GlobalWriteBatchWriter:
           # Column Block Shape has been written to LDS
           # Now read back and write out to global memory
         else:
-          tmpStoreCode = self.parentWriter.addStore(self.kernel, self.ss, 'TD', addrCalc, sumIdx, self.tmpS01, self.edge, comment="store TD StoreRemapVectorWidth")
+          tmpStoreCode = self.parentWriter.addStore(self.kernel, self.ss, 'TD', addrCalc, sumIdx, None, self.tmpS01, self.edge, comment="store TD StoreRemapVectorWidth")
 
           if self.kernel["GroupLoadStore"]:
             storeCode.add(tmpStoreCode)
