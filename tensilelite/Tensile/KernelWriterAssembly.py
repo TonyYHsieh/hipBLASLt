@@ -10290,7 +10290,7 @@ class KernelWriterAssembly(KernelWriter):
     return self.addVecGlobalLoad(dataType, kernel, biasVgpr, addr0, addr1, addrCalc.biasOffset[factorDim], gwvw, comment="Load Bias")
 
   ##############################################################################
-  def addStore(self, kernel, ss, tc: str, addrCalc, sumIdx, tmpS01, edge, wsOffset=0, comment="addStore"):
+  def addStore(self, kernel, ss, tc: str, addrCalc, sumIdx, sumIdxAAM, tmpS01, edge, wsOffset=0, comment="addStore"):
     """
     Add stores for the element with addrCalc and sumIdx.
     tmpS01 is a single :temp sGPR
@@ -10388,43 +10388,56 @@ class KernelWriterAssembly(KernelWriter):
       else:
         printExit("Unsupported store tc %s"%tc)
 
+      actAndMul = kernel["ProblemType"]["ActAndMul"] and (tc == 'D') and (kernel["GlobalSplitU"] > 1)
+      actLoop = 2 if actAndMul else 1
       useBuffer = kernel["BufferStore"]
-      if dataType.isHalf() or dataType.isBFloat16():
-        if not kernel["ProblemType"]["HighPrecisionAccumulate"]:
-          # (H,H,H,H,H,H), internal H
-          if self.states.asmCaps["HasWMMA_V1"] and kernel["EnableMatrixInstruction"]:
-            module.add(self.chooseGlobalWrite(useBuffer, bps, sumIdx, rpv, \
-                addr0, addr1, globalOffset, soffset=wsOffset, \
-                glc=isGlc, slc=isSlc, nt=isNT, hi16=0, comment=comment))
+
+      for act in range(actLoop):
+        destVgpr = sumIdxAAM if act else sumIdx
+        sOffset = wsOffset
+        if act == 1:
+          module.add(SMulI32(dst=sgpr(tmpS01), src0=sgpr("SizeIHalf"), src1=kernel["ProblemType"]["ComputeDataType"].numBytes(), comment="SizeIHalf offset"))
+          if wsOffset != 0:
+            module.add(SAddI32(dst=sgpr(tmpS01), src0=sgpr(tmpS01), src1=wsOffset, comment="SizeIHalf offset"))
+          sOffset = sgpr(tmpS01)
+
+        if dataType.isHalf() or dataType.isBFloat16():
+          if not kernel["ProblemType"]["HighPrecisionAccumulate"]:
+            # (H,H,H,H,H,H), internal H
+            if self.states.asmCaps["HasWMMA_V1"] and kernel["EnableMatrixInstruction"]:
+              module.add(self.chooseGlobalWrite(useBuffer, bps, destVgpr, rpv, \
+                  addr0, addr1, globalOffset, soffset=sOffset, \
+                  glc=isGlc, slc=isSlc, nt=isNT, hi16=0, comment=comment))
+            else:
+              module.add(self.chooseGlobalWrite(useBuffer, bps, destVgpr//2, rpv, \
+                  addr0, addr1, globalOffset, soffset=sOffset, \
+                  glc=isGlc, slc=isSlc, nt=isNT, hi16=destVgpr%2, comment=comment))
           else:
-            module.add(self.chooseGlobalWrite(useBuffer, bps, sumIdx//2, rpv, \
-                addr0, addr1, globalOffset, soffset=wsOffset, \
-                glc=isGlc, slc=isSlc, nt=isNT, hi16=sumIdx%2, comment=comment))
-        else:
-          # (B,B,B,B,S,S), internal S
-          # (H,H,H,H,H,H), internal S
-          # (H,H,H,H,S,S), internal S
-          module.add(self.chooseGlobalWrite(useBuffer, bps, sumIdx, rpv, \
-              addr0, addr1, globalOffset, soffset=wsOffset, \
-              glc=isGlc, slc=isSlc, nt=isNT, hi16=0, comment=comment))
-      elif dataType.isInt32() or dataType.isSingle():
-        module.add(self.chooseGlobalWrite(useBuffer, bps, sumIdx, rpv, \
-            addr0, addr1, globalOffset, soffset=wsOffset, \
-            glc=isGlc, slc=isSlc, nt=isNT, comment=comment))
-      elif dataType.isDouble() or dataType.isSingleComplex():
-        module.add(self.chooseGlobalWrite(useBuffer, bps, sumIdx*2, rpv, \
-            addr0, addr1, globalOffset, soffset=wsOffset, \
-            glc=isGlc, slc=isSlc, nt=isNT, comment=comment))
-      elif dataType.isDoubleComplex():
-        rps = dataType.numRegisters()
-        module.add(self.chooseGlobalWrite(useBuffer, bps, sumIdx*rps, rpv, \
-            addr0, addr1, globalOffset, soffset=wsOffset, \
-            glc=isGlc, slc=isSlc, nt=isNT, comment=comment))
-      elif dataType.isInt8() or dataType.isFloat8() or dataType.isBFloat8() or dataType.isFloat8BFloat8() or dataType.isBFloat8Float8():
-        if kernel["ProblemType"]["HighPrecisionAccumulate"]:
-          module.add(self.chooseGlobalWrite(useBuffer, bps, sumIdx, rpv, \
-              addr0, addr1, globalOffset, soffset=wsOffset, \
+            # (B,B,B,B,S,S), internal S
+            # (H,H,H,H,H,H), internal S
+            # (H,H,H,H,S,S), internal S
+            module.add(self.chooseGlobalWrite(useBuffer, bps, destVgpr, rpv, \
+                addr0, addr1, globalOffset, soffset=sOffset, \
+                glc=isGlc, slc=isSlc, nt=isNT, hi16=0, comment=comment))
+        elif dataType.isInt32() or dataType.isSingle():
+          module.add(self.chooseGlobalWrite(useBuffer, bps, destVgpr, rpv, \
+              addr0, addr1, globalOffset, soffset=sOffset, \
               glc=isGlc, slc=isSlc, nt=isNT, comment=comment))
+        elif dataType.isDouble() or dataType.isSingleComplex():
+          module.add(self.chooseGlobalWrite(useBuffer, bps, destVgpr*2, rpv, \
+              addr0, addr1, globalOffset, soffset=sOffset, \
+              glc=isGlc, slc=isSlc, nt=isNT, comment=comment))
+        elif dataType.isDoubleComplex():
+          rps = dataType.numRegisters()
+          module.add(self.chooseGlobalWrite(useBuffer, bps, destVgpr*rps, rpv, \
+              addr0, addr1, globalOffset, soffset=sOffset, \
+              glc=isGlc, slc=isSlc, nt=isNT, comment=comment))
+        elif dataType.isInt8() or dataType.isFloat8() or dataType.isBFloat8() or dataType.isFloat8BFloat8() or dataType.isBFloat8Float8():
+          if kernel["ProblemType"]["HighPrecisionAccumulate"]:
+            module.add(self.chooseGlobalWrite(useBuffer, bps, destVgpr, rpv, \
+                addr0, addr1, globalOffset, soffset=sOffset, \
+                glc=isGlc, slc=isSlc, nt=isNT, comment=comment))
+
     return module
 
   ##############################################################################
