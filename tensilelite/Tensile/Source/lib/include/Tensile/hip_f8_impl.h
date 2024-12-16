@@ -27,12 +27,16 @@
 #ifndef _HIP_FLOAT8_IMPL_H_
 #define _HIP_FLOAT8_IMPL_H_
 
+#include <hip/hip_fp8.h>
 #include <hip/hip_version.h>
-#if HIP_VERSION_MAJOR == 6 && HIP_VERSION_MINOR > 2 \
-    && HIP_VERSION_PATCH > 42130 //tmp before gfx94 use hip f8 header
+
+#if HIP_VERSION_MAJOR > 6
+#define USE_HIP_FP8_DEF 1
+#elif HIP_VERSION_MAJOR == 6 && HIP_VERSION_MINOR > 3
+#define USE_HIP_FP8_DEF 1
+#elif HIP_VERSION_MAJOR == 6 && HIP_VERSION_MINOR == 3 && HIP_VERSION_PATCH > 42130
 #define USE_HIP_FP8_DEF 1
 #endif
-#include <hip/hip_fp8.h>
 
 namespace tensile_hip_f8_impl
 {
