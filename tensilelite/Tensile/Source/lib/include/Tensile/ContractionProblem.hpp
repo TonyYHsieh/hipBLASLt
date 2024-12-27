@@ -622,7 +622,7 @@ namespace TensileLite
             return m_betaType;
         }
 
-        size_t computeTypeElementSize() const
+        float computeTypeElementSize() const
         {
             return DataTypeInfo::Get(m_betaType).elementSize;
         }

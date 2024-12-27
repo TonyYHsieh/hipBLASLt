@@ -109,7 +109,7 @@ namespace TensileLite
 
     std::string   ToString(DataType d);
     std::string   TypeAbbrev(DataType d);
-    size_t        GetElementSize(DataType d);
+    float         GetElementSize(DataType d);
     std::ostream& operator<<(std::ostream& stream, DataType const& t);
     std::istream& operator>>(std::istream& stream, DataType& t);
 
@@ -127,7 +127,7 @@ namespace TensileLite
         std::string name;
         std::string abbrev;
 
-        size_t elementSize;
+        float elementSize;
         size_t packing;
         size_t segmentSize;
 
@@ -162,11 +162,11 @@ namespace TensileLite
         constexpr static DataType Enum = T_Enum;
 
         /// Bytes of one element.  May contain multiple segments.
-        constexpr static size_t ElementSize = sizeof(T);
+        constexpr static float ElementSize = float(sizeof(T)) / float(T_Packing);
         /// Segments per element.
         constexpr static size_t Packing = T_Packing;
         /// Bytes per segment.
-        constexpr static size_t SegmentSize = ElementSize / Packing;
+        constexpr static float SegmentSize = ElementSize / Packing;
 
         constexpr static bool IsComplex  = T_IsComplex;
         constexpr static bool IsIntegral = T_IsIntegral;
@@ -184,11 +184,11 @@ namespace TensileLite
     template <typename T, DataType T_Enum, int T_Packing, bool T_IsComplex, bool T_IsIntegral>
     constexpr DataType BaseTypeInfo<T, T_Enum, T_Packing, T_IsComplex, T_IsIntegral>::Enum;
     template <typename T, DataType T_Enum, int T_Packing, bool T_IsComplex, bool T_IsIntegral>
-    constexpr size_t BaseTypeInfo<T, T_Enum, T_Packing, T_IsComplex, T_IsIntegral>::ElementSize;
+    constexpr float BaseTypeInfo<T, T_Enum, T_Packing, T_IsComplex, T_IsIntegral>::ElementSize;
     template <typename T, DataType T_Enum, int T_Packing, bool T_IsComplex, bool T_IsIntegral>
     constexpr size_t BaseTypeInfo<T, T_Enum, T_Packing, T_IsComplex, T_IsIntegral>::Packing;
     template <typename T, DataType T_Enum, int T_Packing, bool T_IsComplex, bool T_IsIntegral>
-    constexpr size_t BaseTypeInfo<T, T_Enum, T_Packing, T_IsComplex, T_IsIntegral>::SegmentSize;
+    constexpr float BaseTypeInfo<T, T_Enum, T_Packing, T_IsComplex, T_IsIntegral>::SegmentSize;
 
     template <typename T, DataType T_Enum, int T_Packing, bool T_IsComplex, bool T_IsIntegral>
     constexpr bool BaseTypeInfo<T, T_Enum, T_Packing, T_IsComplex, T_IsIntegral>::IsComplex;
@@ -236,6 +236,11 @@ namespace TensileLite
     // Enum DataType::Int8 maps to int8_t, struct TensileLite::Int8 is only used for LogTensor now
     template <>
     struct TypeInfo<int8_t> : public BaseTypeInfo<int8_t, DataType::Int8, 1, false, true>
+    {
+    };
+
+    template <>
+    struct TypeInfo<Int8> : public BaseTypeInfo<Int8, DataType::Int8, 1, false, true>
     {
     };
 
@@ -367,6 +372,8 @@ namespace TensileLite
 
     std::string ToString(ConstantVariant d);
     bool        CompareValue(const ConstantVariant& d, double value);
+
+    size_t multiplyElementSize(size_t element, float elementSize);
 
     /**
  * @}
