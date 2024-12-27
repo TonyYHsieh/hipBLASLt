@@ -72,6 +72,7 @@ namespace TensileLite
         case DataType::BFloat8Float8_fnuz:
             return "BFloat8Float8_fnuz";
         case DataType::Count:;
+            return "Invalid";
         }
         return "Invalid";
     }
@@ -121,7 +122,7 @@ namespace TensileLite
         return "Invalid";
     }
 
-    size_t GetElementSize(DataType d)
+    float GetElementSize(DataType d)
     {
         switch(d)
         {
@@ -161,7 +162,8 @@ namespace TensileLite
             return TypeInfo<Float8BFloat8_fnuz>::ElementSize;
         case DataType::BFloat8Float8_fnuz:
             return TypeInfo<BFloat8Float8_fnuz>::ElementSize;
-        case DataType::Count:;
+        case DataType::Count:
+            return 1;
         }
         return 1;
     }

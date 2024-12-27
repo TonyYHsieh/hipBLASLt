@@ -668,8 +668,9 @@ namespace TensileLite
             template <typename T, InitMode Mode>
             void initArray(T* array, size_t elements)
             {
+                size_t numPacks = elements / TypeInfo<T>::Packing;
 #pragma omp parallel for
-                for(size_t i = 0; i < elements; i++)
+                for(size_t i = 0; i < numPacks; i++)
                 {
                     array[i] = getValue<T, Mode>();
                 }
@@ -678,8 +679,9 @@ namespace TensileLite
             template <typename T>
             void initArrayConvert(T* array, size_t elements)
             {
+                size_t numPacks = elements / TypeInfo<T>::Packing;
 #pragma omp parallel for
-                for(size_t i = 0; i < elements; i++)
+                for(size_t i = 0; i < numPacks; i++)
                 {
                     array[i] = ConvertTo<T>(i);
                 }
@@ -698,11 +700,12 @@ namespace TensileLite
                 auto const& sizes = tensor.sizes();
                 auto        count = CoordCount(sizes.begin(), sizes.end());
 #pragma omp parallel for
-                for(size_t idx = 0; idx < count; idx++)
+                for(size_t idx = 0; idx < count; idx+=TypeInfo<T>::Packing)
                 {
                     std::vector<size_t> coord(tensor.dimensions(), 0);
                     CoordNumbered(idx, coord.begin(), coord.end(), sizes.begin(), sizes.end());
-                    array[tensor.index(coord)] = static_cast<T>(idx);
+                    size_t tensorIndex = tensor.index(coord) / TypeInfo<T>::Packing;
+                    array[tensorIndex] = ConvertTo<T>(idx);
                 }
             }
 
@@ -712,11 +715,12 @@ namespace TensileLite
                 auto const& sizes = tensor.sizes();
                 auto        count = CoordCount(sizes.begin(), sizes.end());
 #pragma omp parallel for
-                for(size_t idx = 0; idx < count; idx++)
+                for(size_t idx = 0; idx < count; idx+=TypeInfo<T>::Packing)
                 {
                     std::vector<size_t> coord(tensor.dimensions(), 0);
                     CoordNumbered(idx, coord.begin(), coord.end(), sizes.begin(), sizes.end());
-                    array[tensor.index(coord)] = static_cast<T>(coord[dim]);
+                    size_t tensorIndex = tensor.index(coord) / TypeInfo<T>::Packing;
+                    array[tensorIndex] = ConvertTo<T>(coord[dim]);
                 }
             }
 
@@ -747,11 +751,12 @@ namespace TensileLite
                 auto const& sizes = tensor.sizes();
                 auto        count = CoordCount(sizes.begin(), sizes.end());
 #pragma omp parallel for
-                for(size_t idx = 0; idx < count; idx++)
+                for(size_t idx = 0; idx < count; idx+=TypeInfo<T>::Packing)
                 {
                     std::vector<size_t> coord(tensor.dimensions(), 0);
                     CoordNumbered(idx, coord.begin(), coord.end(), sizes.begin(), sizes.end());
-                    array[tensor.index(coord)] = static_cast<T>(coord[0] == coord[1] ? 1 : 0);
+                    size_t tensorIndex = tensor.index(coord) / TypeInfo<T>::Packing;
+                    array[tensorIndex] = ConvertTo<T>(coord[0] == coord[1] ? 1 : 0);
                 }
             }
 
@@ -761,11 +766,12 @@ namespace TensileLite
                 auto const& sizes = tensor.sizes();
                 auto        count = CoordCount(sizes.begin(), sizes.end());
 #pragma omp parallel for
-                for(size_t idx = 0; idx < count; idx++)
+                for(size_t idx = 0; idx < count; idx+=TypeInfo<T>::Packing)
                 {
                     std::vector<size_t> coord(tensor.dimensions(), 0);
                     CoordNumbered(idx, coord.begin(), coord.end(), sizes.begin(), sizes.end());
-                    array[tensor.index(coord)] = getTrigValue<T>(idx, useCos, useAbs);
+                    size_t tensorIndex = tensor.index(coord) / TypeInfo<T>::Packing;
+                    array[tensorIndex] = getTrigValue<T>(idx, useCos, useAbs);
                 }
             }
 
@@ -773,9 +779,9 @@ namespace TensileLite
             void initArrayTrig(T* array, size_t elements)
             {
 #pragma omp parallel for
-                for(size_t i = 0; i < elements; i++)
+                for(size_t i = 0; i < elements; i+=TypeInfo<T>::Packing)
                 {
-                    array[i] = getTrigValue<T>(i, useCos, useAbs);
+                    array[i/TypeInfo<T>::Packing] = getTrigValue<T>(i, useCos, useAbs);
                 }
             }
 

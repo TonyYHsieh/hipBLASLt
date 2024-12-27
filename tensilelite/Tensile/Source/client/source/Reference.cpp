@@ -627,6 +627,123 @@ omp_set_num_threads(MAX_OMP_THREADS);
             throw std::runtime_error("Unsupported input type.");
         }
 
+        template<typename Inputs, typename Accumulator, typename MathOpAccum, typename AType, typename BType, typename ComputeInputType>
+        Accumulator multiply(
+            ContractionProblemGemm const& problem,
+            ContractionInputs const&      inputs,
+            AType const* aPtr,
+            BType const* bPtr,
+            const size_t aIdx,
+            const size_t bIdx,
+            const bool aConjugate,
+            const bool bConjugate)
+        {
+            Accumulator value(0);
+
+            AType aVal = Transform<AType>::Input(aPtr[aIdx], aConjugate);
+            BType bVal = Transform<BType>::Input(bPtr[bIdx], bConjugate);
+
+            if constexpr(sizeof(typename Inputs::AType)
+                             > sizeof(typename Inputs::ComputeInputType)
+                         && sizeof(typename Inputs::BType)
+                                > sizeof(typename Inputs::ComputeInputType))
+            {
+                if constexpr (std::is_same<Float8BFloat8,
+                                typename Inputs::ComputeInputType>::value)
+                {
+                    auto aValCast = static_cast<TensileLite::Float8>(aVal);
+                    auto bValCast = static_cast<TensileLite::BFloat8>(bVal);
+                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
+                }
+                else if constexpr (std::is_same<BFloat8Float8,
+                                     typename Inputs::ComputeInputType>::value)
+                {
+                    auto aValCast = static_cast<TensileLite::BFloat8>(aVal);
+                    auto bValCast = static_cast<TensileLite::Float8>(bVal);
+                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
+                }
+                else if constexpr (std::is_same<Float8BFloat8_fnuz,
+                                typename Inputs::ComputeInputType>::value)
+                {
+                    auto aValCast = static_cast<TensileLite::Float8_fnuz>(aVal);
+                    auto bValCast = static_cast<TensileLite::BFloat8_fnuz>(bVal);
+                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
+                }
+                else if constexpr (std::is_same<BFloat8Float8_fnuz,
+                                     typename Inputs::ComputeInputType>::value)
+                {
+                    auto aValCast = static_cast<TensileLite::BFloat8_fnuz>(aVal);
+                    auto bValCast = static_cast<TensileLite::Float8_fnuz>(bVal);
+                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
+                }
+                else
+                {
+                    typename Inputs::ComputeInputType aValCast, bValCast;
+                    if(problem.useScaleAB() == "Scalar")
+                    {
+                        Accumulator scaleA = GetValue<Accumulator>(
+                            problem.alphaType(), inputs.scaleA, 0, aConjugate);
+                        auto tmp = multiply<Accumulator>(aVal, scaleA);
+                        aValCast
+                            = static_cast<typename Inputs::ComputeInputType>(tmp);
+                        Accumulator scaleB = GetValue<Accumulator>(
+                            problem.alphaType(), inputs.scaleB, 0, aConjugate);
+                        tmp = multiply<Accumulator>(bVal, scaleB);
+                        bValCast
+                            = static_cast<typename Inputs::ComputeInputType>(tmp);
+                    }
+                    else
+                    {
+                        aValCast
+                            = static_cast<typename Inputs::ComputeInputType>(aVal);
+                        bValCast
+                            = static_cast<typename Inputs::ComputeInputType>(bVal);
+                    }
+                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
+                }
+            }
+            else if constexpr(sizeof(typename Inputs::AType)
+                              > sizeof(typename Inputs::ComputeInputType))
+            {
+                typename Inputs::ComputeInputType aValCast;
+                if(problem.useScaleAB() == "Scalar")
+                {
+                    Accumulator scaleA = GetValue<Accumulator>(
+                        problem.alphaType(), inputs.scaleA, 0, aConjugate);
+                    auto tmp = multiply<Accumulator>(aVal, scaleA);
+                    aValCast = static_cast<typename Inputs::ComputeInputType>(tmp);
+                }
+                else
+                {
+                    aValCast = static_cast<typename Inputs::ComputeInputType>(aVal);
+                }
+                value += multiply<Accumulator, MathOpAccum>(aValCast, bVal);
+            }
+            else if constexpr(sizeof(typename Inputs::BType)
+                              > sizeof(typename Inputs::ComputeInputType))
+            {
+                typename Inputs::ComputeInputType bValCast;
+                if(problem.useScaleAB() == "Scalar")
+                {
+                    Accumulator scaleB = GetValue<Accumulator>(
+                        problem.alphaType(), inputs.scaleB, 0, aConjugate);
+                    auto tmp = multiply<Accumulator>(bVal, scaleB);
+                    bValCast = static_cast<typename Inputs::ComputeInputType>(tmp);
+                }
+                else
+                {
+                    bValCast = static_cast<typename Inputs::ComputeInputType>(bVal);
+                }
+                value += multiply<Accumulator, MathOpAccum>(aVal, bValCast);
+            }
+            else
+            {
+                value += multiply<Accumulator, MathOpAccum>(aVal, bVal);
+            }
+
+            return value;
+        }
+
         template <typename Inputs, typename Accumulator, typename MathOpAccum>
         void ReferenceSolution<Inputs, Accumulator, MathOpAccum>::SolveCPU(
             ContractionProblemGemm const& problem,
@@ -798,110 +915,13 @@ omp_set_num_threads(MAX_OMP_THREADS);
                             size_t bI
                                 = problem.boundIndices()[0].bMirror ? (boundSize[0] - i - 1) : i;
 
-                            typename Inputs::AType aVal(0);
-                            typename Inputs::BType bVal(0);
-                            aVal = Transform<typename Inputs::AType>::Input(
-                                aPtr[aIndex + (aI * aStride)], aConjugate);
-                            bVal = Transform<typename Inputs::BType>::Input(
-                                bPtr[bIndex + (bI * bStride)], bConjugate);
-
-                            if constexpr(sizeof(typename Inputs::AType)
-                                             > sizeof(typename Inputs::ComputeInputType)
-                                         && sizeof(typename Inputs::BType)
-                                                > sizeof(typename Inputs::ComputeInputType))
-                            {
-                                if constexpr (std::is_same<Float8BFloat8,
-                                                typename Inputs::ComputeInputType>::value)
-                                {
-                                    auto aValCast = static_cast<TensileLite::Float8>(aVal);
-                                    auto bValCast = static_cast<TensileLite::BFloat8>(bVal);
-                                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
-                                }
-                                else if constexpr (std::is_same<BFloat8Float8,
-                                                     typename Inputs::ComputeInputType>::value)
-                                {
-                                    auto aValCast = static_cast<TensileLite::BFloat8>(aVal);
-                                    auto bValCast = static_cast<TensileLite::Float8>(bVal);
-                                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
-                                }
-                                else if constexpr (std::is_same<Float8BFloat8_fnuz,
-                                                typename Inputs::ComputeInputType>::value)
-                                {
-                                    auto aValCast = static_cast<TensileLite::Float8_fnuz>(aVal);
-                                    auto bValCast = static_cast<TensileLite::BFloat8_fnuz>(bVal);
-                                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
-                                }
-                                else if constexpr (std::is_same<BFloat8Float8_fnuz,
-                                                     typename Inputs::ComputeInputType>::value)
-                                {
-                                    auto aValCast = static_cast<TensileLite::BFloat8_fnuz>(aVal);
-                                    auto bValCast = static_cast<TensileLite::Float8_fnuz>(bVal);
-                                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
-                                }
-                                else
-                                {
-                                    typename Inputs::ComputeInputType aValCast, bValCast;
-                                    if(problem.useScaleAB() == "Scalar")
-                                    {
-                                        Accumulator scaleA = GetValue<Accumulator>(
-                                            problem.alphaType(), inputs.scaleA, 0, aConjugate);
-                                        auto tmp = multiply<Accumulator>(aVal, scaleA);
-                                        aValCast
-                                            = static_cast<typename Inputs::ComputeInputType>(tmp);
-                                        Accumulator scaleB = GetValue<Accumulator>(
-                                            problem.alphaType(), inputs.scaleB, 0, aConjugate);
-                                        tmp = multiply<Accumulator>(bVal, scaleB);
-                                        bValCast
-                                            = static_cast<typename Inputs::ComputeInputType>(tmp);
-                                    }
-                                    else
-                                    {
-                                        aValCast
-                                            = static_cast<typename Inputs::ComputeInputType>(aVal);
-                                        bValCast
-                                            = static_cast<typename Inputs::ComputeInputType>(bVal);
-                                    }
-                                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
-                                }
-                            }
-                            else if constexpr(sizeof(typename Inputs::AType)
-                                              > sizeof(typename Inputs::ComputeInputType))
-                            {
-                                typename Inputs::ComputeInputType aValCast;
-                                if(problem.useScaleAB() == "Scalar")
-                                {
-                                    Accumulator scaleA = GetValue<Accumulator>(
-                                        problem.alphaType(), inputs.scaleA, 0, aConjugate);
-                                    auto tmp = multiply<Accumulator>(aVal, scaleA);
-                                    aValCast = static_cast<typename Inputs::ComputeInputType>(tmp);
-                                }
-                                else
-                                {
-                                    aValCast = static_cast<typename Inputs::ComputeInputType>(aVal);
-                                }
-                                value += multiply<Accumulator, MathOpAccum>(aValCast, bVal);
-                            }
-                            else if constexpr(sizeof(typename Inputs::BType)
-                                              > sizeof(typename Inputs::ComputeInputType))
-                            {
-                                typename Inputs::ComputeInputType bValCast;
-                                if(problem.useScaleAB() == "Scalar")
-                                {
-                                    Accumulator scaleB = GetValue<Accumulator>(
-                                        problem.alphaType(), inputs.scaleB, 0, aConjugate);
-                                    auto tmp = multiply<Accumulator>(bVal, scaleB);
-                                    bValCast = static_cast<typename Inputs::ComputeInputType>(tmp);
-                                }
-                                else
-                                {
-                                    bValCast = static_cast<typename Inputs::ComputeInputType>(bVal);
-                                }
-                                value += multiply<Accumulator, MathOpAccum>(aVal, bValCast);
-                            }
-                            else
-                            {
-                                value += multiply<Accumulator, MathOpAccum>(aVal, bVal);
-                            }
+                            size_t aIdx = aIndex + (aI * aStride);
+                            size_t bIdx = bIndex + (bI * bStride);
+                            value += multiply<Inputs, Accumulator, MathOpAccum,
+                                              typename Inputs::AType,
+                                              typename Inputs::BType,
+                                              typename Inputs::ComputeInputType>(
+                                problem, inputs, aPtr, bPtr, aIdx, bIdx, aConjugate, bConjugate);
                         }
                     }
                 }
@@ -1678,7 +1698,6 @@ omp_set_num_threads(MAX_OMP_THREADS);
             }
 #endif // TENSILE_USE_HALF
 #endif // TENSILE_USE_FP8_BF8
-
             default:;
             }
 
