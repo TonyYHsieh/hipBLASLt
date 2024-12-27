@@ -65,6 +65,7 @@
 #include <Tensile/DataTypes_Int8.hpp>
 #include <Tensile/DataTypes_Int8x4.hpp>
 #include <Tensile/DataTypes_XFloat32.hpp>
+#include <Tensile/DataTypes_Float4.hpp>
 
 namespace TensileLite
 {
@@ -103,6 +104,9 @@ namespace TensileLite
         BFloat8Float8,
         Float8BFloat8_fnuz,
         BFloat8Float8_fnuz,
+#ifdef TENSILE_USE_FP4
+        Float4,
+#endif // #ifdef TENSILE_USE_FP4
         Count,
         None = Count
     };
@@ -292,6 +296,12 @@ namespace TensileLite
         : public BaseTypeInfo<BFloat8Float8_fnuz, DataType::BFloat8Float8_fnuz, 1, false, false>
     {
     };
+#ifdef TENSILE_USE_FP4
+    template <>
+    struct TypeInfo<Float4x2> : public BaseTypeInfo<Float4x2, DataType::Float4, 2, false, false>
+    {
+    };
+#endif // #ifdef TENSILE_USE_FP4
 
     // Variant for constants
     using ConstantVariant = std::variant<float,
@@ -306,7 +316,11 @@ namespace TensileLite
                                          BFloat8,
                                          Float8_fnuz,
                                          BFloat8_fnuz,
-                                         int8_t>;
+                                         int8_t
+#ifdef TENSILE_USE_FP4
+                                       , Float4x2
+#endif // #ifdef TENSILE_USE_FP4
+                                        >;
 
     // Convert variants to type T
     template <typename T>
@@ -345,6 +359,22 @@ namespace TensileLite
             throw std::runtime_error("Unsupported variant cast type.");
         }
     }
+
+#ifdef TENSILE_USE_FP4
+    // Convert variants to type T
+    template <typename T>
+    typename std::enable_if<std::is_same<Float4x2, T>::value, T>::type
+        constVariantCast(const ConstantVariant& val)
+    {
+        switch(val.index())
+        {
+        case static_cast<int>(DataType::Float4):
+            return static_cast<T>(*std::get_if<Float4x2>(&val));
+        default:
+            throw std::runtime_error("Unsupported variant cast type.");
+        }
+    }
+#endif // #ifdef TENSILE_USE_FP4
 
     template <typename T>
     typename std::enable_if<std::is_same<std::complex<double>, T>::value

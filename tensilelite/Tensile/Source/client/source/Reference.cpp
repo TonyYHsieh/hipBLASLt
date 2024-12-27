@@ -255,7 +255,11 @@ namespace TensileLite
             case DataType::Float8BFloat8:
             case DataType::BFloat8Float8:
             case DataType::Float8BFloat8_fnuz:
-            case DataType::BFloat8Float8_fnuz:;
+            case DataType::BFloat8Float8_fnuz:
+#ifdef TENSILE_USE_FP4
+            case DataType::Float4:
+#endif // #ifdef TENSILE_USE_FP4
+                ;
             }
             return DataInitialization::getValue<Accumulator, InitMode::Zero>();
         }
@@ -338,7 +342,11 @@ namespace TensileLite
             case DataType::Float8BFloat8:
             case DataType::BFloat8Float8:
             case DataType::Float8BFloat8_fnuz:
-            case DataType::BFloat8Float8_fnuz:;
+            case DataType::BFloat8Float8_fnuz:
+#ifdef TENSILE_USE_FP4
+            case DataType::Float4:
+#endif // #ifdef TENSILE_USE_FP4
+                ;
             }
         }
 
@@ -383,7 +391,11 @@ namespace TensileLite
             case DataType::Float8BFloat8:
             case DataType::BFloat8Float8:
             case DataType::Float8BFloat8_fnuz:
-            case DataType::BFloat8Float8_fnuz:;
+            case DataType::BFloat8Float8_fnuz:
+#ifdef TENSILE_USE_FP4
+            case DataType::Float4:
+#endif // #ifdef TENSILE_USE_FP4
+                ;
             }
         }
 
@@ -627,7 +639,11 @@ omp_set_num_threads(MAX_OMP_THREADS);
             throw std::runtime_error("Unsupported input type.");
         }
 
-        template<typename Inputs, typename Accumulator, typename MathOpAccum, typename AType, typename BType, typename ComputeInputType>
+        template<typename Inputs, typename Accumulator, typename MathOpAccum, typename AType, typename BType, typename ComputeInputType
+#ifdef TENSILE_USE_FP4
+            , std::enable_if_t<!std::is_same<Float4x2, AType>::value && !std::is_same<Float4x2, BType>::value, bool> = true
+#endif // #ifdef TENSILE_USE_FP4
+        >
         Accumulator multiply(
             ContractionProblemGemm const& problem,
             ContractionInputs const&      inputs,
@@ -743,6 +759,31 @@ omp_set_num_threads(MAX_OMP_THREADS);
 
             return value;
         }
+
+#ifdef TENSILE_USE_FP4
+        template<typename Inputs, typename Accumulator, typename MathOpAccum, typename AType, typename BType, typename ComputeInputType,
+            std::enable_if_t<std::is_same<Float4x2, AType>::value && std::is_same<Float4x2, BType>::value, bool> = true>
+        Accumulator multiply(
+            ContractionProblemGemm const& problem,
+            ContractionInputs const&      inputs,
+            AType const* aPtr,
+            BType const* bPtr,
+            const size_t aIdx,
+            const size_t bIdx,
+            const bool aConjugate,
+            const bool bConjugate)
+        {
+            size_t aPackIdx = aIdx / TypeInfo<AType>::Packing;
+            size_t aElemIdx = aIdx % TypeInfo<AType>::Packing;
+            size_t bPackIdx = bIdx / TypeInfo<BType>::Packing;
+            size_t bElemIdx = bIdx % TypeInfo<BType>::Packing;
+
+            MathOpAccum aVal = static_cast<MathOpAccum>(aPtr[aPackIdx].getElement(aElemIdx));
+            MathOpAccum bVal = static_cast<MathOpAccum>(bPtr[bPackIdx].getElement(bElemIdx));
+
+            return multiply<Accumulator, MathOpAccum>(aVal, bVal);
+        }
+#endif // #ifdef TENSILE_USE_FP4
 
         template <typename Inputs, typename Accumulator, typename MathOpAccum>
         void ReferenceSolution<Inputs, Accumulator, MathOpAccum>::SolveCPU(
@@ -1698,6 +1739,14 @@ omp_set_num_threads(MAX_OMP_THREADS);
             }
 #endif // TENSILE_USE_HALF
 #endif // TENSILE_USE_FP8_BF8
+
+#ifdef TENSILE_USE_FP4
+            case TypedGemm_F4_S_S::TypeId():
+            {
+                return ReferenceSolution<TypedGemm_F4_S_S>::SolveCPU(
+                    problem, inputs, elementsToValidate);
+            }
+#endif //TENSILE_USE_FP4
             default:;
             }
 
