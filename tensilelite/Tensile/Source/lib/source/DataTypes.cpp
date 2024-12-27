@@ -71,7 +71,11 @@ namespace TensileLite
             return "Float8BFloat8_fnuz";
         case DataType::BFloat8Float8_fnuz:
             return "BFloat8Float8_fnuz";
-        case DataType::Count:;
+#ifdef TENSILE_USE_FP4
+        case DataType::Float4:
+            return "Float4";
+#endif // #ifdef TENSILE_USE_FP4
+        case DataType::Count:
             return "Invalid";
         }
         return "Invalid";
@@ -117,7 +121,12 @@ namespace TensileLite
             return "F8B8N";
         case DataType::BFloat8Float8_fnuz:
             return "B8F8N";
-        case DataType::Count:;
+#ifdef TENSILE_USE_FP4
+        case DataType::Float4:
+            return "F4";
+#endif // #ifdef TENSILE_USE_FP4
+        case DataType::Count:
+            return "Invalid";
         }
         return "Invalid";
     }
@@ -162,6 +171,10 @@ namespace TensileLite
             return TypeInfo<Float8BFloat8_fnuz>::ElementSize;
         case DataType::BFloat8Float8_fnuz:
             return TypeInfo<BFloat8Float8_fnuz>::ElementSize;
+#ifdef TENSILE_USE_FP4
+        case DataType::Float4:
+            return TypeInfo<Float4x2>::ElementSize;
+#endif // #ifdef TENSILE_USE_FP4
         case DataType::Count:
             return 1;
         }
@@ -221,6 +234,9 @@ namespace TensileLite
         registerTypeInfo<BFloat8Float8>();
         registerTypeInfo<Float8BFloat8_fnuz>();
         registerTypeInfo<BFloat8Float8_fnuz>();
+#ifdef TENSILE_USE_FP4
+        registerTypeInfo<Float4x2>();
+#endif // #ifdef TENSILE_USE_FP4
     }
 
     void DataTypeInfo::registerAllTypeInfoOnce()
