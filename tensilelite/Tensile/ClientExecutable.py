@@ -67,7 +67,8 @@ def clientExecutableEnvironment(builddir: Optional[str], cxxCompiler: str, cComp
                'Tensile_LIBRARY_FORMAT': globalParameters["LibraryFormat"],
                'Tensile_ENABLE_MARKER' : globalParameters["EnableMarker"],
                'CMAKE_CXX_COMPILER': os.path.join(globalParameters["ROCmBinPath"], cxxCompiler),
-               'CMAKE_C_COMPILER': os.path.join(globalParameters["ROCmBinPath"], cCompiler)}
+               'CMAKE_C_COMPILER': os.path.join(globalParameters["ROCmBinPath"], cCompiler),
+               'CMAKE_CXX_FLAGS_DEBUG': "-O0 -g"}
 
     if "CCACHE_BASEDIR" in os.environ:
         options.update({'CMAKE_C_COMPILER_LAUNCHER': 'ccache', 'CMAKE_CXX_COMPILER_LAUNCHER': 'ccache'})
