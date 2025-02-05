@@ -3484,18 +3484,20 @@ class Solution(collections.abc.Mapping):
     if state["EnableMatrixInstruction"]:
       if state["LdsBlockSizePerPadA"]:
         if state["UnrollMajorLDSA"]:
-          if state["LdsBlockSizePerPadA"] % (state["_DepthUA"] * state["ProblemType"]["DataTypeA"].numBytes()) != 0:
+          tmpBpe = state["ProblemType"]["DataTypeA"].numBytes() if state["ConvertAfterDS"] else state["ProblemType"]["DataType"].numBytes()
+          if state["LdsBlockSizePerPadA"] % (state["_DepthUA"] * tmpBpe) != 0:
             reject(state, "reject: LdsBlockSizePerPadA %u %% depthU %u x bpeA != 0" % (state["LdsBlockSizePerPadA"],state["_DepthUA"]))
-          if (state["LdsBlockSizePerPadA"] // (state["_DepthUA"] * state["ProblemType"]["DataType"].numBytes())) % state["LSPA"] != 0 and \
-              state["LSPA"] % (state["LdsBlockSizePerPadA"] // (state["_DepthUA"] * state["ProblemType"]["DataType"].numBytes())) != 0:
+          if (state["LdsBlockSizePerPadA"] // (state["_DepthUA"] * tmpBpe)) % state["LSPA"] != 0 and \
+              state["LSPA"] % (state["LdsBlockSizePerPadA"] // (state["_DepthUA"] * tmpBpe)) != 0:
             reject(state, "can't pad by addrVgpr or instOffset")
 
       if state["LdsBlockSizePerPadB"]:
         if state["UnrollMajorLDSB"]:
-          if state["LdsBlockSizePerPadB"] % state["_DepthUB"] * state["ProblemType"]["DataTypeB"].numBytes() != 0:
+          tmpBpe = state["ProblemType"]["DataTypeB"].numBytes() if state["ConvertAfterDS"] else state["ProblemType"]["DataType"].numBytes()
+          if state["LdsBlockSizePerPadB"] % (state["_DepthUB"] * tmpBpe) != 0:
             reject(state, "reject: LdsBlockSizePerPadB %u %% depthU %u x bpeB != 0" % (state["LdsBlockSizePerPadB"],state["_DepthUB"]))
-          if (state["LdsBlockSizePerPadB"] // (state["_DepthUB"] * state["ProblemType"]["DataType"].numBytes())) % state["LSPB"] != 0 and \
-              state["LSPB"] % (state["LdsBlockSizePerPadB"] // (state["_DepthUB"] * state["ProblemType"]["DataType"].numBytes())) != 0:
+          if (state["LdsBlockSizePerPadB"] // (state["_DepthUB"] * tmpBpe)) % state["LSPB"] != 0 and \
+              state["LSPB"] % (state["LdsBlockSizePerPadB"] // (state["_DepthUB"] * tmpBpe)) != 0:
             reject(state, "can't pad by addrVgpr or instOffset")
     else:
       if not state["UseDotInstruction"] and (state["UnrollMajorLDSA"] or state["UnrollMajorLDSB"]):
