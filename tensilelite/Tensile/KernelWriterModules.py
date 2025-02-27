@@ -116,7 +116,7 @@ def wait(states, kernel, tPA, tPB, skipGlobalRead, skipLocalWrite, \
     # This line is added for backward compatibility
     vscnt = vmcnt if lgkmcnt != -1 and vmcnt != -1 and states.archCaps["SeparateVscnt"] else -1
 
-    waitcnt = SWaitCnt(lgkmcnt,vmcnt, vscnt, comment)
+    waitcnt = SWaitCnt(lgkmcnt,vmcnt, vscnt, comment=comment)
     return waitcnt
 
 ##############################################################################
