@@ -883,23 +883,7 @@ class KernelWriterAssembly(KernelWriter):
     module.add(ValueSet("MT0", kernel["MacroTile0"]))
     module.add(ValueSet("MT1", kernel["MacroTile1"]))
     module.add(ValueSet("DepthU", kernel["DepthU"]))
-    module.add(ValueSet("BpeA", tPA["bpe"]))
-    module.add(ValueSet("BpeALog2", log2(tPA["bpe"])))
-    module.add(ValueSet("BpeB", tPB["bpe"]))
-    module.add(ValueSet("BpeBLog2", log2(tPB["bpe"])))
-    module.add(ValueSet("BpeAGR", tPA["bpeGR"]))
-    module.add(ValueSet("BpeAGRLog2", log2(tPA["bpeGR"])))
-    module.add(ValueSet("BpeBGR", tPB["bpeGR"]))
-    module.add(ValueSet("BpeBGRLog2", log2(tPB["bpeGR"])))
-    # TODO- get real value from MI-InstM/N
-    if kernel["ProblemType"]["SwizzleTensorA"]:
-      module.add(ValueSet("MI_M", 16))
-    if kernel["ProblemType"]["SwizzleTensorB"]:
-      module.add(ValueSet("MI_N", 16))
-    #
-    if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
-      module.add(ValueSet("BpeMetadata", tPM["bpe"]))
-      module.add(ValueSet("BpeMetadataLog2", log2(tPM["bpe"])))
+
     module.addComment0("Number of elements to shift-left SRD")
     module.add(ValueSet("SrdShiftLeftA", self.states.srdShiftLeft['A']))
     module.add(ValueSet("SrdShiftLeftB", self.states.srdShiftLeft['B']))
@@ -3419,9 +3403,9 @@ class KernelWriterAssembly(KernelWriter):
           tmpSgpr = tmpSgprInfo.idx
           gsuSgpr = tmpSgpr + 2
           module.add(SAndB32(dst=sgpr(tmpSgpr), src0=sgpr("GSU"), src1=hex(0x3FFF), comment="Restore GSU"))
-          module.add(SMulI32(dst=sgpr(gsuSgpr), src0=sgpr(tmpSgpr), src1="DepthU*%d"%(tP["bpeGR"]), comment="GSU*DepthU*Bpe"))
+          module.add(SMulI32(dst=sgpr(gsuSgpr), src0=sgpr(tmpSgpr), src1=(kernel["DepthU"]*tP["bpeGR"]), comment="GSU*DepthU*Bpe"))
           module.add(SAndB32(dst=sgpr(tmpSgpr), src0=sgpr("GSU"), src1=hex(0x8000), comment="SCC = (GSUC == 1) ?"))
-          module.add(SCMovB32(dst=sgpr(gsuSgpr), src="DepthU*%d"%(tP["bpeGR"]), comment="DepthU*Bpe if GSUC = 1"))
+          module.add(SCMovB32(dst=sgpr(gsuSgpr), src=(kernel["DepthU"]*tP["bpeGR"]), comment="DepthU*Bpe if GSUC = 1"))
           module.add(SMulI32(dst=sgpr(tmpSgpr+0), src0=sgpr(gsuSgpr), src1=stride, \
               comment="incr%s%s = %s*DepthU*bpeGR (unrollIdx)"%(tc, loopChar, stride) ))
           # TODO - this should be mul-H??
