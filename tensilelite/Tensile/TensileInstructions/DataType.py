@@ -499,7 +499,7 @@ class DataType:
     def numRegisters(self):
         return self.properties['reg']
     def numBytes(self):
-        return int(self.numRegisters() * 4)
+        return self.numRegisters() * 4
     def MIOutputTypeNameAbbrev(self):
         return self.properties['miOutTypeNameAbbrev']
     def flopsPerMac(self):

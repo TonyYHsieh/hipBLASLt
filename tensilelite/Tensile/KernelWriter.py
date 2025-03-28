@@ -107,7 +107,7 @@ class StateValues:
   bpr: int = 4 # all registers are 32bit
   # default setup
   # AB=DataType / Cexternal=DestDataType / Cinternal=Accumulation (MAC or MFMA)
-  bpeAB: int = field(init=False)
+  bpeAB: float = field(init=False)
   bpeE: int = field(init=False)
   # Cexternal = the "current" kernel output type,
   # - default: the "current" kernel is a non-GSU-kernel,
@@ -3625,7 +3625,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       self.states.mixinst = VMadMixF32
 
 
-    self.states.bpeAB = int(self.states.bpr * kernel["ProblemType"]["DataType"].numRegisters())
+    self.states.bpeAB = self.states.bpr * kernel["ProblemType"]["DataType"].numRegisters()
     self.states.bpeE  = int(self.states.bpr * kernel["ProblemType"]["DataTypeE"].numRegisters())
     self.states.bpeCinternal = int(self.states.bpr * kernel["ProblemType"]["ComputeDataType"].numRegisters())
 
@@ -3789,8 +3789,8 @@ class KernelWriter(metaclass=abc.ABCMeta):
       valuBlocksA = numVgprBufferA * kernel["InnerUnroll"]
       valuBlocksB = numVgprBufferB * kernel["InnerUnroll"]
 
-      self.states.a.numVgprValuPerBlock = kernel["MIWaveTileA"] * kernel["MIInputPerThreadA"] * tensorParametersA["bpe"] // self.states.bpr
-      self.states.b.numVgprValuPerBlock = kernel["MIWaveTileB"] * kernel["MIInputPerThreadB"] * tensorParametersB["bpe"] // self.states.bpr
+      self.states.a.numVgprValuPerBlock = int(kernel["MIWaveTileA"] * kernel["MIInputPerThreadA"] * tensorParametersA["bpe"] // self.states.bpr)
+      self.states.b.numVgprValuPerBlock = int(kernel["MIWaveTileB"] * kernel["MIInputPerThreadB"] * tensorParametersB["bpe"] // self.states.bpr)
 
       # change numVgprValuAPerBlock to 0 if DirectToVgpr is enabled (except for DTV + (pack or input conversion))
       if kernel["DirectToVgprA"] and not (self.states.packDTVA or self.states.convDTVA):
@@ -3812,11 +3812,11 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
       if kernel["UseDotInstruction"]:
         # dot2: at least read NumDotElements elements
-        self.states.a.numVgprValuPerBlock = kernel["ThreadTileA"] * tensorParametersA["bpe"] * kernel["NumDotElements"] // self.states.bpr
-        self.states.b.numVgprValuPerBlock = kernel["ThreadTileB"] * tensorParametersB["bpe"] * kernel["NumDotElements"] // self.states.bpr
+        self.states.a.numVgprValuPerBlock = int(kernel["ThreadTileA"] * tensorParametersA["bpe"] * kernel["NumDotElements"] // self.states.bpr)
+        self.states.b.numVgprValuPerBlock = int(kernel["ThreadTileB"] * tensorParametersB["bpe"] * kernel["NumDotElements"] // self.states.bpr)
       else:
-        self.states.a.numVgprValuPerBlock = kernel["ThreadTileA"] * tensorParametersA["bpe"] // self.states.bpr
-        self.states.b.numVgprValuPerBlock = kernel["ThreadTileB"] * tensorParametersB["bpe"] // self.states.bpr
+        self.states.a.numVgprValuPerBlock = int(kernel["ThreadTileA"] * tensorParametersA["bpe"] // self.states.bpr)
+        self.states.b.numVgprValuPerBlock = int(kernel["ThreadTileB"] * tensorParametersB["bpe"] // self.states.bpr)
 
       self.states.c.numVgprValu = kernel["ThreadTile0"] * kernel["ThreadTile1"] * kernel["ProblemType"]["ComputeDataType"].numRegisters()
       self.states.a.numVgprValu = self.states.a.numVgprValuPerBlock * valuBlocksA
@@ -3872,8 +3872,8 @@ class KernelWriter(metaclass=abc.ABCMeta):
       bpeGRA = tensorParametersA["bpeGR"]
       if kernel["ConvertAfterDS"] and bpeA > bpeGRA:
         # DTV + covertAfterDS case, we need to allocate vgpr based on after conversion
-        self.states.a.numVgprG2L *= (bpeA // bpeGRA)
-        self.states.a.numVgprG2LAllocated *= (bpeA // bpeGRA)
+        self.states.a.numVgprG2L *= int(bpeA // bpeGRA)
+        self.states.a.numVgprG2LAllocated *= int(bpeA // bpeGRA)
 
     self.states.b.numVgprG2L = 0
     numVgprG2LAllocatedLocal = 0
@@ -3907,8 +3907,8 @@ class KernelWriter(metaclass=abc.ABCMeta):
       bpeGRB = tensorParametersB["bpeGR"]
       if kernel["ConvertAfterDS"] and bpeB > bpeGRB:
         # DTV + covertAfterDS case, we need to allocate vgpr based on after conversion
-        self.states.b.numVgprG2L *= (bpeB // bpeGRB)
-        self.states.b.numVgprG2LAllocated *= (bpeB // bpeGRB)
+        self.states.b.numVgprG2L *= int(bpeB // bpeGRB)
+        self.states.b.numVgprG2LAllocated *= int(bpeB // bpeGRB)
 
     self.states.m.numVgprG2L = 0
     if kernel["ProblemType"]["Sparse"]:
@@ -3971,7 +3971,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     # num vgprs: global read addresses
     numGlobalReadsA = kernel["NumLoadsCoalescedA"] \
         * kernel["NumLoadsPerpendicularA"] * kernel["GlobalReadVectorWidthA"]
-    numGlobalReadInstructionsA = (numGlobalReadsA * tensorParametersA["bpeGR"])//\
+    numGlobalReadInstructionsA = int(numGlobalReadsA * tensorParametersA["bpeGR"])//\
         (tensorParametersA["globalReadInstruction"].blockWidth * 4)
 
     if kernel["BufferLoad"]:
@@ -3981,7 +3981,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
     numGlobalReadsB = kernel["NumLoadsCoalescedB"] \
         * kernel["NumLoadsPerpendicularB"] * kernel["GlobalReadVectorWidthB"]
-    numGlobalReadInstructionsB = (numGlobalReadsB * tensorParametersB["bpeGR"])// \
+    numGlobalReadInstructionsB = int(numGlobalReadsB * tensorParametersB["bpeGR"])// \
         (tensorParametersB["globalReadInstruction"].blockWidth * 4)
     if kernel["BufferLoad"]:
       self.states.b.numVgprGlobalReadOffsets = roundUp(numGlobalReadInstructionsB * self.states.rpgo)
@@ -4000,7 +4000,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     if tensorParametersM is not None:
       numGlobalReadsMetadata = kernel["NumLoadsCoalescedMetadata"] \
           * kernel["NumLoadsPerpendicularMetadata"] * kernel["GlobalReadVectorWidthMetadata"]
-      numGlobalReadInstructionsMetadata = (numGlobalReadsMetadata * tensorParametersM["bpe"])//\
+      numGlobalReadInstructionsMetadata = int(numGlobalReadsMetadata * tensorParametersM["bpe"])//\
           (tensorParametersM["globalReadInstruction"].blockWidth * 4)
       if kernel["BufferLoad"]:
         self.states.m.numVgprGlobalReadOffsets = roundUp(numGlobalReadInstructionsMetadata * self.states.rpgo)
@@ -4905,9 +4905,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
     tP["isB"] = (cM == "B")                                      # is this tensor B
     tP["isM"] = (cM == "Metadata")                               # is this tensor Metadata
 
-    bpe = int(kernel["ProblemType"]["DataType"].numBytes()) if not tP["isM"] else 1
-    bpetc = int(kernel["ProblemType"]["DataType%s"%cM].numBytes()) if not tP["isM"] else 1
-    bpeA = int(kernel["ProblemType"]["DataTypeA"].numBytes()) if not tP["isM"] else 1
+    bpe = kernel["ProblemType"]["DataType"].numBytes() if not tP["isM"] else 1
+    bpetc = kernel["ProblemType"]["DataType%s"%cM].numBytes() if not tP["isM"] else 1
+    bpeA = kernel["ProblemType"]["DataTypeA"].numBytes() if not tP["isM"] else 1
 
     tP["bpe"] = bpe
     tP["bpeA"]  = (bpeA if kernel["ConvertAfterDS"] else bpe)
@@ -4952,7 +4952,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
     if (cM == "A" or cM == "B") and kernel["ProblemType"]["SwizzleTensor%s"%cM]:
       # 16 means bytes of buffer_load_dwordx4
-      tP["swizzlePackK"] = 16 // kernel["MIInputPerThread%s"%cM] // kernel["ProblemType"]["DataType%s"%cM].numBytes()
+      tP["swizzlePackK"] = 16 // kernel["MIInputPerThread%s"%cM] // int(kernel["ProblemType"]["DataType%s"%cM].numBytes())
       tP["swizzleK"] = kernel["MatrixInstK"] * tP["swizzlePackK"]
 
   ##############################################################################
