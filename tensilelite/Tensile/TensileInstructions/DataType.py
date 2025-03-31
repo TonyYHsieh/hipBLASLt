@@ -320,6 +320,21 @@ class DataType:
             'isComplex': False,
             'packing': 1,
         },
+        {
+            'char': 'F4',
+            'name': 'float4',
+            'nameAbbrev': 'fp4_fp4',
+            'miOutTypeNameAbbrev': 'f32',
+            'enum': 'Float4',
+            'reg': 0.125,
+            'ocl': 'ERROR',
+            'hip': 'tensile_float4x2',
+            'libType': 'TensileFloat4x2',
+            'libEnum': 'tensileDataTypeF4x2',
+            'isIntegral': False,
+            'isComplex': False,
+            'packing': 2
+        },
     ]
     lookup = {}
 
@@ -493,6 +508,8 @@ class DataType:
                 or self.value == DataType.float8Bfloat8 \
                 or self.value == DataType.bfloat8_fnuz \
                 or self.value == DataType.float8Bfloat8_fnuz)
+    def isFloat4(self):
+        return self.value == DataType.float4
     def isNone(self):
         return self.value == None
 
