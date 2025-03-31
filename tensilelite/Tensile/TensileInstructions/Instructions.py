@@ -316,6 +316,8 @@ class MFMAInstruction(Instruction):
             kStr = "f8f6f4" if self.variant[2] > 32 else "fp8_bf8"
         elif iType == InstType.INST_BF8_F8:
             kStr = "f8f6f4" if self.variant[2] > 32 else "bf8_fp8"
+        elif iType == InstType.INST_F4:
+            kStr = "f8f6f4"
         else:
             printExit("Type %s not found"%str(iType))
         return kStr
@@ -338,25 +340,29 @@ class MFMAInstruction(Instruction):
             self.setInst("v_%s_%s_%s%s%s%s"%(instructionName, self.typeConvert(self.accType), variantStr, \
                          instructionStep, self.typeConvert(self.instType), mfma_1k))
 
+    def inputPermuteStr(self) -> str:
+        if self.asmCaps["HasMFMA_f8f6f4"] and self.variant[2] > 32:
+            if self.instType == InstType.INST_F8 :
+                return " cbsz:0 blgp:0"
+            elif self.instType == InstType.INST_BF8:
+                return " cbsz:1 blgp:1"
+            elif self.instType == InstType.INST_F8_BF8:
+                return " cbsz:0 blgp:1"
+            elif self.instType == InstType.INST_BF8_F8:
+                return " cbsz:1 blgp:0"
+            elif self.instType == InstType.INST_F4:
+                return " cbsz:4 blgp:4"
+
+        return ""
+
     def getArgStr(self) -> str:
         negStr = "" if not self.neg else " neg_lo:[1,1,1]" if self.asmCaps["HasWMMA_V1"] else " neg_lo:[1,1]"
-        inputPermuteStr = ""
-        if self.asmCaps["HasMFMA_f8f6f4"]:
-            iType = self.instType
-            if iType == InstType.INST_F8 :
-                inputPermuteStr = " cbsz:0 blgp:0" if self.variant[2] > 32 else ""
-            elif iType == InstType.INST_BF8:
-                inputPermuteStr = " cbsz:1 blgp:1" if self.variant[2] > 32 else ""
-            elif iType == InstType.INST_F8_BF8:
-                inputPermuteStr = " cbsz:0 blgp:1" if self.variant[2] > 32 else ""
-            elif iType == InstType.INST_BF8_F8:
-                inputPermuteStr = " cbsz:1 blgp:0" if self.variant[2] > 32 else ""
-        return str(self.acc) + ", " + str(self.a) + ", " + str(self.b) + ", " + str(self.acc2) + negStr + inputPermuteStr
+        return str(self.acc) + ", " + str(self.a) + ", " + str(self.b) + ", " + str(self.acc2) + negStr + self.inputPermuteStr()
 
     def toList(self) -> list:
         self.preStr()
         negStr = "" if not self.neg else " neg_lo:[1,1,1]" if self.asmCaps["HasWMMA_V1"] else " neg_lo:[1,1]"
-        return [self.instStr, self.acc, self.a, self.b, self.acc2, negStr, self.comment]
+        return [self.instStr, self.acc, self.a, self.b, self.acc2, negStr, self.inputPermuteStr(), self.comment]
 
     def __str__(self) -> str:
         self.preStr()

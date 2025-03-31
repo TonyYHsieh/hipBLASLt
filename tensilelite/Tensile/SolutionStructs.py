@@ -2279,7 +2279,8 @@ class Solution(collections.abc.Mapping):
               or state["ProblemType"]["DataType"].isHalf() \
               or state["ProblemType"]["DataType"].isComplex() \
               or state["ProblemType"]["DataType"].is8bitFloat() \
-              or state["ProblemType"]["DataType"].isInt8()):
+              or state["ProblemType"]["DataType"].isInt8() \
+              or state["ProblemType"]["DataType"].isFloat4()):
         reject(state, "didn't support Matrix Instruction with type %s" % str(state["ProblemType"]["DataType"]))
         return
       if (not globalParameters["AsmCaps"][isa]["HasMFMA"] and globalParameters["AsmCaps"][isa]["HasWMMA"] and (state["WavefrontSize"] == 64)):
