@@ -3452,6 +3452,10 @@ class Solution(collections.abc.Mapping):
     if state["AssertSummationElementMultiple"] % state["DepthU"] == 0 and state["StreamK"] == 0:
       state["NoTailLoop"] = True
 
+    # TODO: disable Tail Loop when bpe < 1
+    if state["ProblemType"]["DataType"].numBytes() < 1:
+        state["NoTailLoop"] = True
+
     # Determine if we can load directly-to-Vgpr
     # need to check after state["LocalReadVectorWidth"] = -1 is resolved
     if state["DirectToVgprA"]:
