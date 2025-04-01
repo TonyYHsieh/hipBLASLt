@@ -871,6 +871,10 @@ class BufferLoadB128(MUBUFReadInstruction):
     def __init__(self, dst, vaddr, saddr, soffset, mubuf: Optional[MUBUFModifiers] = None, comment="") -> None:
         super().__init__(InstType.INST_B128, dst, vaddr, saddr, soffset, mubuf, comment)
 
+class BufferLoadB192(MUBUFReadInstruction):
+    def __init__(self, dst, vaddr, saddr, soffset, mubuf: Optional[MUBUFModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_B192, dst, vaddr, saddr, soffset, mubuf, comment)
+
 ## Flat load
 class FlatLoadD16HIU8(FLATReadInstruction):
     def __init__(self, dst, vaddr, flat: Optional[FLATModifiers] = None, comment="") -> None:
@@ -898,6 +902,10 @@ class FlatLoadB64(FLATReadInstruction):
 class FlatLoadB128(FLATReadInstruction):
     def __init__(self, dst, vaddr, flat: Optional[FLATModifiers] = None, comment="") -> None:
         super().__init__(InstType.INST_B128, dst, vaddr, flat, comment)
+
+class FlatLoadB192(FLATReadInstruction):
+    def __init__(self, dst, vaddr, flat: Optional[FLATModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_B192, dst, vaddr, flat, comment)
 
 ## Buffer store
 class BufferStoreB8(MUBUFStoreInstruction):
@@ -1067,6 +1075,42 @@ class DSLoadB128(DSLoadInstruction):
     def issueLatency():
         return 2
 
+# Hack unofficial compound instruction
+class DSLoadB192(DSLoadInstruction):
+    def __init__(self, dst, src, ds: Optional[DSModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_B192, dst, src, ds, comment)
+        if ds: ds.na = 1
+        self.setInst("ds_load_b192")
+
+    @staticmethod
+    def issueLatency():
+        return 3
+
+    def getArgStr2(self, upper=False) -> str:
+        dst = fastdeepcopy(self.dst)
+        regNum = 4
+        if upper:
+            dst.regName.offsets[-1] += regNum
+        dst.regNum = 2 if upper else 4
+        kStr = str(dst) + ", " + str(self.srcs)
+        return kStr
+
+    def __str__(self) -> str:
+        instStr = "ds_load_b128"
+        if self.kernel.isa[0] < 11:
+            instStr = instStr.replace("load", "read")
+        kStr = instStr + " " + self.getArgStr2()
+        kStr += str(self.ds) if self.ds else ""
+
+        instStr = "ds_load_b64"
+        if self.kernel.isa[0] < 11:
+            instStr = instStr.replace("load", "read")
+        kStr2 = instStr + " " + self.getArgStr2(True)
+        ds = fastdeepcopy(self.ds) if self.ds else DSModifiers()
+        ds.offset += 16
+        kStr2 += str(ds)
+        return self.formatWithComment(kStr) + self.formatWithComment(kStr2)
+
 class DSLoad2B32(DSLoadInstruction):
     def __init__(self, dst, src, ds: Optional[DSModifiers] = None, comment="") -> None:
         super().__init__(InstType.INST_B32, dst, src, ds, comment)
@@ -1133,6 +1177,42 @@ class DSStoreB64(DSStoreInstruction):
     @staticmethod
     def issueLatency():
         return 3
+
+# Hack unofficial compound instruction
+class DSStoreB192(DSStoreInstruction):
+    def __init__(self, dstAddr, src: RegisterContainer, ds: Optional[DSModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_B192, dstAddr, src, None, ds, comment)
+        if ds: ds.na = 1
+        self.setInst("ds_store_b192")
+
+    @staticmethod
+    def issueLatency():
+        return 10
+
+    def getArgStr2(self, upper=False) -> str:
+        src = fastdeepcopy(self.src0)
+        regNum = 4
+        if upper:
+            src.regName.offsets[-1] += regNum
+        src.regNum = 2 if upper else 4
+        kStr = str(self.dstAddr) + ", " + str(src)
+        return kStr
+
+    def __str__(self) -> str:
+        instStr = "ds_store_b128"
+        if self.kernel.isa[0] < 11:
+            instStr = instStr.replace("store", "write")
+        kStr = instStr + " " + self.getArgStr2()
+        kStr += str(self.ds) if self.ds else ""
+
+        instStr = "ds_store_b64"
+        if self.kernel.isa[0] < 11:
+            instStr = instStr.replace("store", "write")
+        kStr2 = instStr + " " + self.getArgStr2(True)
+        ds = fastdeepcopy(self.ds) if self.ds else DSModifiers()
+        ds.offset += 16
+        kStr2 += str(ds)
+        return self.formatWithComment(kStr) + self.formatWithComment(kStr2)
 
 # Hack unofficial compound instruction
 class DSStoreB256(DSStoreInstruction):

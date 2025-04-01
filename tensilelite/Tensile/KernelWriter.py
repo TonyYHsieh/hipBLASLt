@@ -1154,9 +1154,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
           while (localReadItemsThisLoop):
             item = localReadItemsThisLoop.pop(0)
             iterCode.add(item)
-            localReadsIssuedInThisIter += 1
+            localReadsIssuedInThisIter += (1 + item.countType(DSLoadB192))
             if (i == 0):
-              localReadsWaitcnt += 1
+              localReadsWaitcnt += (1 + item.countType(DSLoadB192))
           item = Module()
           iterCode.add(item)
           self.localReadsVacancy.append({ "items": item, \
@@ -1173,9 +1173,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
           if localReadItemsThisLoop:
             item = localReadItemsThisLoop.pop(0)
             iterCode.add(item)
-            localReadsIssuedInThisIter += 1
+            localReadsIssuedInThisIter += (1 + item.countType(DSLoadB192))
             if (i == 0):
-              localReadsWaitcnt += 1
+              localReadsWaitcnt += (1 + item.countType(DSLoadB192))
         if not localReadItemsThisLoop and latencyLeft > 0 and iteration < isBarrier and \
             not(mfmaIndex > self.states.sync1LdsMfmaIndex and kernel["1LDSBuffer"]):
           item = Module()
@@ -1245,18 +1245,18 @@ class KernelWriter(metaclass=abc.ABCMeta):
               iterCode.add(writeItem)
               # if there is localWrite at first mfma, need to skip it in waitcnt.
               if i == 0:
-                skipLocalWriteWaitcnt += writeItem.countType(LocalWriteInstruction) + writeItem.countType(DSStoreB256)
+                skipLocalWriteWaitcnt += writeItem.countType(LocalWriteInstruction) + writeItem.countType(DSStoreB256) + writeItem.countType(DSStoreB192)
               if not localReadItemsThisLoop:
-                self.states.perIterLocalWriteCanSkip[iteration] += writeItem.countType(LocalWriteInstruction) + writeItem.countType(DSStoreB256)
+                self.states.perIterLocalWriteCanSkip[iteration] += writeItem.countType(LocalWriteInstruction) + writeItem.countType(DSStoreB256) + writeItem.countType(DSStoreB192)
         if mfmaIndex == self.states.lwEndMfmaIndex:
           while writeItems:
             writeItem = writeItems.pop(0)
             # generate all remaining pre code before the first Store C
             iterCode.add(writeItem)
             if i == 0:
-              skipLocalWriteWaitcnt += writeItem.countType(LocalWriteInstruction) + writeItem.countType(DSStoreB256)
+              skipLocalWriteWaitcnt += writeItem.countType(LocalWriteInstruction) + writeItem.countType(DSStoreB256) + writeItem.countType(DSStoreB192)
             if not localReadItemsThisLoop:
-              self.states.perIterLocalWriteCanSkip[iteration] += writeItem.countType(LocalWriteInstruction) + writeItem.countType(DSStoreB256)
+              self.states.perIterLocalWriteCanSkip[iteration] += writeItem.countType(LocalWriteInstruction) + writeItem.countType(DSStoreB256) + writeItem.countType(DSStoreB192)
 
         ####
         # scheduled pointer
@@ -1303,7 +1303,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
             item = localReadItemsNextLoop.pop(0)
             iterCode.add(item)
             if (i == 0):
-              localReadsWaitcnt += 1
+              localReadsWaitcnt += (1 + item.countType(DSLoadB192))
 
         ####
         # scheduled wait localReads
@@ -1695,23 +1695,25 @@ class KernelWriter(metaclass=abc.ABCMeta):
         skipReadsIterB += numPrefetchIter
         # here the reads are prefetches so can skip them in the waitcnt
         # how many localreads can skip is based on how many iterations we prefetch.
-        localReadsA = 0 if kernel["DirectToVgprA"] else self.states.numReadsPerIterA * skipReadsIterA
-        localReadsB = 0 if kernel["DirectToVgprB"] else self.states.numReadsPerIterB * skipReadsIterB
+        readFactorA = 2 if (tPA["localReadInstruction"].blockWidth == 6) else 1
+        readFactorB = 2 if (tPB["localReadInstruction"].blockWidth == 6) else 1
+        localReadsA = 0 if kernel["DirectToVgprA"] else self.states.numReadsPerIterA * skipReadsIterA * readFactorA
+        localReadsB = 0 if kernel["DirectToVgprB"] else self.states.numReadsPerIterB * skipReadsIterB * readFactorB
         localReads += localReadsA + localReadsB
         # some of localReads is interleaved after waitcnt in SIA3
         if kernel["ScheduleIterAlg"] == 3 and self.states.numItersPLR and\
           (iteration < numReadsIterA or iteration < numReadsIterB or numPrefetchIter):
           if ((iteration < numReadsIterA and not dataAtIterA < max(dataAtIterA,dataAtIterB)) or numPrefetchIter) and (not kernel["DirectToVgprA"]):
-            localReads -= self.states.numReadsPerIterA
+            localReads -= self.states.numReadsPerIterA * readFactorA
           if ((iteration < numReadsIterB and not dataAtIterB < max(dataAtIterA,dataAtIterB)) or numPrefetchIter) and (not kernel["DirectToVgprB"]):
-            localReads -= self.states.numReadsPerIterB
+            localReads -= self.states.numReadsPerIterB * readFactorB
           localReads += localReadsWaitcnt
           if iteration == 0 and kernel["UnrollMajorLDSB"] and not (kernel["ProblemType"]["DataTypeB"].isAnyFloat8() and kernel["ConvertAfterDS"]):
             # We issued LR with A[0]->B[0]->A[1:]->B[1:] order.
             # We need to calculate how many B[N:] needed by 1st mfma.
             # If not UnrollMajorLDSB, we have packB which will be issued ahead.
             # If ConvertAfterDS and DataTypeB=FP8, we have cvtB which will be issued ahead.
-            localReadsNotWaited = self.states.numReadsPerIterB//kernel["InnerUnroll"] - self.states.numReadsPerUnrollB
+            localReadsNotWaited = (self.states.numReadsPerIterB//kernel["InnerUnroll"] - self.states.numReadsPerUnrollB) * readFactorB
             if localReadsNotWaited > 0:
               localReads += localReadsNotWaited
 
@@ -1722,12 +1724,12 @@ class KernelWriter(metaclass=abc.ABCMeta):
         if kernel["ScheduleIterAlg"] == 0 or kernel["ScheduleIterAlg"] == 1:
           for i in range (max(dataAtIterA,dataAtIterB),iteration+1):
             localWrites += self.codes.perIterLocalWrite[i].countType(LocalWriteInstruction)
-            localWrites += self.codes.perIterLocalWrite[i].countType(DSStoreB256)
+            localWrites += self.codes.perIterLocalWrite[i].countType(DSStoreB256) + self.codes.perIterLocalWrite[i].countType(DSStoreB192)
         # ScheduleIterAlg=2, localwrite is after waitCnt, no need to count it's current iteration.
         if kernel["ScheduleIterAlg"] == 3:
           for i in range (max(dataAtIterA,dataAtIterB)+1,iteration):
             localWrites += self.codes.perIterLocalWrite[i].countType(LocalWriteInstruction)
-            localWrites += self.codes.perIterLocalWrite[i].countType(DSStoreB256)
+            localWrites += self.codes.perIterLocalWrite[i].countType(DSStoreB256) + self.codes.perIterLocalWrite[i].countType(DSStoreB192)
           if kernel["ScheduleLocalWrite"] > 0:
             # current iteration localWrite count
             localWrites += skipLocalWriteWaitcnt
@@ -1739,7 +1741,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       else:
         for item in list(iterCode.items()):
           localReads  = item.countType(LocalReadInstruction)
-          localWrites = item.countType(LocalWriteInstruction) + item.countType(DSStoreB256)
+          localWrites = item.countType(LocalWriteInstruction) + item.countType(DSStoreB256) + item.countType(DSStoreB192)
           if self.states.numItersPLR:
             # SQ: If PrefetchLocalRead = 1 and DepthU == LocalSplitU, then there is no double
             #  buffering and we must wait for all localReads but not localWrites.
@@ -3667,6 +3669,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     # name, numAddresses, numOffsets, offsetMultiplier, blockWidth, formatting):
     ########################################
     # Local Read
+    _ds_load_b192 = MemoryInstruction(DSLoadB192,  1, 1, 6, 6)
     _ds_load_b128 = MemoryInstruction(DSLoadB128,  1, 1, 4, 4)
     _ds_load2_b64 = MemoryInstruction(DSLoad2B64,  1, 2, 2, 2)
     _ds_load_b64 = MemoryInstruction(DSLoadB64,    1, 1, 2, 2)
@@ -3679,6 +3682,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     ########################################
     # Local Write
     _ds_store_b256 = MemoryInstruction(DSStoreB256,  1, 1, 8, 8)
+    _ds_store_b192 = MemoryInstruction(DSStoreB192,  1, 1, 6, 6)
     _ds_store_b128 = MemoryInstruction(DSStoreB128,  1, 1, 4, 4)
     _ds_store2_b64 = MemoryInstruction(DSStore2B64,  1, 2, 2, 2)
     _ds_store_b64 = MemoryInstruction(DSStoreB64,    1, 1, 2, 2)
@@ -3688,10 +3692,12 @@ class KernelWriter(metaclass=abc.ABCMeta):
     _ds_store_b8 = MemoryInstruction(DSStoreB8,      1, 1, 1, 0.25)
     ########################################
     # Global Read
+    _flat_load_b192 = MemoryInstruction(FlatLoadB192, 1, 0, 0, 6)
     _flat_load_b128 = MemoryInstruction(FlatLoadB128, 1, 0, 0, 4)
     _flat_load_b64 = MemoryInstruction(FlatLoadB64,   1, 0, 0, 2)
     _flat_load_b32 = MemoryInstruction(FlatLoadB32,   1, 0, 0, 1)
 
+    _buffer_load_b192 = MemoryInstruction(BufferLoadB192, 1, 0, 0, 6)
     _buffer_load_b128 = MemoryInstruction(BufferLoadB128, 1, 0, 0, 4)
     _buffer_load_b64 = MemoryInstruction(BufferLoadB64, 1, 0, 0, 2)
     _buffer_load_b32 = MemoryInstruction(BufferLoadB32, 1, 0, 0, 1)
@@ -3717,12 +3723,14 @@ class KernelWriter(metaclass=abc.ABCMeta):
     # gfx900
     ########################################
     if (kernel["BufferLoad"]):
+      chosen_load_b192 = _buffer_load_b192
       chosen_load_b128 = _buffer_load_b128
       chosen_load_b64  = _buffer_load_b64
       chosen_load_b32  = _buffer_load_b32
       chosen_load_b16  = _buffer_load_d16_b16
       chosen_load_b8   = _buffer_load_d16_u8
     else:
+      chosen_load_b192 = _flat_load_b192
       chosen_load_b128 = _flat_load_b128
       chosen_load_b64  = _flat_load_b64
       chosen_load_b32  = _flat_load_b32
@@ -3734,13 +3742,13 @@ class KernelWriter(metaclass=abc.ABCMeta):
     chosen_store_b32  = _flat_store_b32
 
     self.memoryInstructions = {
-          "GlobalRead" : [ chosen_load_b128, chosen_load_b64, chosen_load_b32,
+          "GlobalRead" : [ chosen_load_b192, chosen_load_b128, chosen_load_b64, chosen_load_b32,
                            chosen_load_b16, chosen_load_b8 ],
           "GlobalWrite": [ chosen_store_b128, chosen_store_b64, chosen_store_b32 ],
-          "LocalRead"  : [ _ds_load_b128, _ds_load2_b64, _ds_load_b64,
+          "LocalRead"  : [ _ds_load_b192, _ds_load_b128, _ds_load2_b64, _ds_load_b64,
                            _ds_load2_b32, _ds_load_b32, _ds_load_u16, _ds_load_u8,
                            _ds_load_b64_tr_b16],
-          "LocalWrite" : [ _ds_store_b256, _ds_store_b128, _ds_store2_b64,
+          "LocalWrite" : [ _ds_store_b256,  _ds_store_b192, _ds_store_b128, _ds_store2_b64,
                            _ds_store_b64, _ds_store2_b32, _ds_store_b32,
                            _ds_store_b16, _ds_store_b8 ]
         }

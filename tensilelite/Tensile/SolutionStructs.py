@@ -2692,8 +2692,8 @@ class Solution(collections.abc.Mapping):
           else:
             optPadA //= 2
             readRegsA //= 2
-        if (not globalParameters["AsmCaps"][isa]['HasWMMA']) and (readRegsA > 4 or readRegsB > 4):
-          reject(state, "LocalReadVectorWidth results in attemping to read LDS larger than b128, reject")
+        if (not globalParameters["AsmCaps"][isa]['HasWMMA']) and (readRegsA > 6 or readRegsB > 6):
+          reject(state, "LocalReadVectorWidth results in attemping to read LDS larger than b192, reject")
           return
         if state["EnableMatrixInstruction"]:
           # for readRegs = 1 or 4, we need to double pad for MI16x16xNx1 to avoid bank conflict.
@@ -3029,9 +3029,9 @@ class Solution(collections.abc.Mapping):
         reject(state, "VWB * DataType.numBytes() > 16")
 
       # reject - GRVW too big
-      if (state["GlobalReadVectorWidthA"] * state["ProblemType"]["DataTypeA"].numBytes()) > 16:
+      if (state["GlobalReadVectorWidthA"] * state["ProblemType"]["DataTypeA"].numBytes()) > 24:
         reject(state, "GRVWA * DataTypeA.numBytes() > 16")
-      if (state["GlobalReadVectorWidthB"] * state["ProblemType"]["DataTypeB"].numBytes()) > 16:
+      if (state["GlobalReadVectorWidthB"] * state["ProblemType"]["DataTypeB"].numBytes()) > 24:
         reject(state, "GRVWB * DataTypeB.numBytes() > 16")
 
       ########################################
