@@ -336,6 +336,21 @@ class DataType:
             'packing': 32
         },
         {
+            'char': 'B6',
+            'name': 'bfloat6',
+            'nameAbbrev': 'bf6_bf6',
+            'miOutTypeNameAbbrev': 'f32',
+            'enum': 'BFloat6',
+            'reg': 0.1875,
+            'ocl': 'ERROR',
+            'hip': 'tensile_bfloat6x32',
+            'libType': 'TensileBFloat6x32',
+            'libEnum': 'tensileDataTypeB6x32',
+            'isIntegral': False,
+            'isComplex': False,
+            'packing': 32
+        },
+        {
             'char': 'F4',
             'name': 'float4',
             'nameAbbrev': 'fp4_fp4',
@@ -524,9 +539,12 @@ class DataType:
                 or self.value == DataType.bfloat8_fnuz \
                 or self.value == DataType.float8Bfloat8_fnuz)
     def is6bitFloat(self):
-        return self.value == DataType.float6
+        return (self.value == DataType.float6 \
+                or self.value == DataType.bfloat6)
     def isFloat6(self):
         return self.value == DataType.float6
+    def isBFloat6(self):
+        return self.value == DataType.bfloat6
     def isFloat4(self):
         return self.value == DataType.float4
     def isNone(self):

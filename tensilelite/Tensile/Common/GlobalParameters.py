@@ -463,6 +463,7 @@ validMFMA["B8N"] = validMFMA["F8N"]
 validMFMA["F8B8N"] = validMFMA["F8N"]
 validMFMA["B8F8N"] = validMFMA["F8N"]
 validMFMA["F6"] = [[16,16,128,1], [32,32,64,1]]
+validMFMA["B6"] = [[16,16,128,1], [32,32,64,1]]
 validMFMA["F4"] = [[16,16,128,1], [32,32,64,1]]
 validWMMA = [
     [16, 16, 16, 1],
@@ -597,6 +598,7 @@ validGEMMTypes = [
     ("F8B8N", "F8N", "S"),
     ("B8F8N", "F8N", "S"),
     ("F6", "S", "S"),
+    ("B6", "S", "S"),
     ("F4", "S", "S"),
 ]
 
@@ -654,6 +656,7 @@ HPATypes = [
     ("F8B8N", "F8N", "S"),
     ("B8F8N", "F8N", "S"),
     ("F6", "S", "S"),
+    ("B6", "S", "S"),
     ("F4", "S", "S"),
 ]
 

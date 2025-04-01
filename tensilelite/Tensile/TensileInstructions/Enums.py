@@ -67,8 +67,9 @@ class InstType(Enum):
     INST_CVT        = 38
     INST_MACRO      = 39
     INST_F6         = 40
-    INST_F4         = 41
-    INST_NOTYPE     = 42
+    INST_BF6        = 41
+    INST_F4         = 42
+    INST_NOTYPE     = 43
 
 class SelectBit(Enum):
     DWORD  = 1
