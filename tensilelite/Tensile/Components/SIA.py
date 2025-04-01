@@ -24,6 +24,7 @@ from ..TensileInstructions import Item, Module, HolderContainer, Instruction, \
                                 GlobalReadInstruction, LocalReadInstruction, \
                                 LocalWriteInstruction, SSetPrior, SWaitCnt, \
                                 replaceHolder, fastdeepcopy, VMovB32, \
+                                DSStoreInstruction, DSStoreB256, DSStoreB192, \
                                 DSStoreB128, DSStoreB64, DSStoreB32
 from ..Common import roundUp
 from ..Component import SIA
@@ -768,7 +769,11 @@ def assignLWSchedIndexDefault(writer, kernel, numLocalWritesPerSched, localWrite
     return startIter
 
 def getReadsToWait(writer, kernel):
-    readsToWait = len(list(writer.codes.localWriteA.items())) + len(list(writer.codes.localWriteB.items()))
+    lwAcnt = len(list(writer.codes.localWriteA.items())) + \
+             writer.codes.localWriteA.countType(DSStoreB192)
+    lwBcnt = len(list(writer.codes.localWriteB.items())) + \
+             writer.codes.localWriteB.countType(DSStoreB192)
+    readsToWait = lwAcnt + lwBcnt
     readsToWaitNGLL = readsToWait
     return readsToWait, readsToWaitNGLL
 
@@ -803,6 +808,7 @@ def schedLocalWrite(writer, kernel, numLocalWriteModPerIter, numLocalWritesPerSc
             imod = Module("LocalWriteMod%u"%u)
             imodNGLL = Module("LocalWriteMod%u"%u)
             writesPerItem = item.countType(LocalWriteInstruction)
+            decWait = 1 + item.countType(DSStoreB192)
             if kernel["ProblemType"]["Sparse"] and not writesPerItem:
                 writesPerItem = item.name.startswith("MetadataWrite") and item.countType(VMovB32)
             if writesPerItem:
@@ -821,8 +827,8 @@ def schedLocalWrite(writer, kernel, numLocalWriteModPerIter, numLocalWritesPerSc
                 # this happens in some transpose cases.  Here the first write needs to wait
                 # for the associated global read to finish, then the remaining writes can flow
                 # TODO - can schedule these writes across iters, should figure this out above
-                readsToWait = readsToWait - 1
-                readsToWaitNGLL = readsToWaitNGLL - 1
+                readsToWait = readsToWait - decWait
+                readsToWaitNGLL = readsToWaitNGLL - decWait
                 imod.add(SWaitCnt(lgkmcnt=-1, \
                     vmcnt=min(maxVmcnt, readsToWait), vscnt=-1, \
                     comment="wait for global read before writing to local"))
@@ -875,7 +881,7 @@ def schedLocalWrite(writer, kernel, numLocalWriteModPerIter, numLocalWritesPerSc
                     itemGR = itemsGRToSchedLater[0]
                     readsInc = itemGR.countType(GlobalReadInstruction)
                     reads = reads + readsInc
-                    if reads > readCnt:
+                    if reads > readCnt * readsInc: # TODO:
                         break
                     # PK and StoreCUnroll is removed so you cannot find any HolderContainer in s_waitcnt
                     hasHolder, wcList = hasHolderInWaitCnt(itemGR)

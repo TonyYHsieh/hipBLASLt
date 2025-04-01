@@ -244,9 +244,13 @@ class KernelWriterAssembly(KernelWriter):
       numOffsets = instruction.numOffsets
       offsetMultiplier = instruction.offsetMultiplier
       blockWidth = instruction.blockWidth
+
       valid = True
       if width < blockWidth:
         valid = False
+      if ((width / blockWidth) != floor(width / blockWidth)):
+        valid = False
+
       if combine: # try to combine ops
         if numOffsets > 0: # if inst combines using offsets
           for stride in strides:
@@ -11495,6 +11499,21 @@ class KernelWriterAssembly(KernelWriter):
         elif bpl==8:
           rv.add(BufferLoadB64(dst=dst, vaddr=addr0, saddr=addr1, \
                               soffset=soffset, mubuf=mubuf, comment=comment))
+          return rv
+        elif bpl==24:
+          # split into two dwordx4 loads. Second load offset is +0.5 bpl
+          rv = Module("emulated _buffer_load_b192")
+          dst = None if lds else vgpr(destVgpr, 4)
+          rv.add(BufferLoadB128(dst=dst, vaddr=addr0, saddr=addr1, \
+                                soffset=soffset, mubuf=mubuf, comment=comment))
+          mubuf2 = MUBUFModifiers(offen=True, offset12=offset+16, glc=glc, slc=slc, nt=nt, lds=lds)
+          if isinstance(destVgpr, str):
+            dst2 = destVgpr + "+" + str(int(4))
+          elif isinstance(destVgpr, int):
+            dst2 = int(destVgpr + int(4))
+          dst = None if lds else vgpr(dst2, 2)
+          rv.add(BufferLoadB64(dst=dst, vaddr=addr0, saddr=addr1, \
+                                soffset=soffset, mubuf=mubuf2, comment=comment))
           return rv
         elif bpl==16:
           rv.add(BufferLoadB128(dst=dst, vaddr=addr0, saddr=addr1, \
