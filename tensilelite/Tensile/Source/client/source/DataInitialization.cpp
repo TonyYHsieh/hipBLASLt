@@ -1713,6 +1713,11 @@ namespace TensileLite
                     case DataType::BFloat8_fnuz:
                         prop.value = getValue<BFloat8_fnuz>(prop.init, prop.freeValue);
                         break;
+#ifdef TENSILE_USE_FP6
+                    case DataType::Float6:
+                        prop.value = getValue<Float6x32>(prop.init, prop.freeValue);
+                        break;
+#endif // #ifdef TENSILE_USE_FP6
 #ifdef TENSILE_USE_FP4
                     case DataType::Float4:
                         prop.value = getValue<Float4x2>(prop.init, prop.freeValue);

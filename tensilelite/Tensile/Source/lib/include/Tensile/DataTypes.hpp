@@ -65,6 +65,7 @@
 #include <Tensile/DataTypes_Int8.hpp>
 #include <Tensile/DataTypes_Int8x4.hpp>
 #include <Tensile/DataTypes_XFloat32.hpp>
+#include <Tensile/DataTypes_Float6.hpp>
 #include <Tensile/DataTypes_Float4.hpp>
 
 namespace TensileLite
@@ -104,6 +105,9 @@ namespace TensileLite
         BFloat8Float8,
         Float8BFloat8_fnuz,
         BFloat8Float8_fnuz,
+#ifdef TENSILE_USE_FP6
+        Float6,
+#endif // #ifdef TENSILE_USE_FP6
 #ifdef TENSILE_USE_FP4
         Float4,
 #endif // #ifdef TENSILE_USE_FP4
@@ -296,6 +300,14 @@ namespace TensileLite
         : public BaseTypeInfo<BFloat8Float8_fnuz, DataType::BFloat8Float8_fnuz, 1, false, false>
     {
     };
+
+#ifdef TENSILE_USE_FP6
+    template <>
+    struct TypeInfo<Float6x32> : public BaseTypeInfo<Float6x32, DataType::Float6, 32, false, false>
+    {
+    };
+#endif // #ifdef TENSILE_USE_FP6
+
 #ifdef TENSILE_USE_FP4
     template <>
     struct TypeInfo<Float4x2> : public BaseTypeInfo<Float4x2, DataType::Float4, 2, false, false>
@@ -317,6 +329,9 @@ namespace TensileLite
                                          Float8_fnuz,
                                          BFloat8_fnuz,
                                          int8_t
+#ifdef TENSILE_USE_FP6
+                                       , Float6x32
+#endif // #ifdef TENSILE_USE_FP6
 #ifdef TENSILE_USE_FP4
                                        , Float4x2
 #endif // #ifdef TENSILE_USE_FP4
@@ -359,6 +374,22 @@ namespace TensileLite
             throw std::runtime_error("Unsupported variant cast type.");
         }
     }
+
+#ifdef TENSILE_USE_FP6
+    // Convert variants to type T
+    template <typename T>
+    typename std::enable_if<std::is_same<Float6x32, T>::value, T>::type
+        constVariantCast(const ConstantVariant& val)
+    {
+        switch(val.index())
+        {
+        case static_cast<int>(DataType::Float6):
+            return static_cast<T>(*std::get_if<Float6x32>(&val));
+        default:
+            throw std::runtime_error("Unsupported variant cast type.");
+        }
+    }
+#endif // #ifdef TENSILE_USE_FP6
 
 #ifdef TENSILE_USE_FP4
     // Convert variants to type T
