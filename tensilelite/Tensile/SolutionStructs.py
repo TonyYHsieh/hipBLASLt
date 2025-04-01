@@ -2280,6 +2280,7 @@ class Solution(collections.abc.Mapping):
               or state["ProblemType"]["DataType"].isComplex() \
               or state["ProblemType"]["DataType"].is8bitFloat() \
               or state["ProblemType"]["DataType"].isInt8() \
+              or state["ProblemType"]["DataType"].is6bitFloat() \
               or state["ProblemType"]["DataType"].isFloat4()):
         reject(state, "didn't support Matrix Instruction with type %s" % str(state["ProblemType"]["DataType"]))
         return
