@@ -316,6 +316,8 @@ class MFMAInstruction(Instruction):
             kStr = "f8f6f4" if self.variant[2] > 32 else "fp8_bf8"
         elif iType == InstType.INST_BF8_F8:
             kStr = "f8f6f4" if self.variant[2] > 32 else "bf8_fp8"
+        elif iType == InstType.INST_F6:
+            kStr = "f8f6f4"
         elif iType == InstType.INST_F4:
             kStr = "f8f6f4"
         else:
@@ -350,6 +352,8 @@ class MFMAInstruction(Instruction):
                 return " cbsz:0 blgp:1"
             elif self.instType == InstType.INST_BF8_F8:
                 return " cbsz:1 blgp:0"
+            elif self.instType == InstType.INST_F6:
+                return " cbsz:2 blgp:2"
             elif self.instType == InstType.INST_F4:
                 return " cbsz:4 blgp:4"
 
