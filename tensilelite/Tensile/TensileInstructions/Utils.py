@@ -123,6 +123,8 @@ def dataTypeNameAbbrevToInstType(abbrev: str, sourceSwap: bool = False) -> InstT
         return InstType.INST_BF8_F8
     elif abbrev == 'fp6_fp6':
         return InstType.INST_F6
+    elif abbrev == 'bf6_bf6':
+        return InstType.INST_BF6
     elif abbrev == 'fp4_fp4':
         return InstType.INST_F4
     else:
