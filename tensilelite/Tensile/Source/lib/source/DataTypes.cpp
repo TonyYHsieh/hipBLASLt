@@ -75,6 +75,10 @@ namespace TensileLite
         case DataType::Float6:
             return "Float6";
 #endif // #ifdef TENSILE_USE_FP6
+#ifdef TENSILE_USE_BF6
+        case DataType::BFloat6:
+            return "BFloat6";
+#endif // #ifdef TENSILE_USE_BF6
 #ifdef TENSILE_USE_FP4
         case DataType::Float4:
             return "Float4";
@@ -129,6 +133,10 @@ namespace TensileLite
         case DataType::Float6:
             return "F6";
 #endif // #ifdef TENSILE_USE_FP6
+#ifdef TENSILE_USE_BF6
+        case DataType::BFloat6:
+            return "B6";
+#endif // #ifdef TENSILE_USE_BF6
 #ifdef TENSILE_USE_FP4
         case DataType::Float4:
             return "F4";
@@ -183,6 +191,10 @@ namespace TensileLite
         case DataType::Float6:
             return TypeInfo<Float6x32>::ElementSize;
 #endif // #ifdef TENSILE_USE_FP6
+#ifdef TENSILE_USE_BF6
+        case DataType::BFloat6:
+            return TypeInfo<BFloat6x32>::ElementSize;
+#endif // #ifdef TENSILE_USE_BF6
 #ifdef TENSILE_USE_FP4
         case DataType::Float4:
             return TypeInfo<Float4x2>::ElementSize;
@@ -249,6 +261,9 @@ namespace TensileLite
 #ifdef TENSILE_USE_FP6
         registerTypeInfo<Float6x32>();
 #endif // #ifdef TENSILE_USE_FP6
+#ifdef TENSILE_USE_BF6
+        registerTypeInfo<BFloat6x32>();
+#endif // #ifdef TENSILE_USE_BF6
 #ifdef TENSILE_USE_FP4
         registerTypeInfo<Float4x2>();
 #endif // #ifdef TENSILE_USE_FP4
