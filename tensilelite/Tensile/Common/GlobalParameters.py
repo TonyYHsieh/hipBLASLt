@@ -1465,7 +1465,9 @@ defaultProblemType = {
     "SetConstStrideBias": [],
     # Summation dimension indices
     "MirrorDimsA": [],
+    "MirrorDimsMXSA": [],
     "MirrorDimsB": [],
+    "MirrorDimsMXSB": [],
     "MirrorDimsMetadata": [],
     # for LD description
     "NumIndicesLD": 4,
