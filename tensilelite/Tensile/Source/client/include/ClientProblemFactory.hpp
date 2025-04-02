@@ -102,6 +102,8 @@ namespace TensileLite
             bool                             m_useUserArgs;
             bool                             m_swizzleTensorA;
             bool                             m_swizzleTensorB;
+            int                              m_mxBlockA;
+            int                              m_mxBlockB;
         };
 
     } // namespace Client

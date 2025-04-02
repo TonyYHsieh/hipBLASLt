@@ -1728,6 +1728,9 @@ namespace TensileLite
                         prop.value = getValue<Float4x2>(prop.init, prop.freeValue);
                         break;
 #endif // #ifdef TENSILE_USE_FP4
+                    case DataType::MXScale:
+                        prop.value = getValue<MXScale>(prop.init, prop.freeValue);
+                        break;
                     case DataType::XFloat32:
                     case DataType::Count:
                     case DataType::Float8BFloat8:
@@ -2093,6 +2096,8 @@ namespace TensileLite
             inputs->scaleC        = (void*)ptrs[ContractionProblemGemm::TENSOR::SCALEC];
             inputs->scaleD        = (void*)ptrs[ContractionProblemGemm::TENSOR::SCALED];
             inputs->scaleAlphaVec = (void*)ptrs[ContractionProblemGemm::TENSOR::SCALEALPHAVEC];
+            inputs->mxsa          = (void*)ptrs[ContractionProblemGemm::TENSOR::MXSA];
+            inputs->mxsb          = (void*)ptrs[ContractionProblemGemm::TENSOR::MXSB];
             inputs->metadata      = (unsigned char*)ptrs[ContractionProblemGemm::TENSOR::METADATA];
             inputs->Synchronizer  = (void*)ptrs[ContractionProblemGemm::TENSOR::Synchronizer];
             inputs->amaxD         = (void*)ptrs[ContractionProblemGemm::TENSOR::AMAXD];

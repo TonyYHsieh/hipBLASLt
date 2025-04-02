@@ -68,6 +68,7 @@
 #include <Tensile/DataTypes_Float6.hpp>
 #include <Tensile/DataTypes_BFloat6.hpp>
 #include <Tensile/DataTypes_Float4.hpp>
+#include <Tensile/DataTypes_MXScale.hpp>
 
 namespace TensileLite
 {
@@ -115,6 +116,7 @@ namespace TensileLite
 #ifdef TENSILE_USE_FP4
         Float4,
 #endif // #ifdef TENSILE_USE_FP4
+        MXScale,
         Count,
         None = Count
     };
@@ -323,6 +325,11 @@ namespace TensileLite
     {
     };
 #endif // #ifdef TENSILE_USE_FP4
+    template <>
+    struct TypeInfo<MXScale>
+        : public BaseTypeInfo<MXScale, DataType::MXScale, 1, false, false>
+    {
+    };
 
     // Variant for constants
     using ConstantVariant = std::variant<float,
@@ -347,6 +354,7 @@ namespace TensileLite
 #ifdef TENSILE_USE_FP4
                                        , Float4x2
 #endif // #ifdef TENSILE_USE_FP4
+                                       , MXScale
                                         >;
 
     // Convert variants to type T

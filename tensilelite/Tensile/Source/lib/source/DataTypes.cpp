@@ -83,6 +83,8 @@ namespace TensileLite
         case DataType::Float4:
             return "Float4";
 #endif // #ifdef TENSILE_USE_FP4
+        case DataType::MXScale:
+            return "MXScale";
         case DataType::Count:
             return "Invalid";
         }
@@ -141,6 +143,8 @@ namespace TensileLite
         case DataType::Float4:
             return "F4";
 #endif // #ifdef TENSILE_USE_FP4
+        case DataType::MXScale:
+            return "MX";
         case DataType::Count:
             return "Invalid";
         }
@@ -199,6 +203,8 @@ namespace TensileLite
         case DataType::Float4:
             return TypeInfo<Float4x2>::ElementSize;
 #endif // #ifdef TENSILE_USE_FP4
+        case DataType::MXScale:
+            return TypeInfo<MXScale>::ElementSize;
         case DataType::Count:
             return 1;
         }
@@ -267,6 +273,7 @@ namespace TensileLite
 #ifdef TENSILE_USE_FP4
         registerTypeInfo<Float4x2>();
 #endif // #ifdef TENSILE_USE_FP4
+        registerTypeInfo<MXScale>();
     }
 
     void DataTypeInfo::registerAllTypeInfoOnce()

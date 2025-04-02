@@ -265,6 +265,7 @@ namespace TensileLite
 #ifdef TENSILE_USE_FP4
             case DataType::Float4:
 #endif // #ifdef TENSILE_USE_FP4
+            case DataType::MXScale:
                 ;
             }
             return DataInitialization::getValue<Accumulator, InitMode::Zero>();
@@ -358,6 +359,7 @@ namespace TensileLite
 #ifdef TENSILE_USE_FP4
             case DataType::Float4:
 #endif // #ifdef TENSILE_USE_FP4
+            case DataType::MXScale:
                 ;
             }
         }
@@ -413,6 +415,7 @@ namespace TensileLite
 #ifdef TENSILE_USE_FP4
             case DataType::Float4:
 #endif // #ifdef TENSILE_USE_FP4
+            case DataType::MXScale:
                 ;
             }
         }
@@ -851,6 +854,8 @@ omp_set_num_threads(MAX_OMP_THREADS);
             typename Inputs::BType const* bPtr = (typename Inputs::BType const*)inputs.b;
             typename Inputs::CType const* cPtr = (typename Inputs::CType const*)inputs.c;
             typename Inputs::DType*       dPtr = (typename Inputs::DType*)inputs.d;
+            MXScale                const* mxsaPtr = (MXScale const*) inputs.mxsa;
+            MXScale                const* mxsbPtr = (MXScale const*) inputs.mxsb;
 
             auto const& freeIndicesA = problem.freeIndicesA();
             auto const& freeIndicesB = problem.freeIndicesB();
@@ -862,6 +867,8 @@ omp_set_num_threads(MAX_OMP_THREADS);
             auto const& c    = problem.c();
             auto const& d    = problem.d();
             auto const& bias = problem.bias();
+            auto const& mxsa = problem.mxsa();
+            auto const& mxsb = problem.mxsb();
 
             bool aConjugate = false;
             bool bConjugate = false;
@@ -924,6 +931,8 @@ omp_set_num_threads(MAX_OMP_THREADS);
                 std::vector<int64_t> cCoord(c.dimensions());
                 std::vector<int64_t> dCoord(d.dimensions());
                 std::vector<int64_t> biasCoord(bias.dimensions());
+                std::vector<int64_t> mxsaCoord(mxsa.dimensions());
+                std::vector<int64_t> mxsbCoord(mxsb.dimensions());
                 CoordNumbered(
                     dNum, dCoord.begin(), dCoord.end(), d.sizes().begin(), d.sizes().end());
 
@@ -937,6 +946,10 @@ omp_set_num_threads(MAX_OMP_THREADS);
                     cCoord[idx.c] = coord;
                     if(biasCoord.size() > 2)
                         biasCoord[2] = coord;
+                    if(mxsaCoord.size())
+                        mxsaCoord[idx.a] = coord;
+                    if(mxsbCoord.size())
+                        mxsbCoord[idx.a] = coord;
                 }
 
                 for(size_t i = 0; i < problem.freeIndices().size(); i++)
@@ -947,9 +960,17 @@ omp_set_num_threads(MAX_OMP_THREADS);
                     cCoord[idx.c] = coord;
 
                     if(idx.isA)
+                    {
                         aCoord[idx.i] = coord;
+                        if(mxsaCoord.size())
+                            mxsaCoord[idx.i] = coord;
+                    }
                     else
+                    {
                         bCoord[idx.i] = coord;
+                        if(mxsbCoord.size())
+                            mxsbCoord[idx.i] = coord;
+                    }
                 }
 
                 Accumulator value(0);
@@ -960,7 +981,7 @@ omp_set_num_threads(MAX_OMP_THREADS);
                 {
                     for(size_t boundNum = 0; boundNum < boundCount; boundNum++)
                     {
-                        std::vector<int64_t> bound(problem.boundIndices().size());
+                        std::vector<int64_t> bound(boundIndices.size());
                         CoordNumbered(boundNum,
                                       bound.begin() + 1,
                                       bound.end(),
@@ -972,35 +993,65 @@ omp_set_num_threads(MAX_OMP_THREADS);
                             aCoord[boundIndices[i].a] = bound[i];
                             bCoord[boundIndices[i].b] = bound[i];
 
-                            if(problem.boundIndices()[i].aMirror)
+                            if(boundIndices[i].aMirror)
                                 aCoord[boundIndices[i].a]
                                     = boundSize[i] - aCoord[boundIndices[i].a] - 1;
-                            if(problem.boundIndices()[i].bMirror)
+                            if(boundIndices[i].bMirror)
                                 bCoord[boundIndices[i].b]
                                     = boundSize[i] - bCoord[boundIndices[i].b] - 1;
+
+                            if(problem.mxBlockA())
+                               mxsaCoord[boundIndices[i].a] = aCoord[boundIndices[i].a] / problem.mxBlockA();
+
+                            if(problem.mxBlockB())
+                               mxsbCoord[boundIndices[i].b] = bCoord[boundIndices[i].b] / problem.mxBlockB();
                         }
 
                         size_t aIndex = a.index(aCoord);
                         size_t bIndex = b.index(bCoord);
+                        size_t mxsaIndex = problem.mxBlockA() ? mxsa.index(mxsaCoord) : 0;
+                        size_t mxsbIndex = problem.mxBlockB() ? mxsb.index(mxsbCoord) : 0;
 
-                        auto aStride = problem.a().strides()[boundIndices[0].a];
-                        auto bStride = problem.b().strides()[boundIndices[0].b];
+                        auto aStride = a.strides()[boundIndices[0].a];
+                        auto bStride = b.strides()[boundIndices[0].b];
+                        auto mxsaStride = problem.mxBlockA() ? mxsa.strides()[boundIndices[0].a] : 0;
+                        auto mxsbStride = problem.mxBlockB() ? mxsb.strides()[boundIndices[0].b] : 0;
 
                         // innermost bound calculation:
-                        for(size_t i = 0; i < boundSize[0]; i++)
+                        size_t innerMXLoop = std::max<size_t>(std::max<size_t>(problem.mxBlockA(), problem.mxBlockB()), 1);
+                        for(size_t i = 0; i < boundSize[0]; i+=innerMXLoop)
                         {
-                            size_t aI
-                                = problem.boundIndices()[0].aMirror ? (boundSize[0] - i - 1) : i;
-                            size_t bI
-                                = problem.boundIndices()[0].bMirror ? (boundSize[0] - i - 1) : i;
+                            Accumulator val(0);
+                            for(size_t j = 0; j<innerMXLoop ; j++)
+                            {
+                                size_t idx = i + j;
+                                size_t aI = boundIndices[0].aMirror ? (boundSize[0] - idx - 1) : idx;
+                                size_t bI = boundIndices[0].bMirror ? (boundSize[0] - idx - 1) : idx;
 
-                            size_t aIdx = aIndex + (aI * aStride);
-                            size_t bIdx = bIndex + (bI * bStride);
-                            value += multiply<Inputs, Accumulator, MathOpAccum,
-                                              typename Inputs::AType,
-                                              typename Inputs::BType,
-                                              typename Inputs::ComputeInputType>(
-                                problem, inputs, aPtr, bPtr, aIdx, bIdx, aConjugate, bConjugate);
+                                size_t aIdx = aIndex + (aI * aStride);
+                                size_t bIdx = bIndex + (bI * bStride);
+                                val += multiply<Inputs, Accumulator, MathOpAccum,
+                                                  typename Inputs::AType,
+                                                  typename Inputs::BType,
+                                                  typename Inputs::ComputeInputType>(
+                                    problem, inputs, aPtr, bPtr, aIdx, bIdx, aConjugate, bConjugate);
+                            }
+
+                            float mxScale = 1.0f;
+                            if (problem.mxBlockA())
+                            {
+                                size_t mxsaI = (boundIndices[0].aMirror ? (boundSize[0] - i - 1) : i) / problem.mxBlockA();
+                                size_t mxsaIdx = mxsaIndex + (mxsaI * mxsaStride);
+                                mxScale = multiply<float>(mxScale, mxsaPtr[mxsaIdx]);
+                            }
+
+                            if (problem.mxBlockB())
+                            {
+                                size_t mxsbI = (boundIndices[0].bMirror ? (boundSize[0] - i - 1) : i) / problem.mxBlockB();
+                                size_t mxsbIdx = mxsbIndex + (mxsbI * mxsbStride);
+                                mxScale = multiply<float>(mxScale, mxsbPtr[mxsbIdx]);
+                            }
+                            value += multiply<Accumulator>(val, mxScale);
                         }
                     }
                 }

@@ -292,6 +292,8 @@ namespace TensileLite
             METADATA      = 11,
             Synchronizer  = 12,
             AMAXD         = 13,
+            MXSA          = 14,
+            MXSB          = 15,
             TENSOR_COUNT
         };
 
@@ -996,6 +998,20 @@ namespace TensileLite
             m_swizzleTensorB = swizzle;
         }
 
+        void setMXScaleA(int mxBlock, std::vector<size_t> saStride = {});
+
+        size_t mxBlockA() const
+        {
+            return m_mxBlockA;
+        }
+
+        void setMXScaleB(int mxBlock, std::vector<size_t> sbStride = {});
+
+        size_t mxBlockB() const
+        {
+            return m_mxBlockB;
+        }
+
         /// Allocated elements excluding batch dimensions
         /// Used in assembly kernels to determine buffer limits, if batch dimes not
         /// packed
@@ -1050,6 +1066,14 @@ namespace TensileLite
         TensorDescriptor const& amaxd() const
         {
             return m_tensors[ContractionProblemGemm::TENSOR::AMAXD];
+        }
+        TensorDescriptor const& mxsa() const
+        {
+            return m_tensors[ContractionProblemGemm::TENSOR::MXSA];
+        }
+        TensorDescriptor const& mxsb() const
+        {
+            return m_tensors[ContractionProblemGemm::TENSOR::MXSB];
         }
         FreeIndices const& freeIndicesA() const
         {
@@ -1214,6 +1238,8 @@ namespace TensileLite
         ActivationType m_activationType          = ActivationType::None;
         bool           m_activationNoGuard       = false;
         int            m_sparse                  = 0;
+        int            m_mxBlockA                = 0;
+        int            m_mxBlockB                = 0;
 
         KernelLanguage    m_kernelLanguage    = KernelLanguage::Any;
         PerformanceMetric m_performanceMetric = PerformanceMetric::DeviceEfficiency;
@@ -1311,7 +1337,9 @@ namespace TensileLite
                           void const*          _scaleAlphaVec,
                           void*                _ws,
                           void*                _Synchronizer,
-                          unsigned char const* _metadata);
+                          unsigned char const* _metadata,
+                          void const*          _mxsa,
+                          void const*          _mxsb);
 
         // TODO: Remove this
         void const* a     = nullptr;
@@ -1333,6 +1361,8 @@ namespace TensileLite
         void const* scaleC        = nullptr;
         void const* scaleD        = nullptr;
         void const* scaleAlphaVec = nullptr;
+        void const* mxsa          = nullptr;
+        void const* mxsb          = nullptr;
 
         // Constants
         ConstantVariant              alpha = static_cast<float>(0);

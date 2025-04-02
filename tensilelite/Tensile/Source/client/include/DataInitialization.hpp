@@ -433,6 +433,9 @@ namespace TensileLite
                     initArray<Float4x2>(initMode, static_cast<Float4x2*>(array), descriptor);
                     break;
 #endif // #ifdef TENSILE_USE_FP4
+                case DataType::MXScale:
+                    initArray<MXScale>(initMode, static_cast<MXScale*>(array), descriptor);
+                    break;
                 case DataType::XFloat32:
                 case DataType::ComplexFloat:
                 case DataType::ComplexDouble:
@@ -2507,6 +2510,68 @@ namespace TensileLite
 #endif // #ifdef TENSILE_USE_FP4
 
         template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::Zero>()
+        {
+            throw std::runtime_error("Zero not available for MXScale.");
+        }
+        template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::One>()
+        {
+            return MXScale(1.0f);
+        }
+        template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::Two>()
+        {
+            return MXScale(2.0f);
+        }
+        template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::NegOne>()
+        {
+            throw std::runtime_error("-1 not available for MXScale.");
+        }
+        template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::Max>()
+        {
+            return MXScale(0xfe);
+        }
+        template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::DenormMin>()
+        {
+            throw std::runtime_error("DenormMin not available for MXScale.");
+        }
+        template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::DenormMax>()
+        {
+            throw std::runtime_error("DenormMax not available for MXScale.");
+        }
+        template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::NaN>()
+        {
+            return MXScale(0xff);
+        }
+        template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::Inf>()
+        {
+            throw std::runtime_error("Inf not available for MXScale.");
+        }
+        template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::Random>()
+        {
+            return MXScale(static_cast<uint8_t>((rand() % 7) - 3 + 127));
+        }
+        template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::BadInput>()
+        {
+            return MXScale(0xff);
+        }
+        template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::BadOutput>()
+        {
+            return MXScale(0xff);
+        }
+
+
+        template <>
         inline bool DataInitialization::isBadInput<float>(float value)
         {
             return std::isnan(value);
@@ -2607,6 +2672,12 @@ namespace TensileLite
             return false;
         }
 #endif // #ifdef TENSILE_USE_FP4
+
+        template <>
+        inline bool DataInitialization::isBadInput<MXScale>(MXScale value)
+        {
+            return value.data == 0xff;
+        }
 
         template <>
         inline bool DataInitialization::isBadOutput<float>(float value)
@@ -2881,6 +2952,12 @@ namespace TensileLite
             return Float4x2(val0, val1);
         }
 #endif // #ifdef TENSILE_USE_FP4
+
+        template <>
+        inline MXScale DataInitialization::getTrigValue<MXScale>(int idx, bool useCos, bool useAbs)
+        {
+            return MXScale(getTrigValue<float>(idx, useCos, useAbs));
+        }
 
         template <>
         inline std::complex<float>
@@ -3234,6 +3311,12 @@ namespace TensileLite
         }
 #endif // #ifdef TENSILE_USE_FP4
 
+        template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::RandomNarrow>()
+        {
+            return MXScale(rocm_random_narrow_range<float>{}());
+        }
+
         template <typename T>
         inline T getValueWithUpperLowerBoundFP(double upper = 1.0, double lower = -1.0)
         {
@@ -3436,6 +3519,12 @@ namespace TensileLite
 #endif // #ifdef TENSILE_USE_FP4
 
         template <>
+        inline MXScale DataInitialization::getValue<MXScale, InitMode::RandomNegPosLimited>()
+        {
+            return MXScale(getValueWithUpperLowerBoundFP<float>());
+        }
+
+        template <>
         inline float DataInitialization::ConvertTo<float>(size_t i)
         {
             return static_cast<float>(i);
@@ -3613,6 +3702,12 @@ namespace TensileLite
 #endif // #ifdef TENSILE_USE_FP4
 
         template <>
+        inline MXScale DataInitialization::ConvertTo<MXScale>(size_t i)
+        {
+            return MXScale(float(i));
+        }
+
+        template <>
         inline float DataInitialization::convertDoubleTo<float>(double value)
         {
             return static_cast<float>(value);
@@ -3786,5 +3881,11 @@ namespace TensileLite
             return Float4x2(float(value), float(value));
         }
 #endif // #ifdef TENSILE_USE_FP4
+
+        template <>
+        inline MXScale DataInitialization::convertDoubleTo<MXScale>(double value)
+        {
+            return MXScale(float(value));
+        }
     } // namespace Client
 } // namespace TensileLite

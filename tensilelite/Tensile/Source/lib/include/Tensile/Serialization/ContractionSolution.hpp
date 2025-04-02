@@ -183,6 +183,8 @@ namespace TensileLite
                 iot::mapOptional(io, "supportDeviceUserArguments", s.supportDeviceUserArguments);
                 iot::mapOptional(io, "swizzleTensorA", s.swizzleTensorA);
                 iot::mapOptional(io, "swizzleTensorB", s.swizzleTensorB);
+                iot::mapOptional(io, "mxBlockA", s.mxBlockA);
+                iot::mapOptional(io, "mxBlockB", s.mxBlockB);
             }
 
             const static bool flow = false;

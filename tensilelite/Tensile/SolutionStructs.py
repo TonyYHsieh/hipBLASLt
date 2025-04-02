@@ -504,6 +504,12 @@ class ProblemType(Mapping):
     if self["SwizzleTensorB"]:
       name += "STB_"
 
+    if self["MXBlockA"]:
+      name += f'MXA{self["MXBlockA"]}_'
+
+    if self["MXBlockB"]:
+      name += f'MXB{self["MXBlockB"]}_'
+
     # Other
     if self["UseBeta"]: name += "B"
     if self["HighPrecisionAccumulate"] and not self["SilentHighPrecisionAccumulate"]: name += "H"

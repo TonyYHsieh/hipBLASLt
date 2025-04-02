@@ -517,6 +517,8 @@ namespace TensileLite
             bool                  supportDeviceUserArguments = false;
             bool                  swizzleTensorA             = false;
             bool                  swizzleTensorB             = false;
+            int                   mxBlockA                   = 0;
+            int                   mxBlockB                   = 0;
         };
 
         struct LinearModel

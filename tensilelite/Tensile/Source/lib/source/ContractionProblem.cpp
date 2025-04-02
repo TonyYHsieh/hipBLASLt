@@ -566,6 +566,8 @@ namespace TensileLite
             = TensorDescriptor("scaleAlphaVec");
         gemm.m_tensors[ContractionProblemGemm::TENSOR::METADATA] = TensorDescriptor("metadata");
         gemm.m_tensors[ContractionProblemGemm::TENSOR::AMAXD]    = TensorDescriptor("amaxD");
+        gemm.m_tensors[ContractionProblemGemm::TENSOR::MXSA]     = TensorDescriptor("mxScaleA");
+        gemm.m_tensors[ContractionProblemGemm::TENSOR::MXSB]     = TensorDescriptor("mxScaleB");
         gemm.m_tensor_compressed                                 = TensorDescriptor("compressed");
         return gemm;
     }
@@ -610,6 +612,32 @@ namespace TensileLite
         consistencyCheck();
         normalize();
         calcArithmeticIntensity();
+    }
+
+    void ContractionProblemGemm::setMXScaleA(int mxBlockA, std::vector<size_t> saStride)
+    {
+        m_mxBlockA = mxBlockA;
+
+        if (mxBlockA)
+        {
+            std::vector<size_t> saSizes = m_tensors[ContractionProblemGemm::TENSOR::A].sizes();
+            saSizes[m_boundIndices[0].a] = saSizes[m_boundIndices[0].a] / mxBlockA;
+            TensorDescriptor mxsa("mxScaleA", DataType::MXScale, saSizes.begin(), saSizes.end(), saStride.begin(), saStride.end());
+            m_tensors[ContractionProblemGemm::TENSOR::MXSA] = mxsa;
+        }
+    }
+
+    void ContractionProblemGemm::setMXScaleB(int mxBlockB, std::vector<size_t> sbStride)
+    {
+        m_mxBlockB = mxBlockB;
+
+        if (mxBlockB)
+        {
+            std::vector<size_t> sbSizes = m_tensors[ContractionProblemGemm::TENSOR::B].sizes();
+            sbSizes[m_boundIndices[0].b] = sbSizes[m_boundIndices[0].b] / mxBlockB;
+            TensorDescriptor mxsb("mxScaleB", DataType::MXScale, sbSizes.begin(), sbSizes.end(), sbStride.begin(), sbStride.end());
+            m_tensors[ContractionProblemGemm::TENSOR::MXSB] = mxsb;
+        }
     }
 
     size_t ContractionProblemGemm::toAPos(size_t idx) const
@@ -1526,7 +1554,9 @@ namespace TensileLite
                                          void const*          _scaleAlphaVec,
                                          void*                _ws,
                                          void*                _Synchronizer,
-                                         unsigned char const* _metadata)
+                                         unsigned char const* _metadata,
+                                         void const*          _mxsa,
+                                         void const*          _mxsb)
         : a(_a)
         , b(_b)
         , c(_c)
@@ -1545,6 +1575,8 @@ namespace TensileLite
         , ws(_ws)
         , Synchronizer(_Synchronizer)
         , metadata(_metadata)
+        , mxsa(_mxsa)
+        , mxsb(_mxsb)
     {
     }
 } // namespace TensileLite
