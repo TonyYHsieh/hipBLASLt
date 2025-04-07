@@ -2583,6 +2583,8 @@ class Solution(collections.abc.Mapping):
             and not state["UnrollMajorLDSA"] and not state["DirectToVgprA"]
     state["enableLDSTrB"] = state["LDSTrInst"] and globalParameters["AsmCaps"][isa]["HasLDSTr"] and numBytes == 2 \
             and not state["UnrollMajorLDSB"] and not state["DirectToVgprB"]
+    state["enableLDSTrMXSA"] = False
+    state["enableLDSTrMXSB"] = False
 
     if state["enableLDSTrA"]:
       state["VectorWidthA"] = 1
@@ -3898,8 +3900,12 @@ class Solution(collections.abc.Mapping):
     ldsNumBytesA, ldsNumBytesAlignedA, ldsNumBytesB, ldsNumBytesAlignedB, ldsNumBytesMetadata, ldsNumBytesAlignedMetadata, \
       ldsNumBytesMXSA, ldsNumBytesAlignedMXSA, ldsNumBytesMXSB, ldsNumBytesAlignedMXSB = calcLdsNumBytes(state["LdsPadA"], state["LdsBlockSizePerPadA"], state["LdsPadB"], state["LdsBlockSizePerPadB"])
 
-    state["LdsOffsetA_Blk"]=0
-    state["LdsOffsetB_Blk"]=0
+    state["LdsOffsetA_Blk"] = 0
+    state["LdsOffsetB_Blk"] = 0
+    state["LdsOffsetMXSA_Blk"] = 0
+    state["LdsOffsetMXSB_Blk"] = 0
+    state["LdsOffsetMetadata_Blk"] = 0
+
     # todo, can the alignment be a power of 2?
     state["LdsNumElementsAlignedA"] = int(ldsNumBytesAlignedA)
     state["LdsNumElementsAlignedMXSA"] = int(ldsNumBytesAlignedMXSA)

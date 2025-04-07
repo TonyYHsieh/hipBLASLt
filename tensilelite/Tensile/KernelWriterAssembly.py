@@ -346,13 +346,16 @@ class KernelWriterAssembly(KernelWriter):
     tP["localWriteInstruction"]    = instructions["LocalWrite"][localWriteInstructionIdx]
 
   def initLocalReadMemoryInstruction(self, instructions, kernel, tP, bpr):
-
-    tChar = "A" if tP["isA"] else "B" if tP["isB"] else "Metadata"
+    tChar = tP["tensorChar"]
     if kernel["UnrollMajorLDS%s"%tChar]:
       if tChar == "A":
         localReadWidth = (self.states.lrvwUnrollA * tP["bpeDS"]) / bpr
       if tChar == "B":
         localReadWidth = (self.states.lrvwUnrollB * tP["bpeDS"]) / bpr
+      if tChar == "MXSA":
+        localReadWidth = (self.states.lrvwUnrollMXSA * tP["bpeDS"]) / bpr
+      if tChar == "MXSB":
+        localReadWidth = (self.states.lrvwUnrollMXSB * tP["bpeDS"]) / bpr
       if tChar == "Metadata":
         localReadWidth = (self.states.lrvwUnrollMetadata * tP["bpeDS"]) / bpr
     else:
@@ -360,6 +363,10 @@ class KernelWriterAssembly(KernelWriter):
         localReadWidth = (self.states.lrvwTileA * tP["bpeDS"]) / bpr
       if tChar == "B":
         localReadWidth = (self.states.lrvwTileB * tP["bpeDS"]) / bpr
+      if tChar == "MXSA":
+        localReadWidth = (self.states.lrvwTileMXSA * tP["bpeDS"]) / bpr
+      if tChar == "MXSB":
+        localReadWidth = (self.states.lrvwTileMXSB * tP["bpeDS"]) / bpr
       if tChar == "Metadata":
         localReadWidth = (self.states.lrvwTileMetadata * tP["bpeDS"]) / bpr
 
