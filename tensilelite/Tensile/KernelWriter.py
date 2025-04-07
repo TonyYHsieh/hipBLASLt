@@ -1823,6 +1823,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
     # tile assignments
     module.addComment1("global read addresses: tile offset assignment a")
     module.add(self.graTileAssignment(kernel, tensorParametersA))
+    if kernel["ProblemType"]["MXBlockA"]:
+      module.addComment1("global read addresses: tile offset assignment mxsa")
+      module.add(self.graTileAssignment(kernel, tensorParametersA["MX"]))
     if kernel["ProblemType"]["Sparse"]:
       module.addComment1("global read addresses: tile offset assignment metadata")
       if kernel["DirectToVgprSparseMetadata"]:
@@ -1832,15 +1835,24 @@ class KernelWriter(metaclass=abc.ABCMeta):
         module.add(self.graTileAssignment(kernel, tPM))
     module.addComment1("global read addresses: tile offset assignment b")
     module.add(self.graTileAssignment(kernel, tensorParametersB))
+    if kernel["ProblemType"]["MXBlockB"]:
+      module.addComment1("global read addresses: tile offset assignment mxsb")
+      module.add(self.graTileAssignment(kernel, tensorParametersB["MX"]))
 
     # unroll assignments
     module.addComment1("global read addresses: unroll assignment a")
     module.add(self.graUnrollAssignment(kernel, tensorParametersA))
+    if kernel["ProblemType"]["MXBlockA"]:
+      module.addComment1("global read addresses: unroll assignment mxsa")
+      module.add(self.graUnrollAssignment(kernel, tensorParametersA["MX"]))
     if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
       module.addComment1("global read addresses: unroll assignment metadata")
       module.add(self.graUnrollAssignment(kernel, tPM))
     module.addComment1("global read addresses: unroll assignment b")
     module.add(self.graUnrollAssignment(kernel, tensorParametersB))
+    if kernel["ProblemType"]["MXBlockB"]:
+      module.addComment1("global read addresses: unroll assignment mxsb")
+      module.add(self.graUnrollAssignment(kernel, tensorParametersB["MX"]))
 
     # other free indices
     if kernel["ProblemType"]["NumIndicesC"] > 2:
@@ -1855,21 +1867,33 @@ class KernelWriter(metaclass=abc.ABCMeta):
     # tile offsets
     module.addComment1("global read addresses: tile offsets a")
     module.add(self.graTileOffsets(kernel, tensorParametersA))
+    if kernel["ProblemType"]["MXBlockA"]:
+      module.addComment1("global read addresses: tile offsets mxsa")
+      module.add(self.graTileOffsets(kernel, tensorParametersA["MX"]))
     if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
       module.addComment1("global read addresses: tile offsets metadata")
       # Using A or B's margin to instead Metadata's margin
       module.add(self.graTileOffsets(kernel, tPM, tPMRef["glvw"] if tPMRef["rtv"] else 1))
     module.addComment1("global read addresses: tile offsets b")
     module.add(self.graTileOffsets(kernel, tensorParametersB))
+    if kernel["ProblemType"]["MXBlockB"]:
+      module.addComment1("global read addresses: tile offsets mxsb")
+      module.add(self.graTileOffsets(kernel, tensorParametersB["MX"]))
 
     # unroll offsets
     module.addComment1("global read addresses: unroll offsets a")
     module.add(self.graUnrollOffsets(kernel, tensorParametersA))
+    if kernel["ProblemType"]["MXBlockA"]:
+      module.addComment1("global read addresses: unroll offsets mxsa")
+      module.add(self.graUnrollOffsets(kernel, tensorParametersA["MX"]))
     if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
       module.addComment1("global read addresses: unroll offsets metadata")
       module.add(self.graUnrollOffsets(kernel, tPM))
     module.addComment1("global read addresses: unroll offsets b")
     module.add(self.graUnrollOffsets(kernel, tensorParametersB))
+    if kernel["ProblemType"]["MXBlockB"]:
+      module.addComment1("global read addresses: unroll offsets mxsb")
+      module.add(self.graUnrollOffsets(kernel, tensorParametersB["MX"]))
 
     # tile edges
     if kernel["EdgeType"] == "ShiftPtr":
@@ -1889,6 +1913,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
         if tensorParametersA["is_sparse"] and kernel["DirectToVgprSparseMetadata"]:
           module.addComment1("global read addresses: shift metadata")
           module.add(self.graMetadataShift(kernel, tensorParametersA))
+        if kernel["ProblemType"]["MXBlockA"]:
+          module.addComment1("global read addresses: shift mxsa")
+          module.add(self.graShift(kernel, tensorParametersA["MX"]))
 
       if not (kernel["BufferLoad"] and kernel["GuaranteeNoPartialMetadata"]) and not forceNoTileCode \
         and kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
@@ -1902,10 +1929,16 @@ class KernelWriter(metaclass=abc.ABCMeta):
         if tensorParametersB["is_sparse"] and kernel["DirectToVgprSparseMetadata"]:
           module.addComment1("global read addresses: shift metadata")
           module.add(self.graMetadataShift(kernel, tensorParametersB))
+        if kernel["ProblemType"]["MXBlockB"]:
+          module.addComment1("global read addresses: shift mxsb")
+          module.add(self.graShift(kernel, tensorParametersB["MX"]))
 
     # final offsets
     module.addComment1("global read addresses: final offsets a")
     module.add(self.graFinalOffsets(kernel, tensorParametersA))
+    if kernel["ProblemType"]["MXBlockA"]:
+      module.addComment1("global read addresses: final offsets mxsa")
+      module.add(self.graFinalOffsets(kernel, tensorParametersA["MX"]))
     if kernel["ProblemType"]["Sparse"]:
       module.addComment1("global read addresses: final offsets metadata")
       if kernel["DirectToVgprSparseMetadata"]:
@@ -1914,6 +1947,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
         module.add(self.graFinalOffsets(kernel, tPM))
     module.addComment1("global read addresses: final offsets b")
     module.add(self.graFinalOffsets(kernel, tensorParametersB))
+    if kernel["ProblemType"]["MXBlockB"]:
+      module.addComment1("global read addresses: final offsets mxsb")
+      module.add(self.graFinalOffsets(kernel, tensorParametersB["MX"]))
     self.dontAppendCode = False
     self.dontAppendCode = self.dontAppendCode or forceNoTileCode
 
@@ -1921,11 +1957,17 @@ class KernelWriter(metaclass=abc.ABCMeta):
     if not forceNoTileCode:
       module.addComment1("global read addresses: addresses a")
       module.add(self.graAddresses(kernel, tensorParametersA))
+      if kernel["ProblemType"]["MXBlockA"]:
+        module.addComment1("global read addresses: addresses mxsa")
+        module.add(self.graAddresses(kernel, tensorParametersA["MX"]))
       if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
         module.addComment1("global read addresses: addresses metadata")
         module.add(self.graAddresses(kernel, tPM))
       module.addComment1("global read addresses: addresses b")
       module.add(self.graAddresses(kernel, tensorParametersB))
+      if kernel["ProblemType"]["MXBlockB"]:
+        module.addComment1("global read addresses: addresses mxsb")
+        module.add(self.graAddresses(kernel, tensorParametersB["MX"]))
 
     # Add increment code
     gsuComponent = Component.GSU.find(self)
