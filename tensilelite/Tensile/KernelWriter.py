@@ -4283,7 +4283,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       self.startVgprGlobalReadOffsetB = vgprIdx
       vgprIdx += 1 if kernel["_UseSgprForGRO"] else self.states.b.numVgprGlobalReadOffsets
       if kernel["ProblemType"]["MXBlockB"]:
-        self.startVgprGlobalReadOffsetB = vgprIdx
+        self.startVgprGlobalReadOffsetMXSB = vgprIdx
         vgprIdx += 1 if kernel["_UseSgprForGRO"] else self.states.mxsb.numVgprGlobalReadOffsets
       if kernel["ProblemType"]["Sparse"]:
         self.startVgprGlobalReadOffsetMetadata = vgprIdx
@@ -4852,7 +4852,11 @@ class KernelWriter(metaclass=abc.ABCMeta):
     self.defineSgpr("AddressD", numSgprAddressD)
     self.defineSgpr("AddressC", numSgprAddressC)
     self.defineSgpr("AddressA", numSgprAddressA)
+    if kernel["ProblemType"]["MXBlockA"]:
+      self.defineSgpr("AddressMXSA", numSgprAddressMXSA)
     self.defineSgpr("AddressB", numSgprAddressB)
+    if kernel["ProblemType"]["MXBlockB"]:
+      self.defineSgpr("AddressMXSB", numSgprAddressMXSB)
     if kernel["ProblemType"]["Sparse"]:
       self.defineSgpr("AddressMetadata", numSgprAddressMetadata)
     if kernel["StreamK"] > 0 and kernel["StreamKAtomic"] == 0:
@@ -4864,7 +4868,11 @@ class KernelWriter(metaclass=abc.ABCMeta):
     self.defineSgpr("StridesD", self.states.d.numSgprStrides)
     self.defineSgpr("StridesC", self.states.c.numSgprStrides)
     self.defineSgpr("StridesA", self.states.a.numSgprStrides)
+    if kernel["ProblemType"]["MXBlockA"]:
+      self.defineSgpr("StridesMXSA", self.states.mxsa.numSgprStrides)
     self.defineSgpr("StridesB", self.states.b.numSgprStrides)
+    if kernel["ProblemType"]["MXBlockB"]:
+      self.defineSgpr("StridesMXSB", self.states.mxsb.numSgprStrides)
     if kernel["ProblemType"]["Sparse"]:
       self.defineSgpr("StridesMetadata", self.states.m.numSgprStrides)
 
@@ -4953,6 +4961,12 @@ class KernelWriter(metaclass=abc.ABCMeta):
       self.states.nonPostLoopSgpr.remove("AddressB")
       self.states.nonPostLoopSgpr.remove("StridesA")
       self.states.nonPostLoopSgpr.remove("StridesB")
+      if kernel["ProblemType"]["MXBlockA"]:
+        self.states.nonPostLoopSgpr.remove("AddressMXSA")
+        self.states.nonPostLoopSgpr.remove("StridesMXSA")
+      if kernel["ProblemType"]["MXBlockB"]:
+        self.states.nonPostLoopSgpr.remove("AddressMXSB")
+        self.states.nonPostLoopSgpr.remove("StridesMXSB")
 
     self.states.preloadScaleA = False
     self.states.preloadScaleB = False
@@ -4970,8 +4984,12 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
     self.states.numSgprToLoad = self.states.numSgprSizesFree + self.states.numSgprSizesSum + \
       numSgprAddressD + numSgprAddressC + numSgprAddressA + numSgprAddressB + numSgprAlpha + numSgprAddressMetadata + \
+      (numSgprAddressMXSA if kernel["ProblemType"]["MXBlockA"] else 0) + \
+      (numSgprAddressMXSB if kernel["ProblemType"]["MXBlockB"] else 0) + \
       (numSgprBeta if kernel["ProblemType"]["UseBeta"] else 0) + \
       self.states.d.numSgprStrides + self.states.c.numSgprStrides + self.states.a.numSgprStrides + self.states.b.numSgprStrides + self.states.m.numSgprStrides + \
+      (self.states.mxsa.numSgprStrides if kernel["ProblemType"]["MXBlockA"] else 0) + \
+      (self.states.mxsb.numSgprStrides if kernel["ProblemType"]["MXBlockB"] else 0) + \
       self.states.numSgprStreamK + \
       len(kernel["PackedC0IdxChars"][:-1])*2 + len(kernel["PackedC1IdxChars"][:-1])*2
     # Get kernel argument end here
