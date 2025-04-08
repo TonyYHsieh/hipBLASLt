@@ -5550,7 +5550,11 @@ class KernelWriterAssembly(KernelWriter):
         if kernel["PrefetchGlobalRead"]:
           module.addComment0("openLoop - reset LRO for possible odd-iter exit")
           module.add(self.localReadResetOffsets(kernel, tPA))
+          if kernel["ProblemType"]["MXBlockA"]:
+            module.add(self.localReadResetOffsets(kernel, tPA["MX"]))
           module.add(self.localReadResetOffsets(kernel, tPB))
+          if kernel["ProblemType"]["MXBlockB"]:
+            module.add(self.localReadResetOffsets(kernel, tPB["MX"]))
           if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
             tPM = tPA["tpsMetadata"] if tPA["is_sparse"] else tPB["tpsMetadata"]
             module.add(self.localReadResetOffsets(kernel, tPM))
