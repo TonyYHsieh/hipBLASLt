@@ -9505,13 +9505,21 @@ class KernelWriterAssembly(KernelWriter):
   ##############################################################################
   def localReadInc(self, kernel, iui, tP):
     tc = tP["tensorChar"]
-    if (not self.do["LocalRead%s" % tc]) or ((tP["isA"] or tP["isB"]) and kernel["DirectToVgpr%s"%tc]): # no local read code if DirectToVgpr is enabled
+    if (not self.do["LocalRead%s" % tc]) or ((tc in ("A", "MXSA", "B", "MXSB")) and kernel["DirectToVgpr%s"%tc]): # no local read code if DirectToVgpr is enabled
       return Module("localReadInc (Empty)")
 
     module = Module("localReadInc")
 
     offsetInc = 0
     LdsPad = kernel["LdsPad%s"%tc] if kernel["LdsBlockSizePerPad%s"%tc] == 0 else 0
+
+    if kernel["EnableMatrixInstruction"]:
+      # TODO: remove ceil
+      matrixInstK = kernel["MatrixInstK"]
+      if tc == "MXSA":
+        matrixInstK = ceil(kernel["MatrixInstK"] / kernel["ProblemType"]["MXBlockA"])
+      elif tc == "MXSB":
+        matrixInstK = ceil(kernel["MatrixInstK"] / kernel["ProblemType"]["MXBlockB"])
 
     if self.states.inTailLoop:
       if kernel["UseDotInstruction"]:
@@ -9521,10 +9529,13 @@ class KernelWriterAssembly(KernelWriter):
       else:
         inc = int((kernel["MacroTile%s" % tP["tensorChar"]] + LdsPad) * tP["bpeDS"])
         comment = " ((MT+PAD)*bpeDS)"
+
       if kernel["EnableMatrixInstruction"]:
-        matrixInstK = kernel["MatrixInstK"]
         if kernel["UnrollMajorLDS%s" % tc]:
-          inc = tP["bpeDS"] * max(self.states.numReadsIterCoalescedA,self.states.numReadsIterCoalescedB)
+          if tc in ("MXSA", "MXSB"):
+            inc = tP["bpeDS"] * max(self.states.numReadsIterCoalescedMXSA, self.states.numReadsIterCoalescedMXSB)
+          else:
+            inc = tP["bpeDS"] * max(self.states.numReadsIterCoalescedA, self.states.numReadsIterCoalescedB)
           comment = " (bpeDS)"
         inc *= matrixInstK
         if kernel["ProblemType"]["Sparse"]:
@@ -9549,7 +9560,10 @@ class KernelWriterAssembly(KernelWriter):
       if tP["localReadInstruction"].numOffsets == 1:
         if kernel["EnableMatrixInstruction"]:
           if kernel["UnrollMajorLDS%s" % tP["tensorChar"]]:
-            offsetInc = kernel["MatrixInstK"] * max(self.states.numReadsIterCoalescedA,self.states.numReadsIterCoalescedB)
+            if tc in ("MXSA", "MXSB"):
+              offsetInc = matrixInstK * max(self.states.numReadsIterCoalescedMXSA, self.states.numReadsIterCoalescedMXSB)
+            else:
+              offsetInc = matrixInstK * max(self.states.numReadsIterCoalescedA, self.states.numReadsIterCoalescedB)
             if kernel["ProblemType"]["Sparse"]:
               if (kernel["ProblemType"]["Sparse"] == 2 and tc == "B") or (kernel["ProblemType"]["Sparse"] == 1 and tc == "A"):
                 offsetInc //= 2
@@ -9563,9 +9577,16 @@ class KernelWriterAssembly(KernelWriter):
               if self.states.localReadDoCntA % wlr:
                 offsetInc = (kernel["MacroTile%s"%tP["tensorChar"]] + LdsPad) * kernel["MIInputPerThreadA"]
               else:
-                offsetInc = (kernel["MacroTile%s"%tP["tensorChar"]] + LdsPad) * ((kernel["MatrixInstK"] * wlr) - (kernel["MIInputPerThreadA"] * (wlr - 1)))
+                offsetInc = (kernel["MacroTile%s"%tP["tensorChar"]] + LdsPad) * ((matrixInstK * wlr) - (kernel["MIInputPerThreadA"] * (wlr - 1)))
                 if sparseA:
                   offsetInc //= 2
+            elif tc == "MXSA":
+              lrvw = kernel["LocalReadVectorWidthMXS"]
+              wlr = max(lrvw//kernel["MIInputPerThreadMXSA"], 1)
+              if self.states.localReadDoCntMXSA % wlr:
+                offsetInc = (kernel["MacroTile%s"%tP["tensorChar"]] + LdsPad) * kernel["MIInputPerThreadMXSA"]
+              else:
+                offsetInc = (kernel["MacroTile%s"%tP["tensorChar"]] + LdsPad) * ((matrixInstK * wlr) - (kernel["MIInputPerThreadMXSA"] * (wlr - 1)))
             elif tc == "Metadata":
               lrvw = kernel["LocalReadVectorWidth"] // 8
               wlr = max(lrvw//kernel["MIInputPerThreadMetadata"], 1)
@@ -9574,7 +9595,7 @@ class KernelWriterAssembly(KernelWriter):
               else:
                 offsetInc = (kernel["MacroTile%s"%tP["tensorChar"]] + LdsPad) * (kernel["MatrixInstK"] * wlr - (kernel["MIInputPerThreadMetadata"] * (wlr - 1)))
                 offsetInc //= 8
-            else:
+            elif tc == "B":
               sparseB = kernel["ProblemType"]["Sparse"] == 2
               lrvw = kernel["LocalReadVectorWidth"] // (2 if sparseB else 1)
               wlr = max(lrvw//kernel["MIInputPerThreadB"], 1)
@@ -9584,15 +9605,22 @@ class KernelWriterAssembly(KernelWriter):
                 offsetInc = (kernel["MacroTile%s"%tP["tensorChar"]] + LdsPad) * (kernel["MatrixInstK"] * wlr - (kernel["MIInputPerThreadB"] * (wlr - 1)))
                 if sparseB:
                   offsetInc //= 2
+            elif tc == "MXSB":
+              lrvw = kernel["LocalReadVectorWidthMXS"]
+              wlr = max(lrvw//kernel["MIInputPerThreadMXSB"], 1)
+              if self.states.localReadDoCntMXSB % wlr:
+                offsetInc = (kernel["MacroTile%s"%tP["tensorChar"]] + LdsPad) * kernel["MIInputPerThreadMXSB"]
+              else:
+                offsetInc = (kernel["MacroTile%s"%tP["tensorChar"]] + LdsPad) * ((matrixInstK * wlr) - (kernel["MIInputPerThreadMXSB"] * (wlr - 1)))
+            else:
+              raise Exception(f"unsupport tc %s{tc}")
         else:
           # dot2
           offsetInc = self.states.lrvwUnrollA * kernel["NumWaveSplitK"] if kernel["UseDotInstruction"] else (kernel["MacroTile%s"%tP["tensorChar"]] + LdsPad)
         tP["localReadOffset"] += offsetInc
         module.addComment0("N/A, lro->%d" % tP["localReadOffset"])
-        if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
-          module.addComment0("self.localReadDoCntA %d self.localReadDoCntB %d self.localReadDoCntMetadata %d" % (self.states.localReadDoCntA,self.states.localReadDoCntB, self.states.localReadDoCntMetadata))
-        else:
-          module.addComment0("self.localReadDoCntA %d self.localReadDoCntB %d" % (self.states.localReadDoCntA,self.states.localReadDoCntB))
+        module.addComment0("localReadDoCntA %d localReadDoCntMXSA %d localReadDoCntB %d localReadDoCntMXSB %d localReadDoCntM %d" \
+            % (self.states.localReadDoCntA, self.states.localReadDoCntMXSA, self.states.localReadDoCntB, self.states.localReadDoCntMXSB, self.states.localReadDoCntMetadata))
       else:
         inc = (kernel["MacroTile%s" % tP["tensorChar"]] + LdsPad)
         module.add(VAddCOU32(

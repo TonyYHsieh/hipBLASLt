@@ -2873,6 +2873,10 @@ class KernelWriter(metaclass=abc.ABCMeta):
               if iui*self.states.numReadsIterCoalescedA < kernel["InnerUnroll"]:
                 module.addComment1("local read inc a")
                 module.add(self.localReadInc(kernel, iui, tensorParametersA))
+              if kernel["ProblemType"]["MXBlockA"]:
+                if iui*self.states.numReadsIterCoalescedMXSA < kernel["InnerUnroll"]:
+                  module.addComment1("local read inc mxsa")
+                  module.add(self.localReadInc(kernel, iui, tensorParametersA["MX"]))
               if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
                 if iui*self.states.numReadsIterCoalescedMetadata < kernel["InnerUnroll"]: # no local read code if DirectToVgpr is enabled
                   module.addComment1("local read inc metadata")
@@ -2880,6 +2884,10 @@ class KernelWriter(metaclass=abc.ABCMeta):
               if iui*self.states.numReadsIterCoalescedB < kernel["InnerUnroll"]:
                 module.addComment1("local read inc b")
                 module.add(self.localReadInc(kernel, iui, tensorParametersB))
+              if kernel["ProblemType"]["MXBlockB"]:
+                if iui*self.states.numReadsIterCoalescedMXSB < kernel["InnerUnroll"]:
+                  module.addComment1("local read inc mxsb")
+                  module.add(self.localReadInc(kernel, iui, tensorParametersB["MX"]))
       module.add(self.closeSumAtLeastUnroll(kernel, tensorParametersA, tensorParametersB, prefetch=True, isOptNLL=False, isNGLL=False))
 
     loopCopies = 2 if expand else 1
