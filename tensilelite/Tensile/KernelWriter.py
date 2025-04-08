@@ -384,14 +384,18 @@ class KernelWriter(metaclass=abc.ABCMeta):
     self.do = {}
     self.do["PreLoop"]     = True
     self.do["GlobalReadA"] = True
+    self.do["GlobalReadMXSA"] = True
     self.do["GlobalReadB"] = True
+    self.do["GlobalReadMXSB"] = True
     self.do["GlobalInc"]   = True
     self.do["LocalWriteA"]  = True
     self.do["LocalWriteB"]  = True
     self.do["LocalWriteMetadata"]  = True
     self.do["LocalWriteCVT"]  = True
     self.do["LocalReadA"]  = True
+    self.do["LocalReadMXSA"] = True
     self.do["LocalReadB"]  = True
+    self.do["LocalReadMXSB"] = True
     self.do["LocalReadMetadata"]  = True
     self.do["Wait"]        = True
     self.do["Sync"]        = True
@@ -2018,11 +2022,17 @@ class KernelWriter(metaclass=abc.ABCMeta):
     # init lds read pointers before each unrolled loop
     module.addComment0("local read addresses: init pointers a")
     module.add(self.localReadInitPointers(kernel, tensorParametersA, tensorParametersA))
+    if kernel["ProblemType"]["MXBlockA"]:
+      module.addComment0("local read addresses: init pointers mxsa")
+      module.add(self.localReadInitPointers(kernel, tensorParametersA, tensorParametersA["MX"]))
     if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
       module.addComment0("local read addresses: init pointers metadata")
       module.add(self.localReadInitPointers(kernel, tensorParametersA, tPM))
     module.addComment0("local read addresses: init pointers b")
     module.add(self.localReadInitPointers(kernel, tensorParametersA, tensorParametersB))
+    if kernel["ProblemType"]["MXBlockB"]:
+      module.addComment0("local read addresses: init pointers mxsa")
+      module.add(self.localReadInitPointers(kernel, tensorParametersA, tensorParametersB["MX"]))
 
     if self.do["executeToInitEnd"]:
       module.add(self.functionEnd(kernel, addLabel=False))

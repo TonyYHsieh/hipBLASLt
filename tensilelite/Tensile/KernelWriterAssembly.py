@@ -8178,30 +8178,33 @@ class KernelWriterAssembly(KernelWriter):
     tc = tP["tensorChar"]
     imod = Module("directToLdsM0Update%s_%u"%(tc,mode))
     DtldsModule = imod.add(Module("dtls_offset%s"%tP["tensorChar"]))
-    if not self.do["GlobalRead%s"%tP["tensorChar"]]: return imod
-    if kernel["DirectToLds%s"%tc]:
-      # DirectToLds only enabled for TLU=1 cases, where the registers are directly copied into LDS
-      # for cases both A&B are DTLS, updating m0 for each GlobalRead requires instruction schedule
-      # along with global reads
-      assert (kernel["LocalWriteUseSgpr%s"%tc])
-      if kernel["ExpandPointerSwap"]:
-        DtldsModule.add(SAddU32(dst=mgpr(0), src0=sgpr("LocalWriteAddr%s"%tc), \
-                      src1=tP["localWriteSwapByteOffset"], comment="m0 <- LDS write address"))
-      else:
-        DtldsModule.add(SMovB32(dst=mgpr(0), src=sgpr("LocalWriteAddr%s"%tc), comment="m0 <- LDS write address"))
+    if self.do["GlobalRead%s"%tP["tensorChar"]]:
+      if kernel["DirectToLds%s"%tc]:
+        # DirectToLds only enabled for TLU=1 cases, where the registers are directly copied into LDS
+        # for cases both A&B are DTLS, updating m0 for each GlobalRead requires instruction schedule
+        # along with global reads
+        assert (kernel["LocalWriteUseSgpr%s"%tc])
+        if kernel["ExpandPointerSwap"]:
+          DtldsModule.add(SAddU32(dst=mgpr(0), src0=sgpr("LocalWriteAddr%s"%tc), \
+                        src1=tP["localWriteSwapByteOffset"], comment="m0 <- LDS write address"))
+        else:
+          DtldsModule.add(SMovB32(dst=mgpr(0), src=sgpr("LocalWriteAddr%s"%tc), comment="m0 <- LDS write address"))
 
-      # PrefetchGlobalRead=2 case, generate local read wait for DirectToLds
-      if kernel["PrefetchGlobalRead"]==2:
-        # do not generate local read wait for PGR=2
-        DtldsModule.addComment0("before DirectToLds load, ensure prior ds_reads have finished")
-        DtldsModule.add(SWaitCnt(lgkmcnt=0, comment=""))
-        if not kernel["NoLdsWriteCode"]:
-          if usePlaceHolder:
-            waitStr = Holder(idx=0)
-          else:
-            waitStr = 0
-          DtldsModule.add(SWaitCnt(vmcnt=waitStr, comment=""))
-        DtldsModule.add(SBarrier())
+        # PrefetchGlobalRead=2 case, generate local read wait for DirectToLds
+        if kernel["PrefetchGlobalRead"]==2:
+          # do not generate local read wait for PGR=2
+          DtldsModule.addComment0("before DirectToLds load, ensure prior ds_reads have finished")
+          DtldsModule.add(SWaitCnt(lgkmcnt=0, comment=""))
+          if not kernel["NoLdsWriteCode"]:
+            if usePlaceHolder:
+              waitStr = Holder(idx=0)
+            else:
+              waitStr = 0
+            DtldsModule.add(SWaitCnt(vmcnt=waitStr, comment=""))
+          DtldsModule.add(SBarrier())
+
+    if "MX" in tP:
+      imod.add(self.directToLdsM0Update(kernel, 0, tP["MX"], usePlaceHolder=False))
 
     return imod
 
@@ -8266,11 +8269,12 @@ class KernelWriterAssembly(KernelWriter):
 
     def globalReadBody(tP):
       tc = tP["tensorChar"]
+      isAB = tc in ("A", "B")
       self.vgprs.globalReadRegisters[tc] = []
       graIdx = 0
       g2lIdx = 0
       loadWidth = tP["globalReadInstruction"].totalWidth # load width in elements?
-      bpe = tP["bpeGR"] if not tP["isM"] else tP["bpe"]
+      bpe = tP["bpeGR"] if isAB else tP["bpe"]
       bpl = bpe * tP["glvw"]  # bytes per load
       isGlc = tP["NonTemporal"] & 0x1
       isSlc = tP["NonTemporal"] & 0x2
@@ -8307,7 +8311,7 @@ class KernelWriterAssembly(KernelWriter):
               loadModule = Module("load%u"%loopCnt)
               imod.middle.add(loadModule)
 
-              if (self.states.archCaps["HasEccHalf"] or not self.states.asmCaps["HasWMMA_V1"]) and not tP["isM"]:
+              if (self.states.archCaps["HasEccHalf"] or not self.states.asmCaps["HasWMMA_V1"]) and isAB:
                 numVgprG2L = self.states.a.numVgprG2L if tc == 'A' else self.states.b.numVgprG2L if tc =='B' else self.states.m.numVgprG2L
                 eccBpe = tP["bpeDS"] if kernel["ConvertAfterDS"] else max(tP["bpeGR"], tP["bpe"])
                 eccOffset = _getEccOffset(loadWidth, bpr=self.states.bpr, bpe=eccBpe, \
@@ -8375,14 +8379,14 @@ class KernelWriterAssembly(KernelWriter):
                   self.vgprs.globalReadRegisters[tc].append(0)
                 else:
                   g2lIdxM = i * max(loadWidth * tP["bpeRatio"], 1)
-                  destVgpr = destVgprPrefix + "+%u"%((g2lIdx+eccOffset+tP["shiftGR"]) if not tP["isM"] else g2lIdxM)
-                  self.vgprs.globalReadRegisters[tc].append(g2lIdx+eccOffset+tP["shiftGR"] if not tP["isM"] else g2lIdxM)
+                  destVgpr = destVgprPrefix + "+%u"%((g2lIdx+eccOffset+tP["shiftGR"]) if isAB else g2lIdxM)
+                  self.vgprs.globalReadRegisters[tc].append(g2lIdx+eccOffset+tP["shiftGR"] if isAB else g2lIdxM)
                   if tP["isM"]:
                     assert(graIdx <= self.states.m.numVgprG2LAllocated)
 
                 # TODO: is it possible to load only hi16 when no in tail? (need to check INT8 too)
                 datatype = kernel["ProblemType"]["DataType%s"%tc] if kernel["ConvertAfterDS"] else kernel["ProblemType"]["DataType"]
-                isHigh16Bits = (datatype.isHalf() or datatype.isBFloat16()) and loopCnt%2==1 if not tP["isM"] else False
+                isHigh16Bits = (datatype.isHalf() or datatype.isBFloat16()) and loopCnt%2==1 if isAB else False
                 loadModule.add( self.chooseGlobalRead(kernel["BufferLoad"], \
                           bpl, destVgpr=destVgpr, \
                           addr0=vgpr(offsetVgpr), addr1=sgpr("Srd%s"%tc, 4), \
@@ -8439,6 +8443,9 @@ class KernelWriterAssembly(KernelWriter):
 
     if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"] and tP["is_sparse"]:
         globalReadBody(tP["tpsMetadata"])
+
+    if "MX" in tP:
+        globalReadBody(tP["MX"])
 
     if self.db["ConservativeWaitCnt"] & 0x1:
         imod.footer.add(SBarrier(comment="debug"))
