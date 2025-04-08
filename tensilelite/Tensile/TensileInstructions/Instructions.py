@@ -377,6 +377,59 @@ class MFMAInstruction(Instruction):
         kStr = self.instStr + " " + self.getArgStr()
         return self.formatWithComment(kStr)
 
+class MXMFMAInstruction(Instruction):
+    def __init__(self, instType: InstType, accType: InstType, variant: List[int], \
+                 acc, a, b, acc2=None, mxsa="", mxsb="", comment="") -> None:
+        super().__init__(instType, comment)
+        self.accType = accType
+        self.variant = variant
+        self.acc     = acc
+        self.a       = a
+        self.b       = b
+        self.acc2    = acc if acc2 == None else acc2
+        self.mxsa    = mxsa
+        self.mxsb    = mxsb
+
+    def getParams(self) -> list:
+        return [self.acc, self.a, self.b, self.acc2, self.mxsa, self.mxsb]
+
+    def preStr(self) -> None:
+        variantStr = "{}x{}x{}".format(*self.variant)
+        self.setInst("v_mfma_scale_f32_%s_f8f6f4" % variantStr)
+
+    def inputPermuteStr(self) -> str:
+        if self.asmCaps["HasMFMA_f8f6f4"] and self.variant[2] > 32:
+            if self.instType == InstType.INST_F8 :
+                return " cbsz:0 blgp:0"
+            elif self.instType == InstType.INST_BF8:
+                return " cbsz:1 blgp:1"
+            elif self.instType == InstType.INST_F8_BF8:
+                return " cbsz:0 blgp:1"
+            elif self.instType == InstType.INST_BF8_F8:
+                return " cbsz:1 blgp:0"
+            elif self.instType == InstType.INST_F6:
+                return " cbsz:2 blgp:2"
+            elif self.instType == InstType.INST_BF6:
+                return " cbsz:3 blgp:3"
+            elif self.instType == InstType.INST_F4:
+                return " cbsz:4 blgp:4"
+
+        return ""
+
+    def getArgStr(self) -> str:
+        inPeStr = self.inputPermuteStr()
+        return str(self.acc) + ", " + str(self.a) + ", " + str(self.b) + ", " + str(self.acc2) + ", " + str(self.mxsa) + ", " + str(self.mxsb) + inPeStr
+
+    def toList(self) -> list:
+        self.preStr()
+        lowPrecStr = self.inputPermuteStr()
+        return [self.instStr, self.acc, self.a, self.b, self.acc2, self.mxsa, self.mxsb, inPeStr, self.comment]
+
+    def __str__(self) -> str:
+        self.preStr()
+        kStr = self.instStr + " " + self.getArgStr()
+        return self.formatWithComment(kStr)
+
 class SMFMAInstruction(Instruction):
     def __init__(self, instType: InstType, accType: InstType, variant: List[int], mfma1k, \
                  acc, a, b, metadata, comment="") -> None:
