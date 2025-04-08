@@ -389,7 +389,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
     self.do["GlobalReadMXSB"] = True
     self.do["GlobalInc"]   = True
     self.do["LocalWriteA"]  = True
+    self.do["LocalWriteMXSA"]  = True
     self.do["LocalWriteB"]  = True
+    self.do["LocalWriteMXSB"]  = True
     self.do["LocalWriteMetadata"]  = True
     self.do["LocalWriteCVT"]  = True
     self.do["LocalReadA"]  = True
@@ -470,7 +472,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
     assert (not (self.db["ForceExpectedValue"] and self.db["ForceVSerial"]))
 
     self.db["ForceInputValueA"] = False
+    self.db["ForceInputValueMXSA"] = False
     self.db["ForceInputValueB"] = False
+    self.db["ForceInputValueMXSB"] = False
     self.db["ForceInputValueMetadata"] = False
     self.db["ForceValueA"] = 1.0
     self.db["ForceValueB"] = 1.0
