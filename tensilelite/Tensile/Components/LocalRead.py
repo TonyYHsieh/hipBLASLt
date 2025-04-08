@@ -151,10 +151,16 @@ class LocalReadMFMA(LocalRead):
 
         if tc == "A":
             writer.states.localReadDoCntA += 1
+        elif tc == "MXSA":
+            writer.states.localReadDoCntMXSA += 1
         elif tc == "Metadata":
             writer.states.localReadDoCntMetadata += 1
-        else:
+        elif tc == "B":
             writer.states.localReadDoCntB += 1
+        elif tc == "MXSB":
+            writer.states.localReadDoCntMXSB += 1
+        else:
+            raise Exception(f"unsupport tc %s{tc}")
 
         if tP["enableLDSTr"]:
             return self.transposeLocalReadMFMA(writer, kernel, bufferIdx, iui, epsi, tP)
@@ -241,12 +247,17 @@ class LocalReadMFMA(LocalRead):
         numVgpr  = int(ceil(blockWidth))
         if tc == 'A':
             lrvwTile = writer.states.lrvwTileA
+        elif tc == "MXSA":
+            lrvwTile = writer.states.lrvwTileMXSA
         elif tc == 'B':
             lrvwTile = writer.states.lrvwTileB
+        elif tc == "MXSB":
+            lrvwTile = writer.states.lrvwTileMXSB
         elif tc == "Metadata":
             lrvwTile = writer.states.lrvwTileMetadata
         else:
-            lrvwTile = 1
+            raise Exception(f"unsupport tc %s{tc}")
+
         numElementPerRead = 1 if kernel["ConvertAfterDS"] else int(blockWidth * bpr // tP['bpe'] // lrvwTile)
         numElementPerGroup = (writer.states.kernel["WavefrontSize"] // kernel["MatrixInstM"]) * miInputPerGroup
 
@@ -258,6 +269,9 @@ class LocalReadMFMA(LocalRead):
             needPack |= needPackMetadata
         else:
             needPack = blockWidth == 0.25
+        if tc in ("MXSA", "MXSB"):
+            # TODO: fix hard code
+            needPack = False
         needPack |= (kernel["ConvertAfterDS"] and (tP["bpe"] != tP["bpeDS"]))
 
         # split Metadata when localread width > mi input
@@ -550,7 +564,7 @@ class LocalReadMFMA(LocalRead):
                         if kernel["ConvertAfterDS"] and kernel["UnrollMajorLDS%s"%tc]:
                             valufIdx += blockWidth * (tP["bpe"] // tP["bpeDS"]) if (not tP["isM"]) else 1
                         else:
-                            valufIdx += blockWidth if (not tP["isM"]) else 1
+                            valufIdx += blockWidth if (tc in ("A", "B")) else 1
 
                         # load read instrution
                         paramList = []
