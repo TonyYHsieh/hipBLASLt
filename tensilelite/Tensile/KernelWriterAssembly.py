@@ -5754,9 +5754,13 @@ class KernelWriterAssembly(KernelWriter):
           # Generate local read address code only if DirectToVgpr is not enabled
           if not kernel["DirectToVgprA"]:
             oddIterCode.add(self.localReadSwapOffsets(kernel, False, tPA))
+            if kernel["ProblemType"]["MXBlockA"]:
+              oddIterCode.add(self.localReadSwapOffsets(kernel, False, tPA["MX"]))
           # Generate local read address code only if DirectToVgpr is not enabled
           if not kernel["DirectToVgprB"]:
             oddIterCode.add(self.localReadSwapOffsets(kernel, False, tPB))
+            if kernel["ProblemType"]["MXBlockB"]:
+              oddIterCode.add(self.localReadSwapOffsets(kernel, False, tPB["MX"]))
 
           if kernel["ProblemType"]["Sparse"]:
             if kernel["DirectToVgprSparseMetadata"]:
@@ -9701,16 +9705,28 @@ class KernelWriterAssembly(KernelWriter):
   ##############################################################################
   def saveLocalPointers(self, kernel, tPA, tPB):
     tPA["savedLocalReadOffset"] = tPA["localReadOffset"]
+    if kernel["ProblemType"]["MXBlockA"]:
+      tPA["MX"]["savedLocalReadOffset"] = tPA["MX"]["localReadOffset"]
     tPB["savedLocalReadOffset"] = tPB["localReadOffset"]
+    if kernel["ProblemType"]["MXBlockB"]:
+      tPB["MX"]["savedLocalReadOffset"] = tPB["MX"]["localReadOffset"]
     tPM = tPA["tpsMetadata"] if tPA["is_sparse"] else tPB["tpsMetadata"]
     if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
       tPM["savedLocalReadOffset"] = tPM["localReadOffset"]
     self.states.savedLocalReadDoCntA = self.states.localReadDoCntA
+    if kernel["ProblemType"]["MXBlockA"]:
+      self.states.savedLocalReadDoCntMXSA = self.states.localReadDoCntMXSA
     self.states.savedLocalReadDoCntB = self.states.localReadDoCntB
+    if kernel["ProblemType"]["MXBlockB"]:
+      self.states.savedLocalReadDoCntMXSB = self.states.localReadDoCntMXSB
     self.states.savedLocalReadDoCntMetadata = self.states.localReadDoCntMetadata
     if kernel["ExpandPointerSwap"]:
       tPA["savedLocalWriteSwapByteOffset"] = tPA["localWriteSwapByteOffset"]
+      if kernel["ProblemType"]["MXBlockA"]:
+        tPA["MX"]["savedLocalWriteSwapByteOffset"] = tPA["MX"]["localWriteSwapByteOffset"]
       tPB["savedLocalWriteSwapByteOffset"] = tPB["localWriteSwapByteOffset"]
+      if kernel["ProblemType"]["MXBlockB"]:
+        tPB["MX"]["savedLocalWriteSwapByteOffset"] = tPB["MX"]["localWriteSwapByteOffset"]
       if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
         tPM["savedLocalWriteSwapByteOffset"] = tPM["localWriteSwapByteOffset"]
   ##############################################################################
@@ -9719,16 +9735,28 @@ class KernelWriterAssembly(KernelWriter):
   ##############################################################################
   def restoreLocalPointers(self, kernel, tPA, tPB):
     tPA["localReadOffset"] = tPA["savedLocalReadOffset"]
+    if kernel["ProblemType"]["MXBlockA"]:
+      tPA["MX"]["localReadOffset"] = tPA["MX"]["savedLocalReadOffset"]
     tPB["localReadOffset"] = tPB["savedLocalReadOffset"]
+    if kernel["ProblemType"]["MXBlockB"]:
+      tPB["MX"]["localReadOffset"] = tPB["MX"]["savedLocalReadOffset"]
     tPM = tPA["tpsMetadata"] if tPA["is_sparse"] else tPB["tpsMetadata"]
     if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
       tPM["localReadOffset"] = tPM["savedLocalReadOffset"]
     self.states.localReadDoCntA = self.states.savedLocalReadDoCntA
+    if kernel["ProblemType"]["MXBlockA"]:
+      self.states.localReadDoCntMXSA = self.states.savedLocalReadDoCntMXSA
     self.states.localReadDoCntB = self.states.savedLocalReadDoCntB
+    if kernel["ProblemType"]["MXBlockB"]:
+      self.states.localReadDoCntMXSB = self.states.savedLocalReadDoCntMXSB
     self.states.localReadDoCntMetadata = self.states.savedLocalReadDoCntMetadata
     if kernel["ExpandPointerSwap"]:
       tPA["localWriteSwapByteOffset"] = tPA["savedLocalWriteSwapByteOffset"]
+      if kernel["ProblemType"]["MXBlockA"]:
+        tPA["MX"]["localWriteSwapByteOffset"] = tPA["MX"]["savedLocalWriteSwapByteOffset"]
       tPB["localWriteSwapByteOffset"] = tPB["savedLocalWriteSwapByteOffset"]
+      if kernel["ProblemType"]["MXBlockB"]:
+        tPB["MX"]["localWriteSwapByteOffset"] = tPB["MX"]["savedLocalWriteSwapByteOffset"]
       if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
         tPM["localWriteSwapByteOffset"] = tPM["savedLocalWriteSwapByteOffset"]
   ##############################################################################
