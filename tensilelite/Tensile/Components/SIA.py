@@ -220,6 +220,15 @@ def getLocalWriteMFMAEnd(writer, kernel, tensorParametersA, tensorParametersB):
             if latencyLeft < 0:
                 writer.states.numMfmaForLR += 1
                 latencyLeft = max(miLatencyLeft - tensorParametersA["localReadInstruction"].issueLatency*2,0)
+        # ds_read[MXSA][0]
+        if kernel["ProblemType"]["MXBlockA"]:
+            for i in range(writer.states.numReadsPerUnrollMXSA):
+                while(checkLocalReadFIFO(localReadFIFO, writer.states.miLatency, numWaves, writer.states.numMfmaForLR, tensorParametersA["MX"]["localReadInstruction"].blockWidth)):
+                    writer.states.numMfmaForLR += 1
+                latencyLeft -= tensorParametersA["MX"]["localReadInstruction"].issueLatency*2
+                if latencyLeft < 0:
+                    writer.states.numMfmaForLR += 1
+                    latencyLeft = max(miLatencyLeft - tensorParametersA["MX"]["localReadInstruction"].issueLatency*2,0)
         # ds_read[M][0]
         if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
             for i in range(writer.states.numReadsPerUnrollMetadata):
@@ -235,6 +244,15 @@ def getLocalWriteMFMAEnd(writer, kernel, tensorParametersA, tensorParametersB):
             if latencyLeft < 0:
                 writer.states.numMfmaForLR += 1
                 latencyLeft = max(miLatencyLeft - tensorParametersB["localReadInstruction"].issueLatency*2,0)
+        # ds_read[MXSB][0]
+        if kernel["ProblemType"]["MXBlockB"]:
+            for i in range(writer.states.numReadsPerUnrollMXSB):
+                while(checkLocalReadFIFO(localReadFIFO, writer.states.miLatency, numWaves,writer.states.numMfmaForLR, tensorParametersB["MX"]["localReadInstruction"].blockWidth)):
+                    writer.states.numMfmaForLR += 1
+                latencyLeft -= tensorParametersB["MX"]["localReadInstruction"].issueLatency*2
+                if latencyLeft < 0:
+                    writer.states.numMfmaForLR += 1
+                    latencyLeft = max(miLatencyLeft - tensorParametersB["MX"]["localReadInstruction"].issueLatency*2,0)
         # ds_read[A][1:]
         for i in range(writer.states.numReadsPerIterA//kernel["InnerUnroll"] - writer.states.numReadsPerUnrollA):
             while(checkLocalReadFIFO(localReadFIFO, writer.states.miLatency, numWaves, writer.states.numMfmaForLR, tensorParametersA["localReadInstruction"].blockWidth)):
@@ -243,6 +261,15 @@ def getLocalWriteMFMAEnd(writer, kernel, tensorParametersA, tensorParametersB):
             if latencyLeft < 0:
                 writer.states.numMfmaForLR += 1
                 latencyLeft = max(miLatencyLeft - tensorParametersA["localReadInstruction"].issueLatency*2,0)
+        # ds_read[MXSA][1:]
+        if kernel["ProblemType"]["MXBlockA"]:
+            for i in range(writer.states.numReadsPerIterMXSA//kernel["InnerUnroll"] - writer.states.numReadsPerUnrollMXSA):
+                while(checkLocalReadFIFO(localReadFIFO, writer.states.miLatency, numWaves, writer.states.numMfmaForLR, tensorParametersA["MX"]["localReadInstruction"].blockWidth)):
+                    writer.states.numMfmaForLR += 1
+                latencyLeft -= tensorParametersA["MX"]["localReadInstruction"].issueLatency*2
+                if latencyLeft < 0:
+                    writer.states.numMfmaForLR += 1
+                    latencyLeft = max(miLatencyLeft - tensorParametersA["MX"]["localReadInstruction"].issueLatency*2,0)
         # ds_read[M][1:]
         if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
             for i in range(writer.states.numReadsPerIterMetadata//kernel["InnerUnroll"] - writer.states.numReadsPerUnrollMetadata):
@@ -261,6 +288,16 @@ def getLocalWriteMFMAEnd(writer, kernel, tensorParametersA, tensorParametersB):
             if latencyLeft < 0:
                 writer.states.numMfmaForLR += 1
                 latencyLeft = max(miLatencyLeft - tensorParametersB["localReadInstruction"].issueLatency*2,0)
+        # ds_read[MXSB][1:]
+        if kernel["ProblemType"]["MXBlockB"]:
+            for i in range(writer.states.numReadsPerIterMXSB//kernel["InnerUnroll"] - writer.states.numReadsPerUnrollMXSB):
+                while(checkLocalReadFIFO(localReadFIFO, writer.states.miLatency, numWaves, writer.states.numMfmaForLR, tensorParametersB["MX"]["localReadInstruction"].blockWidth)):
+                    writer.states.numMfmaForLR += 1
+                latencyLeft -= tensorParametersB["MX"]["localReadInstruction"].issueLatency*2
+                if latencyLeft < 0:
+                    writer.states.numMfmaForLR += 1
+                    latencyLeft = max(miLatencyLeft - tensorParametersB["MX"]["localReadInstruction"].issueLatency*2,0)
+
     # to calculate number of mfma we need to wait before data arrive from lds to vgpr.
     # latency: 40 quad-cycle for 4 word, 20 quad-cycle for 2 word, 10 quad-cycle for 1 word / half word
     writer.states.numMfmaForNextLoopLR = writer.states.numMfmaForLR
@@ -309,10 +346,14 @@ def getLocalWriteMFMAStart(writer, kernel, tensorParametersA, tensorParametersB,
             numMfmaForCurrentLoopLR = 1
             latencyLeft = writer.states.miLatencyLeft
             for u in range(kernel["LoopIters"] - writer.states.numItersPLR):
-                doReadA = (u < kernel["LoopIters"] // writer.states.numIterPerCoalescedReadA - writer.states.numItersPLR) and not kernel["DirectToVgprA"]
-                doReadB = (u < kernel["LoopIters"] // writer.states.numIterPerCoalescedReadB - writer.states.numItersPLR) and not kernel["DirectToVgprB"]
-                doReadM = (u < kernel["LoopIters"] // writer.states.numIterPerCoalescedReadMetadata - writer.states.numItersPLR)
-                doReadM = doReadM and (kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"])
+                doReadA    = (u < kernel["LoopIters"] // writer.states.numIterPerCoalescedReadA - writer.states.numItersPLR) and not kernel["DirectToVgprA"]
+                doReadMXSA = (u < kernel["LoopIters"] // writer.states.numIterPerCoalescedReadMXSA - writer.states.numItersPLR) and not kernel["DirectToVgprA"]
+                doReadB    = (u < kernel["LoopIters"] // writer.states.numIterPerCoalescedReadB - writer.states.numItersPLR) and not kernel["DirectToVgprB"]
+                doReadMXSB = (u < kernel["LoopIters"] // writer.states.numIterPerCoalescedReadMXSB - writer.states.numItersPLR) and not kernel["DirectToVgprB"]
+                doReadM    = (u < kernel["LoopIters"] // writer.states.numIterPerCoalescedReadMetadata - writer.states.numItersPLR)
+                doReadMXSA = doReadMXSA and kernel["ProblemType"]["MXBlockA"]
+                doReadMXSB = doReadMXSB and kernel["ProblemType"]["MXBlockB"]
+                doReadM    = doReadM and (kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"])
                 for iui in range(kernel["InnerUnroll"]):
                     # ds_read[A][0]
                     for i in range(writer.states.numReadsPerUnrollA * doReadA):
@@ -322,6 +363,15 @@ def getLocalWriteMFMAStart(writer, kernel, tensorParametersA, tensorParametersB,
                         if latencyLeft < 0:
                             numMfmaForCurrentLoopLR += 1
                             latencyLeft = max(writer.states.miLatencyLeft - tensorParametersA["localReadInstruction"].issueLatency*2,0)
+                    # ds_read[MXSA][0]
+                    if kernel["ProblemType"]["MXBlockA"]:
+                        for i in range(writer.states.numReadsPerUnrollMXSA * doReadMXSA):
+                            while(checkLocalReadFIFO(localReadFIFO, writer.states.miLatency, numWaves, numMfmaForCurrentLoopLR, tensorParametersA["MX"]["localReadInstruction"].blockWidth)):
+                                numMfmaForCurrentLoopLR += 1
+                            latencyLeft -= tensorParametersA["MX"]["localReadInstruction"].issueLatency*2
+                            if latencyLeft < 0:
+                                numMfmaForCurrentLoopLR += 1
+                                latencyLeft = max(writer.states.miLatencyLeft - tensorParametersA["MX"]["localReadInstruction"].issueLatency*2,0)
                     # ds_read[M][0]
                     for i in range(writer.states.numReadsPerUnrollMetadata * doReadM):
                         latencyLeft -= tPM["localReadInstruction"].issueLatency*2
@@ -336,6 +386,16 @@ def getLocalWriteMFMAStart(writer, kernel, tensorParametersA, tensorParametersB,
                         if latencyLeft < 0:
                             numMfmaForCurrentLoopLR += 1
                             latencyLeft = max(writer.states.miLatencyLeft - tensorParametersB["localReadInstruction"].issueLatency*2,0)
+                    # ds_read[MXSB][0]
+                    if kernel["ProblemType"]["MXBlockB"]:
+                        for i in range(writer.states.numReadsPerUnrollB * doReadMXSB):
+                            while(checkLocalReadFIFO(localReadFIFO, writer.states.miLatency, numWaves, numMfmaForCurrentLoopLR, tensorParametersB["MX"]["localReadInstruction"].blockWidth)):
+                                numMfmaForCurrentLoopLR += 1
+                            latencyLeft -= tensorParametersB["MX"]["localReadInstruction"].issueLatency*2
+                            if latencyLeft < 0:
+                                numMfmaForCurrentLoopLR += 1
+                                latencyLeft = max(writer.states.miLatencyLeft - tensorParametersB["MX"]["localReadInstruction"].issueLatency*2,0)
+
                     # ds_read[A][1:]
                     for i in range((writer.states.numReadsPerIterA//kernel["InnerUnroll"]  - writer.states.numReadsPerUnrollA) * doReadA):
                         while(checkLocalReadFIFO(localReadFIFO, writer.states.miLatency, numWaves, numMfmaForCurrentLoopLR, tensorParametersA["localReadInstruction"].blockWidth)):
@@ -344,6 +404,15 @@ def getLocalWriteMFMAStart(writer, kernel, tensorParametersA, tensorParametersB,
                         if latencyLeft < 0:
                             numMfmaForCurrentLoopLR += 1
                             latencyLeft = max(writer.states.miLatencyLeft - tensorParametersA["localReadInstruction"].issueLatency*2,0)
+                    # ds_read[MXSA][1:]
+                    if kernel["ProblemType"]["MXBlockA"]:
+                        for i in range((writer.states.numReadsPerIterMXSA//kernel["InnerUnroll"]  - writer.states.numReadsPerUnrollMXSA) * doReadMXSA):
+                            while(checkLocalReadFIFO(localReadFIFO, writer.states.miLatency, numWaves, numMfmaForCurrentLoopLR, tensorParametersA["MX"]["localReadInstruction"].blockWidth)):
+                                numMfmaForCurrentLoopLR += 1
+                            latencyLeft -= tensorParametersA["MX"]["localReadInstruction"].issueLatency*2
+                            if latencyLeft < 0:
+                                numMfmaForCurrentLoopLR += 1
+                                latencyLeft = max(writer.states.miLatencyLeft - tensorParametersA["MX"]["localReadInstruction"].issueLatency*2,0)
                     # ds_read[M][1:]
                     for i in range((writer.states.numReadsPerIterMetadata - writer.states.numReadsPerUnrollMetadata) * doReadM):
                         latencyLeft -= tPM["localReadInstruction"].issueLatency*2
@@ -358,6 +427,16 @@ def getLocalWriteMFMAStart(writer, kernel, tensorParametersA, tensorParametersB,
                         if latencyLeft < 0:
                             numMfmaForCurrentLoopLR += 1
                             latencyLeft = max(writer.states.miLatencyLeft - tensorParametersB["localReadInstruction"].issueLatency*2,0)
+                    # ds_read[MXSB][1:]
+                    if kernel["ProblemType"]["MXBlockB"]:
+                        for i in range((writer.states.numReadsPerIterMXSB//kernel["InnerUnroll"]  - writer.states.numReadsPerUnrollMXSB) * doReadMXSB):
+                            while(checkLocalReadFIFO(localReadFIFO, writer.states.miLatency, numWaves, numMfmaForCurrentLoopLR, tensorParametersB["MX"]["localReadInstruction"].blockWidth)):
+                                numMfmaForCurrentLoopLR += 1
+                            latencyLeft -= tensorParametersB["MX"]["localReadInstruction"].issueLatency*2
+                            if latencyLeft < 0:
+                                numMfmaForCurrentLoopLR += 1
+                                latencyLeft = max(writer.states.miLatencyLeft - tensorParametersB["MX"]["localReadInstruction"].issueLatency*2,0)
+
             lwStartMfmaIndex = numMfmaForCurrentLoopLR
         else:
             lwStartMfmaIndex = numMfmaPerIter * (kernel["LoopIters"] - 1 - writer.states.numItersPLR) + writer.states.numMfmaForLR
