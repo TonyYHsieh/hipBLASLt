@@ -3619,6 +3619,8 @@ class Solution(collections.abc.Mapping):
     # TODO: disable Tail Loop when bpe < 1
     if state["ProblemType"]["DataType"].numBytes() < 1:
         state["NoTailLoop"] = True
+    if state["ProblemType"]["MXBlockA"] or state["ProblemType"]["MXBlockB"]:
+        state["NoTailLoop"] = True
 
     # Determine if we can load directly-to-Vgpr
     # need to check after state["LocalReadVectorWidth"] = -1 is resolved
