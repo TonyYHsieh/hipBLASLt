@@ -2260,8 +2260,14 @@ class KernelWriter(metaclass=abc.ABCMeta):
             # local write for next iter, used to have local writes here
             pointerLWCode.addComment1("local write swap offsets a")
             pointerLWCode.add(self.localWriteSwapOffsets(kernel, expand, tensorParametersA))
+          if kernel["ProblemType"]["MXBlockA"]:
+            pointerLWCode.addComment1("local write swap offsets mxsa")
+            pointerLWCode.add(self.localWriteSwapOffsets(kernel, expand, tensorParametersA["MX"]))
             pointerLWCode.addComment1("local write swap offsets b")
             pointerLWCode.add(self.localWriteSwapOffsets(kernel, expand, tensorParametersB))
+          if kernel["ProblemType"]["MXBlockB"]:
+            pointerLWCode.addComment1("local write swap offsets mxsb")
+            pointerLWCode.add(self.localWriteSwapOffsets(kernel, expand, tensorParametersB["MX"]))
 
           if isSwapLroIter: # ResetLroIter
             # Swap, reset, or increment the LRO:
