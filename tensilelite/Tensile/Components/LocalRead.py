@@ -232,7 +232,9 @@ class LocalReadMFMA(LocalRead):
         # overloading numReadsPerUnroll for DirectToLds x2/x4 case when blockWidth of instruction < LocalReadVectorWidth
         # fp64 TLU=1 reading 0.5element/lane/read..
         # for TLU=0 case, blockWidth and LRVW should match
-        miInputPerGroup = int(16 / tP["bpeDS"]) if ((tP["bpeDS"] * kernel["MIInputPerThread%s"%tc]) > 24) else kernel["MIInputPerThread%s"%tc]
+        miInputPerGroup = kernel["MIInputPerThread%s"%tc]
+        if writer.states.asmCaps["HasMFMA_f8f6f4"] and ((tP["bpeDS"] * miInputPerGroup) > 24):
+          miInputPerGroup = int(16 / tP["bpeDS"])
         miInputGroup = kernel["MIInputPerThread%s"%tc] // miInputPerGroup
         numReadsPerUnroll = ceil(tP["bpeDS"] * miInputPerGroup / int(unrollBlockWidth * bpr))
 

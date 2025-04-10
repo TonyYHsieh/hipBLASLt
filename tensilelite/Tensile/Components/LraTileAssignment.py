@@ -163,7 +163,9 @@ class LraTileAssignmentMFMA(LraTileAssignment):
           elif tP["isM"]:
             lrvw = lrvw // 8
 
-        miInputPerGroup = int(16 / tP["bpeDS"]) if ((tP["bpeDS"] * kernel["MIInputPerThread%s"%tc]) > 24) else kernel["MIInputPerThread%s"%tc]
+        miInputPerGroup = kernel["MIInputPerThread%s"%tc]
+        if writer.states.asmCaps["HasMFMA_f8f6f4"] and ((tP["bpeDS"] * miInputPerGroup) > 24):
+          miInputPerGroup = int(16 / tP["bpeDS"])
         offsetK = lrvw if (lrvw > miInputPerGroup) else miInputPerGroup
         offsetK = offsetK if not writer.states.inTailLoop else kernel["MIInputPerThread%s"%tc]
 
