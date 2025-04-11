@@ -244,9 +244,13 @@ class KernelWriterAssembly(KernelWriter):
       numOffsets = instruction.numOffsets
       offsetMultiplier = instruction.offsetMultiplier
       blockWidth = instruction.blockWidth
+
       valid = True
       if width < blockWidth:
         valid = False
+      if ((width / blockWidth) != floor(width / blockWidth)):
+        valid = False
+
       if combine: # try to combine ops
         if numOffsets > 0: # if inst combines using offsets
           for stride in strides:
