@@ -37,17 +37,12 @@ from typing import Type
 @dataclass
 class MemoryInstruction:
     inst: Type[ReadWriteInstruction]
-    numAddresses: int
-    numOffsets: int
-    offsetMultiplier: int
     blockWidth: float
-    numBlocks: int = field(init=False)
     totalWidth: float = field(init=False)
     issueLatency: int = field(init=False)
 
     def __post_init__(self):
-        self.numBlocks = 2 if self.numAddresses > 1 or self.numOffsets > 1 else 1
-        self.totalWidth = self.blockWidth * self.numBlocks
+        self.totalWidth = self.blockWidth
         self.issueLatency = self.inst.issueLatency()
 
     def getInst(self, highBits=0):

@@ -3992,50 +3992,46 @@ class KernelWriter(metaclass=abc.ABCMeta):
     # name, numAddresses, numOffsets, offsetMultiplier, blockWidth, formatting):
     ########################################
     # Local Read
-    _ds_load_b192 = MemoryInstruction(DSLoadB192,  1, 1, 6, 6)
-    _ds_load_b128 = MemoryInstruction(DSLoadB128,  1, 1, 4, 4)
-    _ds_load2_b64 = MemoryInstruction(DSLoad2B64,  1, 2, 2, 2)
-    _ds_load_b64 = MemoryInstruction(DSLoadB64,    1, 1, 2, 2)
-    _ds_load2_b32 = MemoryInstruction(DSLoad2B32,  1, 2, 1, 1)
-    _ds_load_b32 = MemoryInstruction(DSLoadB32,    1, 1, 1, 1)
-    _ds_load_u16 = MemoryInstruction(DSLoadU16,    1, 1, 1, 0.5)
-    _ds_load_u8 = MemoryInstruction(DSLoadU8,      1, 1, 1, 0.25)
-    _ds_load_b64_tr_b16 = MemoryInstruction(DSLoadB64TrB16,    1, 1, 2, 2)
+    _ds_load_b192 = MemoryInstruction(DSLoadB192,6)
+    _ds_load_b128 = MemoryInstruction(DSLoadB128,4)
+    _ds_load_b64 = MemoryInstruction(DSLoadB64,  2)
+    _ds_load_b32 = MemoryInstruction(DSLoadB32,  1)
+    _ds_load_u16 = MemoryInstruction(DSLoadU16,  0.5)
+    _ds_load_u8 = MemoryInstruction(DSLoadU8,    0.25)
+    _ds_load_b64_tr_b16 = MemoryInstruction(DSLoadB64TrB16, 2)
 
     ########################################
     # Local Write
-    _ds_store_b256 = MemoryInstruction(DSStoreB256,  1, 1, 8, 8)
-    _ds_store_b192 = MemoryInstruction(DSStoreB192,  1, 1, 6, 6)
-    _ds_store_b128 = MemoryInstruction(DSStoreB128,  1, 1, 4, 4)
-    _ds_store2_b64 = MemoryInstruction(DSStore2B64,  1, 2, 2, 2)
-    _ds_store_b64 = MemoryInstruction(DSStoreB64,    1, 1, 2, 2)
-    _ds_store2_b32 = MemoryInstruction(DSStore2B32,  1, 2, 1, 1)
-    _ds_store_b32 = MemoryInstruction(DSStoreB32,    1, 1, 1, 1)
-    _ds_store_b16 = MemoryInstruction(DSStoreB16,    1, 1, 1, 0.5)
-    _ds_store_b8 = MemoryInstruction(DSStoreB8,      1, 1, 1, 0.25)
+    _ds_store_b256 = MemoryInstruction(DSStoreB256, 8)
+    _ds_store_b192 = MemoryInstruction(DSStoreB192, 6)
+    _ds_store_b128 = MemoryInstruction(DSStoreB128, 4)
+    _ds_store_b64 = MemoryInstruction(DSStoreB64,   2)
+    _ds_store_b32 = MemoryInstruction(DSStoreB32,   1)
+    _ds_store_b16 = MemoryInstruction(DSStoreB16,   0.5)
+    _ds_store_b8 = MemoryInstruction(DSStoreB8,     0.25)
     ########################################
     # Global Read
-    _flat_load_b192 = MemoryInstruction(FlatLoadB192, 1, 0, 0, 6)
-    _flat_load_b128 = MemoryInstruction(FlatLoadB128, 1, 0, 0, 4)
-    _flat_load_b64 = MemoryInstruction(FlatLoadB64,   1, 0, 0, 2)
-    _flat_load_b32 = MemoryInstruction(FlatLoadB32,   1, 0, 0, 1)
+    _flat_load_b192 = MemoryInstruction(FlatLoadB192, 6)
+    _flat_load_b128 = MemoryInstruction(FlatLoadB128, 4)
+    _flat_load_b64 = MemoryInstruction(FlatLoadB64,   2)
+    _flat_load_b32 = MemoryInstruction(FlatLoadB32,   1)
 
-    _buffer_load_b192 = MemoryInstruction(BufferLoadB192, 1, 0, 0, 6)
-    _buffer_load_b128 = MemoryInstruction(BufferLoadB128, 1, 0, 0, 4)
-    _buffer_load_b64 = MemoryInstruction(BufferLoadB64, 1, 0, 0, 2)
-    _buffer_load_b32 = MemoryInstruction(BufferLoadB32, 1, 0, 0, 1)
+    _buffer_load_b192 = MemoryInstruction(BufferLoadB192, 6)
+    _buffer_load_b128 = MemoryInstruction(BufferLoadB128, 4)
+    _buffer_load_b64 = MemoryInstruction(BufferLoadB64, 2)
+    _buffer_load_b32 = MemoryInstruction(BufferLoadB32, 1)
     # generate half directly w/o using the format string to handle hi/lo correctly
-    _buffer_load_d16_b16 = MemoryInstruction(BufferLoadD16B16, 1, 0, 0, 0.5)
+    _buffer_load_d16_b16 = MemoryInstruction(BufferLoadD16B16, 0.5)
     # generate byte directly w/o using the format string to handle hi/lo correctly
-    _buffer_load_d16_u8 = MemoryInstruction(BufferLoadD16U8, 1, 0, 0, 0.25)
+    _buffer_load_d16_u8 = MemoryInstruction(BufferLoadD16U8, 0.25)
 
     self.buff_load_inst_offset_max = 4096
 
     ########################################
     # Global Write
-    _flat_store_b128 = MemoryInstruction(FlatStoreB128, 1, 0, 0, 4)
-    _flat_store_b64  = MemoryInstruction(FlatStoreB64,  1, 0, 0, 2)
-    _flat_store_b32  = MemoryInstruction(FlatStoreB32,  1, 0, 0, 1)
+    _flat_store_b128 = MemoryInstruction(FlatStoreB128, 4)
+    _flat_store_b64  = MemoryInstruction(FlatStoreB64,  2)
+    _flat_store_b32  = MemoryInstruction(FlatStoreB32,  1)
 
     ########################################
     # Available Memory Instructions per Architecture
@@ -4068,11 +4064,11 @@ class KernelWriter(metaclass=abc.ABCMeta):
           "GlobalRead" : [ chosen_load_b192, chosen_load_b128, chosen_load_b64, chosen_load_b32,
                            chosen_load_b16, chosen_load_b8 ],
           "GlobalWrite": [ chosen_store_b128, chosen_store_b64, chosen_store_b32 ],
-          "LocalRead"  : [ _ds_load_b192, _ds_load_b128, _ds_load2_b64, _ds_load_b64,
-                           _ds_load2_b32, _ds_load_b32, _ds_load_u16, _ds_load_u8,
+          "LocalRead"  : [ _ds_load_b192, _ds_load_b128, _ds_load_b64,
+                           _ds_load_b32, _ds_load_u16, _ds_load_u8,
                            _ds_load_b64_tr_b16],
-          "LocalWrite" : [ _ds_store_b256,  _ds_store_b192, _ds_store_b128, _ds_store2_b64,
-                           _ds_store_b64, _ds_store2_b32, _ds_store_b32,
+          "LocalWrite" : [ _ds_store_b256,  _ds_store_b192, _ds_store_b128,
+                           _ds_store_b64,  _ds_store_b32,
                            _ds_store_b16, _ds_store_b8 ]
         }
 
@@ -5278,13 +5274,13 @@ class KernelWriter(metaclass=abc.ABCMeta):
         self.states.numReadsPerUnrollA = ceil(tensorParametersA["bpe"] * kernel["MIInputPerThreadA"] / int(tensorParametersA["localReadInstruction"].blockWidth * 4))
       else:
         self.states.numReadsPerUnrollA = kernel["MIInputPerThreadA"]
-      numA = kernel["InnerUnroll"]*(kernel["MIWaveTile"][0] * self.states.numReadsPerUnrollA) // tensorParametersA["localReadInstruction"].numOffsets
+      numA = kernel["InnerUnroll"]*(kernel["MIWaveTile"][0] * self.states.numReadsPerUnrollA)
       if self.states.lrvwTileA > 1:
         numA = numA // kernel["VectorWidthA"]
 
       if kernel["ProblemType"]["MXBlockA"]:
         self.states.numReadsPerUnrollMXSA = 1
-        numMXSA = kernel["InnerUnroll"] * kernel["MIWaveTile"][0] // tensorParametersMXSA["localReadInstruction"].numOffsets
+        numMXSA = kernel["InnerUnroll"] * kernel["MIWaveTile"][0]
         if self.states.lrvwTileMXSA > 1:
           numMXSA = numMXSA // kernel["VectorWidthA"]
 
@@ -5294,19 +5290,19 @@ class KernelWriter(metaclass=abc.ABCMeta):
         else:
           self.states.numReadsPerUnrollMetadata = kernel["MIInputPerThreadMetadata"]
         tileM = kernel["MIWaveTile"][1] if kernel["ProblemType"]["Sparse"] == 2 else kernel["MIWaveTile"][0]
-        numM = kernel["InnerUnroll"]*(tileM * self.states.numReadsPerUnrollMetadata) // tensorParametersM["localReadInstruction"].numOffsets
+        numM = kernel["InnerUnroll"]*(tileM * self.states.numReadsPerUnrollMetadata)
 
       if kernel["UnrollMajorLDSB"]:
         self.states.numReadsPerUnrollB = ceil(tensorParametersB["bpe"] * kernel["MIInputPerThreadB"] / int(tensorParametersB["localReadInstruction"].blockWidth * 4))
       else:
         self.states.numReadsPerUnrollB = kernel["MIInputPerThreadB"]
-      numB = kernel["InnerUnroll"]*(kernel["MIWaveTile"][1] * self.states.numReadsPerUnrollB) // tensorParametersB["localReadInstruction"].numOffsets
+      numB = kernel["InnerUnroll"]*(kernel["MIWaveTile"][1] * self.states.numReadsPerUnrollB)
       if self.states.lrvwTileB > 1:
         numB = numB // kernel["VectorWidthB"]
 
       if kernel["ProblemType"]["MXBlockB"]:
         self.states.numReadsPerUnrollMXSB = 1
-        numMXSB = kernel["InnerUnroll"] * kernel["MIWaveTile"][1] // tensorParametersMXSB["localReadInstruction"].numOffsets
+        numMXSB = kernel["InnerUnroll"] * kernel["MIWaveTile"][1]
         if self.states.lrvwTileMXSB > 1:
           numMXSB = numMXSB // kernel["VectorWidthB"]
 
@@ -5330,11 +5326,11 @@ class KernelWriter(metaclass=abc.ABCMeta):
     else: # mac instruction
       if kernel["UseDotInstruction"]:
         # dot2: InnerUnroll are used for wider local read
-        numA = kernel["ThreadTile0"] // tensorParametersA["localReadInstruction"].numOffsets
-        numB = kernel["ThreadTile1"] // tensorParametersB["localReadInstruction"].numOffsets
+        numA = kernel["ThreadTile0"]
+        numB = kernel["ThreadTile1"]
       else:
-        numA = kernel["InnerUnroll"]*(kernel["ThreadTile0"] // kernel["VectorWidthA"]) // tensorParametersA["localReadInstruction"].numOffsets
-        numB = kernel["InnerUnroll"]*(kernel["ThreadTile1"] // kernel["VectorWidthB"]) // tensorParametersB["localReadInstruction"].numOffsets
+        numA = kernel["InnerUnroll"]*(kernel["ThreadTile0"] // kernel["VectorWidthA"])
+        numB = kernel["InnerUnroll"]*(kernel["ThreadTile1"] // kernel["VectorWidthB"])
 
     if not kernel["DirectToVgprA"]:
       self.states.numReadsPerIterA = numA

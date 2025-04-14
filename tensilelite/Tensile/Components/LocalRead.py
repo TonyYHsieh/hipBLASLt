@@ -50,7 +50,6 @@ class LocalReadVALU(LocalRead):
         imod              = Module("LocalReadDo%s_I%s"%(tc,iui))
         pack              = Module("pack%s_I%s"%(tc,iui))
         instruction       = tP["localReadInstruction"]
-        numOffsets        = instruction.numOffsets
         blockWidth        = instruction.blockWidth
         offsetMultiplier  = 1 # instruction.offsetMultiplier
         valuIdx           = 0
@@ -73,25 +72,14 @@ class LocalReadVALU(LocalRead):
                 # paramList.append(destVgpr)
                 # paramList.append(vgpr("LocalReadAddr%s"%tc))
 
-                for oIdx in range(0, numOffsets):
-                    # dot2
-                    if kernel["UseDotInstruction"]:
-                        paramList.append(int((rIdx*blockWidth + kernel["SubGroup%u"%tile01] * (vIdx*numOffsets+oIdx) * tileStride \
-                            + tP["localReadOffset"]) * tP["bpe"] + tP["localReadSwapByteOffset"]) // offsetMultiplier)
-                    else:
-                        paramList.append(int((rIdx*blockWidth + kernel["SubGroup%u"%tile01] * (vIdx*numOffsets+oIdx)*kernel["VectorWidthA"] \
-                            + tP["localReadOffset"]) * tP["bpe"] + tP["localReadSwapByteOffset"]) // offsetMultiplier)
-                    # print("Debug: Matrix{}, rIdx offset {}, vIdx offset {}, bpe {}, net offset {}".format( \
-                    #     tP["tensorChar"], \
-                    #     rIdx * blockWidth, \
-                    #     kernel["SubGroup%u" % tP["tensorIdx"]] * (vIdx * numOffsets + oIdx) * kernel["VectorWidth"] + tP["localReadOffset"], \
-                    #     tP["bpe"], \
-                    #     paramList[-1]))
-                # paramTuple = tuple(paramList)
-                if numOffsets == 1:
-                    ds = DSModifiers(na=1, offset=paramList[0])
-                if numOffsets == 2:
-                    ds = DSModifiers(na=2, offset0=paramList[0], offset1=paramList[1])
+                # dot2
+                if kernel["UseDotInstruction"]:
+                    paramList.append(int((rIdx*blockWidth + kernel["SubGroup%u"%tile01] * vIdx * tileStride \
+                        + tP["localReadOffset"]) * tP["bpe"] + tP["localReadSwapByteOffset"]) // offsetMultiplier)
+                else:
+                    paramList.append(int((rIdx*blockWidth + kernel["SubGroup%u"%tile01] * vIdx*kernel["VectorWidthA"] \
+                        + tP["localReadOffset"]) * tP["bpe"] + tP["localReadSwapByteOffset"]) // offsetMultiplier)
+                ds = DSModifiers(na=1, offset=paramList[0])
                 LocalReadX = instruction.getInst()
                 localReadCode.add(LocalReadX(dst=destVgpr, src=vgpr("LocalReadAddr%s"%tc), ds=ds))
                 valuIdx += blockWidth
@@ -216,7 +204,6 @@ class LocalReadMFMA(LocalRead):
         instruction      = tP["localReadInstruction"]
         bpr              = 4 # bytes/register
 
-        numOffsets       = instruction.numOffsets
         blockWidth       = instruction.blockWidth
         unrollBlockWidth = instruction.blockWidth if kernel["UnrollMajorLDS%s"%tc] else tP["bpeDS"]/4
         tileBlockWidth   = tP["bpeDS"]/4 if kernel["UnrollMajorLDS%s"%tc] else instruction.blockWidth
@@ -569,23 +556,22 @@ class LocalReadMFMA(LocalRead):
                         # load read instrution
                         paramList = []
 
-                        for oIdx in range(0, numOffsets):
-                            offset_val = (eIdx + (vIdx * numOffsets+oIdx) * MIWaveGroupShape[tile01]) * tileStride
+                        offset_val = (eIdx + vIdx * MIWaveGroupShape[tile01]) * tileStride
 
-                            offset_val = int(((gIdx * numElementPerGroup + rIdx * numElementPerRead) * UnrollStride + offset_val + tP["localReadOffset"]) * tP["bpeDS"])
+                        offset_val = int(((gIdx * numElementPerGroup + rIdx * numElementPerRead) * UnrollStride + offset_val + tP["localReadOffset"]) * tP["bpeDS"])
 
-                            if (kernel["LdsBlockSizePerPad%s"%tc] != 0) and (kernel["LdsPad%s"%tc] != 0):
-                                offset_val = int(offset_val + (offset_val // kernel["LdsBlockSizePerPad%s"%tc]) * kernel["LdsPad%s"%tc] * tP["bpeDS"])
-                            offset_val = offset_val + tP["localReadSwapByteOffset"]
-                            if (kernel["DirectToLds%s" % tc] and  \
-                                kernel["GlobalReadVectorWidth%c"%tc] * tP["bpeDS"] > 4):
-                              # another address conversion for DirectToLds + NumLoadsCoalesced > 1
-                              dummy, offset_val = writer.lraOffsetConversionForDTLandNLC(kernel, tP, offset_val)
+                        if (kernel["LdsBlockSizePerPad%s"%tc] != 0) and (kernel["LdsPad%s"%tc] != 0):
+                            offset_val = int(offset_val + (offset_val // kernel["LdsBlockSizePerPad%s"%tc]) * kernel["LdsPad%s"%tc] * tP["bpeDS"])
+                        offset_val = offset_val + tP["localReadSwapByteOffset"]
+                        if (kernel["DirectToLds%s" % tc] and  \
+                            kernel["GlobalReadVectorWidth%c"%tc] * tP["bpeDS"] > 4):
+                          # another address conversion for DirectToLds + NumLoadsCoalesced > 1
+                          dummy, offset_val = writer.lraOffsetConversionForDTLandNLC(kernel, tP, offset_val)
 
-                            paramList.append(int(offset_val))
+                        paramList.append(int(offset_val))
 
-                        comment = "L -> Reg lro=%d swapByteOffset=%u ti=%u vIdx=%u eIdx=%u grIdx=%u oIdx=%u buffer=%u iui=%u" \
-                                % (tP["localReadOffset"], tP["localReadSwapByteOffset"], MIWaveGroupShape[tile01], vIdx, eIdx, grIdx, oIdx, bufferIdx, iui)
+                        comment = "L -> Reg lro=%d swapByteOffset=%u ti=%u vIdx=%u eIdx=%u grIdx=%u buffer=%u iui=%u" \
+                                % (tP["localReadOffset"], tP["localReadSwapByteOffset"], MIWaveGroupShape[tile01], vIdx, eIdx, grIdx, bufferIdx, iui)
 
                         highBits = 0 if writer.states.archCaps["DSLow16NotPreserve"] else highBitsForHalf or isHigh16Bits
 
@@ -599,10 +585,7 @@ class LocalReadMFMA(LocalRead):
                         else:
                             srcAddr=vgpr("LocalReadAddr%s"%tc)
 
-                        if numOffsets == 1:
-                            ds = DSModifiers(na=1, offset=paramList[0])
-                        else:
-                            ds = DSModifiers(na=2, offset0=paramList[0], offset1=paramList[1])
+                        ds = DSModifiers(na=1, offset=paramList[0])
                         LocalReadX = instruction.getInst(highBits)
                         localReadCode.add(LocalReadX(dst=destVgpr, src=srcAddr, ds=ds, comment=comment))
                         # TODO - handle vector-load
