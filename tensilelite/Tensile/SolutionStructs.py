@@ -1960,7 +1960,7 @@ class Solution(collections.abc.Mapping):
       return False
 
     # DTV + input type conversion
-    if state["ProblemType"]["DataType%s"%tc] != state["ProblemType"]["DataType"]:
+    if state["ProblemType"]["DataType%s"%tc] != state["ProblemType"]["MacDataType%s"%tc]:
       if not state["ConvertAfterDS"]:
         reject(state, "DirectToVgpr%s + input conversion + ConvertAfterDS=False not supported"%(tc))
         return False
@@ -4581,8 +4581,8 @@ class Solution(collections.abc.Mapping):
       reject(state, "When both UseBias and UseScaleAlphaVec are enabled then UseBias and UseScaleAlphaVec must have same settings.")
 
     # ScaleAB or ScaleABVec
-    if state["ProblemType"]["DataTypeA"] != state["ProblemType"]["DataTypeB"] and \
-      state["ProblemType"]["DataTypeA"] != state["ProblemType"]["DataType"] and \
+    if state["ProblemType"]["DataTypeA"] != state["ProblemType"]["MacDataTypeA"] and \
+      state["ProblemType"]["DataTypeB"] != state["ProblemType"]["MacDataTypeB"] and \
       state["ProblemType"]["UseScaleAB"] == "Vector":
       reject(state, "Currently does not support using scaleABVec if DataTypeA != DataTypeB != DataType.")
 
