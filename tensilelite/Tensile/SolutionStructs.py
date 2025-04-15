@@ -333,11 +333,12 @@ class ProblemType(Mapping):
   #   See the discussion on Common.py for validGEMMTypes
   ################################################################################
   def checkIfSupportedGEMMType(self):
-    inType = self["DataType"]
+    inTypeA = self["MacDataTypeA"]
+    inTypeB = self["MacDataTypeB"]
     outType = self["DestDataType"]
     computeType = self["ComputeDataType"]
 
-    gemmType = ( inType.toChar(), outType.toChar(), computeType.toChar() )
+    gemmType = ( inTypeA.toChar(), inTypeB.toChar(), outType.toChar(), computeType.toChar() )
     if gemmType not in validGEMMTypes:
       printExit("This typed-GEMM (Ti, To, Tc) = (%s, %s, %s) is not supported yet."%(gemmType[0],gemmType[1],gemmType[2]))
 
@@ -555,7 +556,7 @@ class ProblemType(Mapping):
     # Special condition for some newly supported kernels:
     #   HHS, HSS, BSS and I8II kernels, use a clearer naming _TiToTc_
     # TODO: Distinguish all kernels by _TiToTc_ to be more consistent with rocblas
-    gemmType = (self["DataType"].toChar(),self["DestDataType"].toChar(),self["ComputeDataType"].toChar() )
+    gemmType = (self["MacDataTypeA"].toChar(), self["MacDataTypeB"].toChar(), self["DestDataType"].toChar(), self["ComputeDataType"].toChar() )
     if gemmType in HPATypes:
       name += self["DestDataType"].toChar()    # Type of C/D
       name += self["ComputeDataType"].toChar() # Type of Alpha/Beta
@@ -1820,23 +1821,22 @@ class Solution(collections.abc.Mapping):
       state["ThreadTile"][1]      = 1  # dummy
 
       state["MFMA_BF16_1K"] = False
+      key = state["ProblemType"]["MacDataTypeA"].toChar() + state["ProblemType"]["MacDataTypeB"].toChar()
       if not state["ProblemType"]["Sparse"]:
-        miDataType = state["ProblemType"]["DataType"] if (not state["EnableF32XdlMathOp"]) else state["ProblemType"]["F32XdlMathOp"]
+        if state["EnableF32XdlMathOp"]:
+          key = state["ProblemType"]["F32XdlMathOp"].toChar() + state["ProblemType"]["F32XdlMathOp"].toChar()
         if globalParameters["AsmCaps"][isa]["HasMFMA"]:
-          if not (miDataType.toChar() in validMFMA and \
-            state["MatrixInstruction"] in validMFMA[miDataType.toChar()]):
-            if miDataType.isBFloat16() and \
-              state["MatrixInstruction"] in validMFMA["B1k"]:
+          if not (key in validMFMA and state["MatrixInstruction"] in validMFMA[key]):
+            if (key == "BB") and state["MatrixInstruction"] in validMFMA["B1k"]:
               state["MFMA_BF16_1K"] = True
             else:
-              reject(state, "MatrixInstruction %s not valid for DataType %s" % (state["MatrixInstruction"], miDataType))
+              reject(state, "MatrixInstruction %s not valid for DataType %s" % (state["MatrixInstruction"], key))
         elif globalParameters["AsmCaps"][isa]["HasWMMA"]:
           if state["MatrixInstruction"] not in validWMMA:
-            reject(state, "MatrixInstruction %s not valid for DataType %s" % (state["MatrixInstruction"], state["ProblemType"]["DataType"]))
+            reject(state, "MatrixInstruction %s not valid for DataType %s" % (state["MatrixInstruction"], key))
       else:
-        if not (state["ProblemType"]["DataType"].toChar() in validSMFMA and \
-          state["MatrixInstruction"] in validSMFMA[state["ProblemType"]["DataType"].toChar()]):
-          reject(state, "Sparse MatrixInstruction %s not valid for DataType %s" % (state["MatrixInstruction"], state["ProblemType"]["DataType"]))
+        if not (key in validSMFMA and state["MatrixInstruction"] in validSMFMA[key]):
+          reject(state, "Sparse MatrixInstruction %s not valid for DataType %s" % (state["MatrixInstruction"], key))
 
       # set EnableMatrixInstruction
       state["EnableMatrixInstruction"] = True

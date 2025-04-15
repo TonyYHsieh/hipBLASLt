@@ -432,10 +432,10 @@ for i in validMacroTileSides:
         validMacroTiles.append([i, j])
 
 validMFMA = {}
-validMFMA["H"] = [[32, 32, 16, 1], [32, 32, 4, 2], [32, 32, 8, 1], [16, 16, 32, 1], [16, 16, 4, 4], [16, 16, 16, 1], [4, 4, 4, 16]]
-validMFMA["S"] = [[32, 32, 1, 2], [32, 32, 2, 1], [16, 16, 1, 4], [16, 16, 4, 1], [4, 4, 1, 16]]
-validMFMA["B"] = [[32, 32, 16, 1], [32, 32, 2, 2], [32, 32, 4, 1], [16, 16, 32, 1], [16, 16, 2, 4], [16, 16, 8, 1], [4, 4, 2, 16]]
-validMFMA["4xi8"] = [
+validMFMA["HH"] = [[32, 32, 16, 1], [32, 32, 4, 2], [32, 32, 8, 1], [16, 16, 32, 1], [16, 16, 4, 4], [16, 16, 16, 1], [4, 4, 4, 16]]
+validMFMA["SS"] = [[32, 32, 1, 2], [32, 32, 2, 1], [16, 16, 1, 4], [16, 16, 4, 1], [4, 4, 1, 16]]
+validMFMA["BB"] = [[32, 32, 16, 1], [32, 32, 2, 2], [32, 32, 4, 1], [16, 16, 32, 1], [16, 16, 2, 4], [16, 16, 8, 1], [4, 4, 2, 16]]
+validMFMA["4xi84xi8"] = [
     [32, 32, 4, 2],
     [32, 32, 8, 1],
     [16, 16, 4, 4],
@@ -444,29 +444,29 @@ validMFMA["4xi8"] = [
     [32, 32, 16, 1],
     [16, 16, 32, 1],
 ]
-validMFMA["D"] = [[16, 16, 4, 1], [4, 4, 4, 4]]
+validMFMA["DD"] = [[16, 16, 4, 1], [4, 4, 4, 4]]
 validMFMA["B1k"] = [[32, 32, 4, 2], [32, 32, 8, 1], [16, 16, 4, 4], [16, 16, 16, 1], [4, 4, 4, 16]]
-validMFMA["C"] = validMFMA["S"]
-validMFMA["Z"] = validMFMA["D"]
-validMFMA["I8"] = [
+validMFMA["CC"] = validMFMA["SS"]
+validMFMA["ZZ"] = validMFMA["DD"]
+validMFMA["I8I8"] = [
     [32, 32, 4, 2],
     [32, 32, 8, 1],
     [16, 16, 4, 4],
     [16, 16, 16, 1],
     [4, 4, 4, 16],
 ] + [[32, 32, 16, 1], [16, 16, 32, 1]]
-validMFMA["X"] = [[32, 32, 4, 1], [16, 16, 8, 1]]
-validMFMA["F8"] = [[32, 32, 16, 1], [16, 16, 32, 1], [32, 32, 64, 1], [16, 16, 128, 1]]
-validMFMA["B8"] = validMFMA["F8"]
-validMFMA["F8B8"] = validMFMA["F8"]
-validMFMA["B8F8"] = validMFMA["F8"]
-validMFMA["F8N"] = [[32, 32, 16, 1], [16, 16, 32, 1]]
-validMFMA["B8N"] = validMFMA["F8N"]
-validMFMA["F8B8N"] = validMFMA["F8N"]
-validMFMA["B8F8N"] = validMFMA["F8N"]
-validMFMA["F6"] = [[16,16,128,1], [32,32,64,1]]
-validMFMA["B6"] = [[16,16,128,1], [32,32,64,1]]
-validMFMA["F4"] = [[16,16,128,1], [32,32,64,1]]
+validMFMA["XX"] = [[32, 32, 4, 1], [16, 16, 8, 1]]
+validMFMA["F8F8"] = [[32, 32, 16, 1], [16, 16, 32, 1], [32, 32, 64, 1], [16, 16, 128, 1]]
+validMFMA["B8B8"] = validMFMA["F8F8"]
+validMFMA["F8B8"] = validMFMA["F8F8"]
+validMFMA["B8F8"] = validMFMA["F8F8"]
+validMFMA["F8NF8N"] = [[32, 32, 16, 1], [16, 16, 32, 1]]
+validMFMA["B8NB8N"] = validMFMA["F8NF8N"]
+validMFMA["F8NB8N"] = validMFMA["F8NF8N"]
+validMFMA["B8NF8N"] = validMFMA["F8NF8N"]
+validMFMA["F6F6"] = [[16,16,128,1], [32,32,64,1]]
+validMFMA["B6B6"] = [[16,16,128,1], [32,32,64,1]]
+validMFMA["F4F4"] = [[16,16,128,1], [32,32,64,1]]
 validWMMA = [
     [16, 16, 16, 1],
 ]
@@ -474,12 +474,12 @@ validTT = 32
 validMFMA["_format9"] = []
 
 for MFMA in [
-    validMFMA["H"],
-    validMFMA["S"],
-    validMFMA["B"],
-    validMFMA["D"],
-    validMFMA["X"],
-    validMFMA["F8"],
+    validMFMA["HH"],
+    validMFMA["SS"],
+    validMFMA["BB"],
+    validMFMA["DD"],
+    validMFMA["XX"],
+    validMFMA["F8F8"],
     validWMMA,
 ]:
     for MI in MFMA:
@@ -493,30 +493,30 @@ for MFMA in [
                             )
 validMatrixInstructions = (
     [[], [-1]]
-    + validMFMA["H"]
-    + validMFMA["S"]
-    + validMFMA["B"]
-    + validMFMA["D"]
+    + validMFMA["HH"]
+    + validMFMA["SS"]
+    + validMFMA["BB"]
+    + validMFMA["DD"]
     + validMFMA["B1k"]
-    + validMFMA["X"]
+    + validMFMA["XX"]
 )
 validMatrixInstructions = validMatrixInstructions + validMFMA["_format9"]
 
 validSMFMA = {}
-validSMFMA["H"] = [[32, 32, 16, 1], [16, 16, 32, 1], [16, 16, 64, 1], [32, 32, 32, 1]]
-validSMFMA["B"] = [[32, 32, 16, 1], [16, 16, 32, 1], [16, 16, 64, 1], [32, 32, 32, 1]]
-validSMFMA["4xi8"] = [[32, 32, 32, 1], [16, 16, 64, 1], [16, 16, 128, 1], [32, 32, 64, 1]]
-validSMFMA["I8"] = validSMFMA["4xi8"]
-validSMFMA["F8"] = [[32, 32, 32, 1], [16, 16, 64, 1], [16, 16, 128, 1], [32, 32, 64, 1]]
-validSMFMA["B8"] = validSMFMA["F8"]
-validSMFMA["F8B8"] = validSMFMA["F8"]
-validSMFMA["B8F8"] = validSMFMA["F8"]
-validSMFMA["F8N"] = validSMFMA["F8"]
-validSMFMA["B8N"] = validSMFMA["F8"]
-validSMFMA["F8B8N"] = validSMFMA["F8N"]
-validSMFMA["B8F8N"] = validSMFMA["F8N"]
+validSMFMA["HH"] = [[32, 32, 16, 1], [16, 16, 32, 1], [16, 16, 64, 1], [32, 32, 32, 1]]
+validSMFMA["BB"] = [[32, 32, 16, 1], [16, 16, 32, 1], [16, 16, 64, 1], [32, 32, 32, 1]]
+validSMFMA["4xi84xi8"] = [[32, 32, 32, 1], [16, 16, 64, 1], [16, 16, 128, 1], [32, 32, 64, 1]]
+validSMFMA["I8I8"] = validSMFMA["4xi84xi8"]
+validSMFMA["F8F8"] = [[32, 32, 32, 1], [16, 16, 64, 1], [16, 16, 128, 1], [32, 32, 64, 1]]
+validSMFMA["B8B8"] = validSMFMA["F8F8"]
+validSMFMA["F8B8"] = validSMFMA["F8F8"]
+validSMFMA["B8F8"] = validSMFMA["F8F8"]
+validSMFMA["F8NF8N"] = validSMFMA["F8F8"]
+validSMFMA["B8NB8N"] = validSMFMA["F8F8"]
+validSMFMA["F8NB8N"] = validSMFMA["F8NF8N"]
+validSMFMA["B8NF8N"] = validSMFMA["F8NF8N"]
 validSMFMA["_format9"] = []
-for SMFMA in [validSMFMA["H"], validSMFMA["B"], validSMFMA["4xi8"], validSMFMA["F8N"]]:
+for SMFMA in [validSMFMA["HH"], validSMFMA["BB"], validSMFMA["4xi84xi8"], validSMFMA["F8NF8N"]]:
     for MI in SMFMA:
         for bm in range(int(math.log(MI[3], 2)) + 1):
             for tt0 in range(1, validTT + 1):
@@ -526,7 +526,7 @@ for SMFMA in [validSMFMA["H"], validSMFMA["B"], validSMFMA["4xi8"], validSMFMA["
                             validSMFMA["_format9"].append(
                                 [MI[0], MI[1], MI[2], MI[3], 2**bm, tt0, tt1, 2**wave_m, 2**wave_n]
                             )
-validSparseMatrixInstructions = validSMFMA["H"] + validSMFMA["B"] + validSMFMA["4xi8"]
+validSparseMatrixInstructions = validSMFMA["HH"] + validSMFMA["BB"] + validSMFMA["4xi84xi8"]
 validMatrixInstructions = (
     validMatrixInstructions + validSparseMatrixInstructions + validSMFMA["_format9"]
 )
@@ -540,126 +540,127 @@ validMatrixInstructions = (
 
 # This is used in SolutionStruct.py::checkIfSupportedGEMMType()
 validGEMMTypes = [
-    ("H", "H", "H"),
-    ("S", "S", "S"),
-    ("D", "D", "D"),
-    ("C", "C", "C"),
-    ("Z", "Z", "Z"),
-    ("H", "H", "S"),
-    ("H", "S", "S"),
-    ("B", "B", "S"),
-    ("B", "S", "S"),
-    ("B", "H", "S"),
-    ("I8", "I", "I"),
-    ("4xi8", "I", "I"),
-    ("I8", "I8", "I"),
-    ("I8", "I", "S"),
-    ("I8", "I8", "S"),
-    ("I8", "H", "S"),
-    ("I8", "B", "S"),
-    ("F8", "S", "S"),
-    ("B8", "S", "S"),
-    ("F8B8", "S", "S"),
-    ("B8F8", "S", "S"),
-    ("F8", "H", "S"),
-    ("B8", "H", "S"),
-    ("F8B8", "H", "S"),
-    ("B8F8", "H", "S"),
-    ("B8", "B", "S"),
-    ("H", "F8", "S"),
-    ("F8", "B", "S"),
-    ("F8B8", "B", "S"),
-    ("B8F8", "B", "S"),  # in/out are both R8
-    ("F8", "F8", "S"),
-    ("B8", "B8", "S"),
-    ("F8B8", "B8", "S"),
-    ("B8F8", "B8", "S"),
-    ("F8", "B8", "S"),
-    ("B8", "F8", "S"),
-    ("F8B8", "F8", "S"),
-    ("B8F8", "F8", "S"),  # F8 NANOO
-    ("F8N", "S", "S"),
-    ("B8N", "S", "S"),
-    ("F8B8N", "S", "S"),
-    ("B8F8N", "S", "S"),
-    ("F8N", "H", "S"),
-    ("B8N", "H", "S"),
-    ("F8B8N", "H", "S"),
-    ("B8F8N", "H", "S"),
-    ("B8N", "B", "S"),
-    ("H", "F8N", "S"),
-    ("F8N", "B", "S"),
-    ("F8B8N", "B", "S"),
-    ("B8F8N", "B", "S"),  # in/out are both R8
-    ("F8N", "F8N", "S"),
-    ("B8N", "B8N", "S"),
-    ("F8B8N", "B8N", "S"),
-    ("B8F8N", "B8N", "S"),
-    ("F8N", "B8N", "S"),
-    ("B8N", "F8N", "S"),
-    ("F8B8N", "F8N", "S"),
-    ("B8F8N", "F8N", "S"),
-    ("F6", "S", "S"),
-    ("B6", "S", "S"),
-    ("F4", "S", "S"),
+    ("H", "H", "H", "H"),
+    ("S", "S", "S", "S"),
+    ("D", "D", "D", "D"),
+    ("C", "C", "C", "C"),
+    ("Z", "Z", "Z", "Z"),
+    ("H", "H", "H", "S"),
+    ("H", "H", "S", "S"),
+    ("B", "B", "B", "S"),
+    ("B", "B", "S", "S"),
+    ("B", "B", "H", "S"),
+    ("I8", "I8", "I", "I"),
+    ("4xi8", "4xi8", "I", "I"),
+    ("I8", "I8", "I8", "I"),
+    ("I8", "I8", "I", "S"),
+    ("I8", "I8", "I8", "S"),
+    ("I8", "I8", "H", "S"),
+    ("I8", "I8", "B", "S"),
+    ("F8", "F8", "S", "S"),
+    ("B8", "B8", "S", "S"),
+    ("F8", "B8", "S", "S"),
+    ("B8", "F8", "S", "S"),
+    ("F8", "F8", "H", "S"),
+    ("B8", "B8", "H", "S"),
+    ("F8", "B8", "H", "S"),
+    ("B8", "F8", "H", "S"),
+    ("B8", "B8", "B", "S"),
+    ("H", "H", "F8", "S"),
+    ("F8", "F8", "B", "S"),
+    ("F8", "B8", "B", "S"),
+    ("B8", "F8", "B", "S"),  # in/out are both R8
+    ("F8", "F8", "F8", "S"),
+    ("B8", "B8", "B8", "S"),
+    ("F8", "B8", "B8", "S"),
+    ("B8", "F8", "B8", "S"),
+    ("F8", "F8", "B8", "S"),
+    ("B8", "B8", "F8", "S"),
+    ("F8", "B8", "F8", "S"),
+    ("B8", "F8", "F8", "S"),  # F8 NANOO
+    ("F8N", "F8N", "S", "S"),
+    ("B8N", "B8N", "S", "S"),
+    ("F8N", "B8N", "S", "S"),
+    ("B8N", "F8N", "S", "S"),
+    ("F8N", "F8N", "H", "S"),
+    ("B8N", "B8N", "H", "S"),
+    ("F8N", "B8N", "H", "S"),
+    ("B8N", "F8N", "H", "S"),
+    ("B8N", "B8N", "B", "S"),
+    ("H", "H", "F8N", "S"),
+    ("F8N", "F8N", "B", "S"),
+    ("F8N", "B8N", "B", "S"),
+    ("B8N", "F8N", "B", "S"),  # in/out are both R8
+    ("F8N", "F8N", "F8N", "S"),
+    ("B8N", "B8N", "B8N", "S"),
+    ("F8N", "B8N", "B8N", "S"),
+    ("B8N", "F8N", "B8N", "S"),
+    ("F8N", "F8N", "B8N", "S"),
+    ("B8N", "B8N", "F8N", "S"),
+    ("F8N", "B8N", "F8N", "S"),
+    ("B8N", "F8N", "F8N", "S"),
+    ("F6", "F6", "S", "S"),
+    ("B6", "B6", "S", "S"),
+    ("F4", "F4", "S", "S"),
 ]
 
 # All HPA types are listed here (HPA=T). The name of the library logic files for these types is:
 # *_TiToTc_BH*.yaml where Ti, To, and Tc are the data types of A/B, C/D, and computation, respectively.
 # The name of the library logic files for non-HPA (HPA=F) types is: *_TiB*.yaml.
 HPATypes = [
-    ("H", "S", "S"),
-    ("H", "H", "S"),
-    ("B", "B", "S"),
-    ("B", "S", "S"),
-    ("B", "H", "S"),
-    ("I8", "I", "I"),
-    ("4xi8", "I", "I"),
-    ("I8", "I", "S"),
-    ("I8", "I8", "S"),
-    ("I8", "H", "S"),
-    ("I8", "B", "S"),
-    ("F8", "S", "S"),
-    ("B8", "S", "S"),
-    ("F8B8", "S", "S"),
-    ("B8F8", "S", "S"),
-    ("F8", "H", "S"),
-    ("B8", "H", "S"),
-    ("F8B8", "H", "S"),
-    ("B8F8", "H", "S"),
-    ("H", "F8", "S"),
-    ("F8", "B", "S"),
-    ("F8B8", "B", "S"),  # in/out are both R8
-    ("F8", "F8", "S"),
-    ("B8", "B8", "S"),
-    ("F8B8", "B8", "S"),
-    ("B8F8", "B8", "S"),
-    ("F8", "B8", "S"),
-    ("B8", "F8", "S"),
-    ("F8B8", "F8", "S"),
-    ("B8F8", "F8", "S"),
-    ("F8N", "S", "S"),
-    ("B8N", "S", "S"),
-    ("F8B8N", "S", "S"),
-    ("B8F8N", "S", "S"),
-    ("F8N", "H", "S"),
-    ("B8N", "H", "S"),
-    ("F8B8N", "H", "S"),
-    ("B8F8N", "H", "S"),
-    ("H", "F8N", "S"),
-    ("F8N", "B", "S"),
-    ("F8B8N", "B", "S"),  # in/out are both R8
-    ("F8N", "F8N", "S"),
-    ("B8N", "B8N", "S"),
-    ("F8B8N", "B8N", "S"),
-    ("B8F8N", "B8N", "S"),
-    ("F8N", "B8N", "S"),
-    ("B8N", "F8N", "S"),
-    ("F8B8N", "F8N", "S"),
-    ("B8F8N", "F8N", "S"),
-    ("F6", "S", "S"),
-    ("B6", "S", "S"),
-    ("F4", "S", "S"),
+    ("H", "H", "S", "S"),
+    ("H", "H", "H", "S"),
+    ("B", "B", "B", "S"),
+    ("B", "B", "S", "S"),
+    ("B", "B", "H", "S"),
+    ("I8", "I8", "I", "I"),
+    ("4xi8", "4xi8", "I", "I"),
+    ("I8", "I8", "I", "S"),
+    ("I8", "I8", "I8", "S"),
+    ("I8", "I8", "H", "S"),
+    ("I8", "I8", "B", "S"),
+    ("F8", "F8", "S", "S"),
+    ("B8", "B8", "S", "S"),
+    ("F8", "B8", "S", "S"),
+    ("B8", "F8", "S", "S"),
+    ("F8", "F8", "H", "S"),
+    ("B8", "B8", "H", "S"),
+    ("F8", "B8", "H", "S"),
+    ("B8", "F8", "H", "S"),
+    ("H", "H", "F8", "S"),
+    ("F8", "F8", "B", "S"),
+    ("F8", "B8", "B", "S"),  # in/out are both R8
+    ("F8", "F8", "F8", "S"),
+    ("B8", "B8", "B8", "S"),
+    ("F8", "B8", "B8", "S"),
+    ("B8", "F8", "B8", "S"),
+    ("F8", "F8", "B8", "S"),
+    ("B8", "B8", "F8", "S"),
+    ("F8", "B8", "F8", "S"),
+    ("B8", "F8", "F8", "S"),
+    ("F8N", "F8N", "S", "S"),
+    ("B8N", "B8N", "S", "S"),
+    ("F8N", "B8N", "S", "S"),
+    ("B8N", "F8N", "S", "S"),
+    ("F8N", "F8N", "H", "S"),
+    ("B8N", "B8N", "H", "S"),
+    ("F8N", "B8N", "H", "S"),
+    ("B8N", "F8N", "H", "S"),
+    ("H", "H", "F8N", "S"),
+    ("F8N", "F8N", "B", "S"),
+
+    ("F8N", "B8N", "B", "S"),  # in/out are both R8
+    ("F8N", "F8N", "F8N", "S"),
+    ("B8N", "B8N", "B8N", "S"),
+    ("F8N", "B8N", "B8N", "S"),
+    ("B8N", "F8N", "B8N", "S"),
+    ("F8N", "F8N", "B8N", "S"),
+    ("B8N", "B8N", "F8N", "S"),
+    ("F8N", "B8N", "F8N", "S"),
+    ("B8N", "F8N", "F8N", "S"),
+    ("F6", "F6", "S", "S"),
+    ("B6", "B6", "S", "S"),
+    ("F4", "F4", "S", "S"),
 ]
 
 validParameters = {
