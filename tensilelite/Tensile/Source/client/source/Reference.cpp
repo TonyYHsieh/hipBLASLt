@@ -660,7 +660,7 @@ omp_set_num_threads(MAX_OMP_THREADS);
             throw std::runtime_error("Unsupported input type.");
         }
 
-        template<typename Inputs, typename Accumulator, typename MathOpAccum, typename AType, typename BType, typename ComputeInputType
+        template<typename Inputs, typename Accumulator, typename MathOpAccum, typename AType, typename BType, typename ComputeInputTypeA, typename ComputeInputTypeB
 #if defined(TENSILE_USE_FP6) || defined(TENSILE_USE_BF6) || defined(TENSILE_USE_FP4)
             , std::enable_if_t<true
 #ifdef TENSILE_USE_FP6
@@ -691,95 +691,61 @@ omp_set_num_threads(MAX_OMP_THREADS);
             BType bVal = Transform<BType>::Input(bPtr[bIdx], bConjugate);
 
             if constexpr(sizeof(typename Inputs::AType)
-                             > sizeof(typename Inputs::ComputeInputType)
+                             > sizeof(typename Inputs::ComputeInputTypeA)
                          && sizeof(typename Inputs::BType)
-                                > sizeof(typename Inputs::ComputeInputType))
+                                > sizeof(typename Inputs::ComputeInputTypeB))
             {
-                if constexpr (std::is_same<Float8BFloat8,
-                                typename Inputs::ComputeInputType>::value)
-                {
-                    auto aValCast = static_cast<TensileLite::Float8>(aVal);
-                    auto bValCast = static_cast<TensileLite::BFloat8>(bVal);
-                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
-                }
-                else if constexpr (std::is_same<BFloat8Float8,
-                                     typename Inputs::ComputeInputType>::value)
-                {
-                    auto aValCast = static_cast<TensileLite::BFloat8>(aVal);
-                    auto bValCast = static_cast<TensileLite::Float8>(bVal);
-                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
-                }
-                else if constexpr (std::is_same<Float8BFloat8_fnuz,
-                                typename Inputs::ComputeInputType>::value)
-                {
-                    auto aValCast = static_cast<TensileLite::Float8_fnuz>(aVal);
-                    auto bValCast = static_cast<TensileLite::BFloat8_fnuz>(bVal);
-                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
-                }
-                else if constexpr (std::is_same<BFloat8Float8_fnuz,
-                                     typename Inputs::ComputeInputType>::value)
-                {
-                    auto aValCast = static_cast<TensileLite::BFloat8_fnuz>(aVal);
-                    auto bValCast = static_cast<TensileLite::Float8_fnuz>(bVal);
-                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
-                }
-                else
-                {
-                    typename Inputs::ComputeInputType aValCast, bValCast;
-                    if(problem.useScaleAB() == "Scalar")
-                    {
-                        Accumulator scaleA = GetValue<Accumulator>(
-                            problem.alphaType(), inputs.scaleA, 0, aConjugate);
-                        auto tmp = multiply<Accumulator>(aVal, scaleA);
-                        aValCast
-                            = static_cast<typename Inputs::ComputeInputType>(tmp);
-                        Accumulator scaleB = GetValue<Accumulator>(
-                            problem.alphaType(), inputs.scaleB, 0, aConjugate);
-                        tmp = multiply<Accumulator>(bVal, scaleB);
-                        bValCast
-                            = static_cast<typename Inputs::ComputeInputType>(tmp);
-                    }
-                    else
-                    {
-                        aValCast
-                            = static_cast<typename Inputs::ComputeInputType>(aVal);
-                        bValCast
-                            = static_cast<typename Inputs::ComputeInputType>(bVal);
-                    }
-                    value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
-                }
-            }
-            else if constexpr(sizeof(typename Inputs::AType)
-                              > sizeof(typename Inputs::ComputeInputType))
-            {
-                typename Inputs::ComputeInputType aValCast;
+                ComputeInputTypeA aValCast;
+                ComputeInputTypeB bValCast;
                 if(problem.useScaleAB() == "Scalar")
                 {
                     Accumulator scaleA = GetValue<Accumulator>(
                         problem.alphaType(), inputs.scaleA, 0, aConjugate);
                     auto tmp = multiply<Accumulator>(aVal, scaleA);
-                    aValCast = static_cast<typename Inputs::ComputeInputType>(tmp);
+                    aValCast = static_cast<ComputeInputTypeA>(tmp);
+                    Accumulator scaleB = GetValue<Accumulator>(
+                        problem.alphaType(), inputs.scaleB, 0, aConjugate);
+                    tmp = multiply<Accumulator>(bVal, scaleB);
+                    bValCast = static_cast<ComputeInputTypeB>(tmp);
                 }
                 else
                 {
-                    aValCast = static_cast<typename Inputs::ComputeInputType>(aVal);
+                    aValCast = static_cast<ComputeInputTypeA>(aVal);
+                    bValCast = static_cast<ComputeInputTypeB>(bVal);
+                }
+                value += multiply<Accumulator, MathOpAccum>(aValCast, bValCast);
+            }
+            else if constexpr(sizeof(typename Inputs::AType)
+                              > sizeof(typename Inputs::ComputeInputTypeA))
+            {
+                ComputeInputTypeA aValCast;
+                if(problem.useScaleAB() == "Scalar")
+                {
+                    Accumulator scaleA = GetValue<Accumulator>(
+                        problem.alphaType(), inputs.scaleA, 0, aConjugate);
+                    auto tmp = multiply<Accumulator>(aVal, scaleA);
+                    aValCast = static_cast<ComputeInputTypeA>(tmp);
+                }
+                else
+                {
+                    aValCast = static_cast<ComputeInputTypeA>(aVal);
                 }
                 value += multiply<Accumulator, MathOpAccum>(aValCast, bVal);
             }
             else if constexpr(sizeof(typename Inputs::BType)
-                              > sizeof(typename Inputs::ComputeInputType))
+                              > sizeof(typename Inputs::ComputeInputTypeB))
             {
-                typename Inputs::ComputeInputType bValCast;
+                ComputeInputTypeB bValCast;
                 if(problem.useScaleAB() == "Scalar")
                 {
                     Accumulator scaleB = GetValue<Accumulator>(
                         problem.alphaType(), inputs.scaleB, 0, aConjugate);
                     auto tmp = multiply<Accumulator>(bVal, scaleB);
-                    bValCast = static_cast<typename Inputs::ComputeInputType>(tmp);
+                    bValCast = static_cast<ComputeInputTypeB>(tmp);
                 }
                 else
                 {
-                    bValCast = static_cast<typename Inputs::ComputeInputType>(bVal);
+                    bValCast = static_cast<ComputeInputTypeB>(bVal);
                 }
                 value += multiply<Accumulator, MathOpAccum>(aVal, bValCast);
             }
@@ -792,7 +758,7 @@ omp_set_num_threads(MAX_OMP_THREADS);
         }
 
 #if defined(TENSILE_USE_FP6) || defined(TENSILE_USE_BF6) || defined(TENSILE_USE_FP4)
-        template<typename Inputs, typename Accumulator, typename MathOpAccum, typename AType, typename BType, typename ComputeInputType,
+        template<typename Inputs, typename Accumulator, typename MathOpAccum, typename AType, typename BType, typename ComputeInputTypeA, typename ComputeInputTypeB,
             std::enable_if_t<false
 #ifdef TENSILE_USE_FP6
                              || (std::is_same<Float6x32, AType>::value && std::is_same<Float6x32, BType>::value)
@@ -1033,7 +999,8 @@ omp_set_num_threads(MAX_OMP_THREADS);
                                 val += multiply<Inputs, Accumulator, MathOpAccum,
                                                   typename Inputs::AType,
                                                   typename Inputs::BType,
-                                                  typename Inputs::ComputeInputType>(
+                                                  typename Inputs::ComputeInputTypeA,
+                                                  typename Inputs::ComputeInputTypeB>(
                                     problem, inputs, aPtr, bPtr, aIdx, bIdx, aConjugate, bConjugate);
                             }
 
@@ -1071,11 +1038,11 @@ omp_set_num_threads(MAX_OMP_THREADS);
                     Accumulator scaleB
                         = GetValue<Accumulator>(problem.alphaType(), inputs.scaleB, 0, aConjugate);
                     if constexpr(sizeof(typename Inputs::AType)
-                                 <= sizeof(typename Inputs::ComputeInputType))
+                                 <= sizeof(typename Inputs::ComputeInputTypeA))
                         alpha *= scaleA;
 
                     if constexpr(sizeof(typename Inputs::BType)
-                                 <= sizeof(typename Inputs::ComputeInputType))
+                                 <= sizeof(typename Inputs::ComputeInputTypeB))
                         alpha *= scaleB;
                 }
                 else if(problem.useScaleAB() == "Vector")
@@ -1087,11 +1054,11 @@ omp_set_num_threads(MAX_OMP_THREADS);
                     Accumulator scaleB = GetValue<Accumulator>(
                         problem.alphaType(), inputs.scaleB, posB, aConjugate);
                     if constexpr(sizeof(typename Inputs::AType)
-                                 <= sizeof(typename Inputs::ComputeInputType))
+                                 <= sizeof(typename Inputs::ComputeInputTypeA))
                         alpha *= scaleA;
 
                     if constexpr(sizeof(typename Inputs::BType)
-                                 <= sizeof(typename Inputs::ComputeInputType))
+                                 <= sizeof(typename Inputs::ComputeInputTypeB))
                         alpha *= scaleB;
                 }
 
@@ -1304,7 +1271,8 @@ omp_set_num_threads(MAX_OMP_THREADS);
                                        problem.d().dataType(),
                                        alphaType,
                                        betaType,
-                                       problem.computeInputType());
+                                       problem.computeInputTypeA(),
+                                       problem.computeInputTypeB());
         }
 
         template <typename Problem, typename Inputs>

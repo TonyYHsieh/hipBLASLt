@@ -233,14 +233,24 @@ namespace TensileLite
             return m_f32XdlMathOp;
         }
 
-        void setComputeInputType(DataType value)
+        void setComputeInputTypeA(DataType value)
         {
-            m_computeInputType = value;
+            m_computeInputTypeA = value;
         }
 
-        DataType computeInputType() const
+        DataType computeInputTypeA() const
         {
-            return m_computeInputType;
+            return m_computeInputTypeA;
+        }
+
+        void setComputeInputTypeB(DataType value)
+        {
+            m_computeInputTypeB = value;
+        }
+
+        DataType computeInputTypeB() const
+        {
+            return m_computeInputTypeB;
         }
 
         void setUseDeviceUserArguments(bool use)
@@ -262,7 +272,8 @@ namespace TensileLite
         size_t m_workspaceSizeGroupedGemm = std::numeric_limits<size_t>::max();
 
         DataType m_f32XdlMathOp;
-        DataType m_computeInputType;
+        DataType m_computeInputTypeA;
+        DataType m_computeInputTypeB;
 
         bool m_useDeviceUserArguments = false;
     };
@@ -1202,7 +1213,8 @@ namespace TensileLite
                                  DataType               typeD,
                                  DataType               typeAlpha,
                                  DataType               typeBeta,
-                                 DataType               typeComputeInput,
+                                 DataType               typeComputeInputA,
+                                 DataType               typeComputeInputB,
                                  DataType               typeCompute,
                                  double                 alpha,
                                  double                 beta,

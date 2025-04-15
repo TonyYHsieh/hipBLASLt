@@ -48,7 +48,8 @@ namespace TensileLite
             , m_activationType(ActivationType::None)
             , m_activationNoGuard(false)
             , m_activationEnumArg(std::vector<ActivationType>(1, ActivationType::None))
-            , m_computeInputType(DataType::Float)
+            , m_computeInputTypeA(DataType::Float)
+            , m_computeInputTypeB(DataType::Float)
             , m_f32XdlMathOp(DataType::Float)
             , m_activationComputeType(DataType::Float)
             , m_useUserArgs(false)
@@ -185,10 +186,16 @@ namespace TensileLite
             if(args.count("max-workspace-size"))
                 m_maxWorkspaceSize = args["max-workspace-size"].as<size_t>();
 
-            if(args.count("compute-input-type"))
+            if(args.count("compute-input-type-A"))
             {
                 //accept mix-types (i.g. Float8BFloat8); there no need to set m_computeInputTypeA and m_computeInputTypeB
-                m_computeInputType = args["compute-input-type"].as<DataType>();
+                m_computeInputTypeA = args["compute-input-type-A"].as<DataType>();
+            }
+
+            if(args.count("compute-input-type-B"))
+            {
+                //accept mix-types (i.g. Float8BFloat8); there no need to set m_computeInputTypeA and m_computeInputTypeB
+                m_computeInputTypeB = args["compute-input-type-B"].as<DataType>();
             }
 
             if(args.count("f32-xdl-math-op"))
@@ -313,7 +320,8 @@ namespace TensileLite
                                 dStrides,
                                 m_constantValues[ContractionProblemGemm::CONST::BETA]));
 
-                            rv.back().setComputeInputType(m_computeInputType);
+                            rv.back().setComputeInputTypeA(m_computeInputTypeA);
+                            rv.back().setComputeInputTypeB(m_computeInputTypeB);
                             rv.back().setAlphaRestriction(toScalarValueEnum(
                                 m_constantValues[ContractionProblemGemm::CONST::ALPHA]));
                             rv.back().setCEqualsD(m_cEqualsD);

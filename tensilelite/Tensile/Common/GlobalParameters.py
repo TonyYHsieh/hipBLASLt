@@ -1411,6 +1411,8 @@ defaultProblemType = {
     # =TensorContraction  requires specifying
     "OperationType": "GEMM",  # GEMM, TensorContraction, ConvolutionForward, ConvolutionBackwardData, ConvolutionBackwardWeights
     "DataType": 0,  # data types can specified by a variety of ways, such as "s", as listed in SolutionStructs.py::DataType
+    "MacDataTypeA": 0, # A data type can specified by a variety of ways, such as "s", as listed in SolutionStructs.py::DataType
+    "MacDataTypeB": 0, # B data type can specified by a variety of ways, such as "s", as listed in SolutionStructs.py::DataType
     "DataTypeA": 0,  # A data type can specified by a variety of ways, such as "s", as listed in SolutionStructs.py::DataType
     "DataTypeB": 0,  # B data type can specified by a variety of ways, such as "s", as listed in SolutionStructs.py::DataType
     "DataTypeE": 0,  # E data type can specified by a variety of ways, such as "s", as listed in SolutionStructs.py::DataType

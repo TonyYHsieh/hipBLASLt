@@ -93,6 +93,30 @@ class Fbs(Enum):
   Batch=1    # Expect to be batch dimension
   Sum=2      # Expect to be summation dimension
 
+def getRealDataTypeA(dataType):
+    if dataType.value == DataType.float8Bfloat8:
+        return DataType(DataType.float8)
+    elif dataType.value == DataType.bfloat8Float8:
+        return DataType(DataType.bfloat8)
+    elif dataType.value == DataType.float8Bfloat8_fnuz:
+        return DataType(DataType.float8_fnuz)
+    elif dataType.value == DataType.bfloat8Float8_fnuz:
+        return DataType(DataType.bfloat8_fnuz)
+    else:
+        return dataType
+
+def getRealDataTypeB(dataType):
+    if dataType.value == DataType.float8Bfloat8:
+        return DataType(DataType.bfloat8)
+    elif dataType.value == DataType.bfloat8Float8:
+        return DataType(DataType.float8)
+    elif dataType.value == DataType.float8Bfloat8_fnuz:
+        return DataType(DataType.bfloat8_fnuz)
+    elif dataType.value == DataType.bfloat8Float8_fnuz:
+        return DataType(DataType.float8_fnuz)
+    else:
+        return dataType
+
 ################################################################################
 # ProblemType
 # name of solution should begin with name of problemType, and arguments can be listed out explicitly
@@ -107,19 +131,37 @@ class ProblemType(Mapping):
     # adjusting all data types
     if "DataType" in config:
       self["DataType"]  = DataType(config["DataType"])
+      self["MacDataTypeA"] = self["DataType"]
+      self["MacDataTypeB"] = self["DataType"]
       self["DataTypeA"] = self["DataType"]
       self["DataTypeB"] = self["DataType"]
     else:
       printExit("NO data type specified")
       self["DataType"]  = DataType(0)
+      self["MacDataTypeA"] = DataType(0)
+      self["MacDataTypeB"] = DataType(0)
       self["DataTypeA"] = DataType(0)
       self["DataTypeB"] = DataType(0)
 
+    if "MacDataTypeA" in config:
+      self["MacDataTypeA"] = DataType(config["MacDataTypeA"])
+    self["MacDataTypeA"] = getRealDataTypeA(self["MacDataTypeA"])
+
+    if "MacDataTypeB" in config:
+      self["MacDataTypeB"] = DataType(config["MacDataTypeB"])
+    self["MacDataTypeB"] = getRealDataTypeB(self["MacDataTypeB"])
+
     if "DataTypeA" in config:
       self["DataTypeA"] = DataType(config["DataTypeA"])
+    else:
+      self["DataTypeA"] = self["MacDataTypeA"]
+    self["DataTypeA"] = getRealDataTypeA(self["DataTypeA"])
 
     if "DataTypeB" in config:
       self["DataTypeB"] = DataType(config["DataTypeB"])
+    else:
+      self["DataTypeB"] = self["MacDataTypeB"]
+    self["DataTypeB"] = getRealDataTypeB(self["DataTypeB"])
 
     if "DestDataType" in config:
       self["DestDataType"] = DataType(config["DestDataType"])
@@ -501,11 +543,14 @@ class ProblemType(Mapping):
       name += "C"
 
     # DataTypes
-    if self["DataType"] != self["DataTypeA"] or self["DataType"] != self["DataTypeB"]:
+    macTypeStr = self["MacDataTypeA"].toChar()
+    if self["MacDataTypeA"] != self["MacDataTypeB"]:
+      macTypeStr = self["MacDataTypeA"].toChar() + self["MacDataTypeB"].toChar()
+    if self["MacDataTypeA"] != self["DataTypeA"] or self["MacDataTypeB"] != self["DataTypeB"]:
       name += "_"
       name += self["DataTypeA"].toChar() + self["DataTypeB"].toChar()
     name += "_"
-    name += self["DataType"].toChar() # Type of A/B
+    name += macTypeStr # Type of A/B
 
     # Special condition for some newly supported kernels:
     #   HHS, HSS, BSS and I8II kernels, use a clearer naming _TiToTc_

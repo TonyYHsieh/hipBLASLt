@@ -1347,7 +1347,8 @@ namespace TensileLite
                                                      DataType               typeD,
                                                      DataType               typeAlpha,
                                                      DataType               typeBeta,
-                                                     DataType               typeComputeInput,
+                                                     DataType               typeComputeInputA,
+                                                     DataType               typeComputeInputB,
                                                      DataType               typeCompute,
                                                      double                 alpha,
                                                      double                 beta,
@@ -1460,7 +1461,8 @@ namespace TensileLite
                                                 beta,
                                                 maxWorkspaceBytes};
 
-        problem.setComputeInputType(typeComputeInput);
+        problem.setComputeInputTypeA(typeComputeInputA);
+        problem.setComputeInputTypeB(typeComputeInputB);
         problem.setAlphaType(typeAlpha);
         problem.setBetaType(typeBeta);
 

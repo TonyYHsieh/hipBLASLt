@@ -24,6 +24,7 @@
 
 from .CustomKernels import getCustomKernelConfig
 from .SolutionStructs import Solution, ProblemSizes, ProblemType
+from .TensileInstructions import DataType
 from . import SolutionLibrary
 from .CustomYamlLoader import load_yaml_stream
 from .Common import gfxToIsa, printExit, printWarning, print2, versionIsCompatible, __version__
@@ -125,6 +126,10 @@ def writeSolutions(filename, problemSizes, biasTypeArgs, activationArgs, solutio
             solutionState["ProblemType"] = solutionState["ProblemType"].state
             solutionState["ProblemType"]["DataType"] = \
                     solutionState["ProblemType"]["DataType"].value
+            solutionState["ProblemType"]["MacDataTypeA"] = \
+                    solutionState["ProblemType"]["MacDataTypeA"].value
+            solutionState["ProblemType"]["MacDataTypeB"] = \
+                    solutionState["ProblemType"]["MacDataTypeB"].value
             solutionState["ProblemType"]["DataTypeA"] = \
                     solutionState["ProblemType"]["DataTypeA"].value
             solutionState["ProblemType"]["DataTypeB"] = \
@@ -231,6 +236,30 @@ def parseSolutionsData(data, srcFile, cxxCompiler):
     return (problemSizes, solutions)
 
 
+def getRealDataTypeA(dataType):
+    if dataType == DataType.float8Bfloat8:
+        return DataType.float8
+    elif dataType == DataType.bfloat8Float8:
+        return DataType.bfloat8
+    elif dataType == DataType.float8Bfloat8_fnuz:
+        return DataType.float8_fnuz
+    elif dataType == DataType.bfloat8Float8_fnuz:
+        return DataType.bfloat8_fnuz
+    else:
+        return dataType
+
+def getRealDataTypeB(dataType):
+    if dataType == DataType.float8Bfloat8:
+        return DataType.bfloat8
+    elif dataType == DataType.bfloat8Float8:
+        return DataType.float8
+    elif dataType == DataType.float8Bfloat8_fnuz:
+        return DataType.bfloat8_fnuz
+    elif dataType == DataType.bfloat8Float8_fnuz:
+        return DataType.float8_fnuz
+    else:
+        return dataType
+
 class LibraryLogic(NamedTuple):
     """Return tuple for parseLibraryLogicData()"""
     schedule: str
@@ -263,6 +292,22 @@ def parseLibraryLogicData(data, srcFile, cxxCompiler, archs=None):
     if "CUCount" not in data:
         data["CUCount"] = None
 
+    if 'MacDataTypeA' not in data["ProblemType"]: #it will either be set as d['MacDataType'] or a specified input
+        data["ProblemType"]['MacDataTypeA'] = getRealDataTypeA(data["ProblemType"]['DataType'])
+
+    if 'MacDataTypeB' not in data["ProblemType"]:
+        data["ProblemType"]['MacDataTypeB'] = getRealDataTypeB(data["ProblemType"]['DataType'])
+
+    if 'DataTypeA' not in data["ProblemType"]:
+        data["ProblemType"]['DataTypeA'] = data["ProblemType"]['MacDataTypeA']
+    else:
+        data["ProblemType"]['DataTypeA'] = getRealDataTypeA(data["ProblemType"]['DataTypeA'])
+
+    if 'DataTypeB' not in data["ProblemType"]:
+        data["ProblemType"]['DataTypeB'] = data["ProblemType"]['MacDataTypeB']
+    else:
+        data["ProblemType"]['DataTypeB'] = getRealDataTypeB(data["ProblemType"]['DataTypeB'])
+
     if not versionIsCompatible(data["MinimumRequiredVersion"]):
         printWarning("Version = {} in library logic file {} does not match Tensile version = {}" \
                 .format(srcFile, data["MinimumRequiredVersion"], __version__) )
@@ -290,6 +335,21 @@ def parseLibraryLogicData(data, srcFile, cxxCompiler, archs=None):
             # The ActivationType setting in YAML is meaningless in customKernel case.
             # Therefore, we override the customKernel setting with the ActivationType value from ProblemType to avoid false alarms during subsequent problemType checks.
             solutionState["ProblemType"]["ActivationType"] = problemType["ActivationType"]
+        if 'MacDataTypeA' not in solutionState["ProblemType"]: #it will either be set as d['MacDataType'] or a specified input
+            solutionState["ProblemType"]['MacDataTypeA'] = getRealDataTypeA(solutionState["ProblemType"]['DataType'])
+
+        if 'MacDataTypeB' not in solutionState["ProblemType"]:
+            solutionState["ProblemType"]['MacDataTypeB'] = getRealDataTypeB(solutionState["ProblemType"]['DataType'])
+
+        if 'DataTypeA' not in solutionState["ProblemType"]:
+            solutionState["ProblemType"]['DataTypeA'] = solutionState["ProblemType"]['MacDataTypeA']
+        else:
+            solutionState["ProblemType"]['DataTypeA'] = getRealDataTypeA(solutionState["ProblemType"]['DataTypeA'])
+
+        if 'DataTypeB' not in solutionState["ProblemType"]:
+            solutionState["ProblemType"]['DataTypeB'] = solutionState["ProblemType"]['MacDataTypeB']
+        else:
+            solutionState["ProblemType"]['DataTypeB'] = getRealDataTypeB(solutionState["ProblemType"]['DataTypeB'])
         solutionObject = Solution(solutionState, cxxCompiler, srcFile)
         solutionProblemType = solutionObject["ProblemType"]
         if problemType != solutionProblemType:
@@ -410,6 +470,10 @@ def createLibraryLogic(schedulePrefix, architectureName, deviceNames, libraryTyp
     problemTypeState = problemType.state
     problemTypeState["DataType"] = \
             problemTypeState["DataType"].value
+    problemTypeState["MacDataTypeA"] = \
+            problemTypeState["MacDataTypeA"].value
+    problemTypeState["MacDataTypeB"] = \
+            problemTypeState["MacDataTypeB"].value
     problemTypeState["DataTypeA"] = \
             problemTypeState["DataTypeA"].value
     problemTypeState["DataTypeB"] = \
@@ -441,6 +505,10 @@ def createLibraryLogic(schedulePrefix, architectureName, deviceNames, libraryTyp
         solutionState["ProblemType"] = solutionState["ProblemType"].state
         solutionState["ProblemType"]["DataType"] = \
                 solutionState["ProblemType"]["DataType"].value
+        solutionState["ProblemType"]["MacDataTypeA"] = \
+                solutionState["ProblemType"]["MacDataTypeA"].value
+        solutionState["ProblemType"]["MacDataTypeB"] = \
+                solutionState["ProblemType"]["MacDataTypeB"].value
         solutionState["ProblemType"]["DataTypeA"] = \
                 solutionState["ProblemType"]["DataTypeA"].value
         solutionState["ProblemType"]["DataTypeB"] = \
@@ -473,6 +541,10 @@ def createLibraryLogic(schedulePrefix, architectureName, deviceNames, libraryTyp
             solutionState["ProblemType"] = solutionState["ProblemType"].state
             solutionState["ProblemType"]["DataType"] = \
                     solutionState["ProblemType"]["DataType"].value
+            solutionState["ProblemType"]["MacDataTypeA"] = \
+                    solutionState["ProblemType"]["MacDataTypeA"].value
+            solutionState["ProblemType"]["MacDataTypeB"] = \
+                    solutionState["ProblemType"]["MacDataTypeB"].value
             solutionState["ProblemType"]["DataTypeA"] = \
                     solutionState["ProblemType"]["DataTypeA"].value
             solutionState["ProblemType"]["DataTypeB"] = \
