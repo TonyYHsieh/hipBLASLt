@@ -287,7 +287,67 @@ namespace
     }
 
     inline const TensileLite::DataType
-        roc2TensileComputeInputType(const TensileLite::DataType&  typeA,
+        roc2TensileComputeInputTypeA(const TensileLite::DataType&  typeA,
+                                     const TensileLite::DataType&  typeB,
+                                     const rocblaslt_compute_type& typeCompute)
+    {
+        switch(typeCompute)
+        {
+        case rocblaslt_compute_f32_fast_f16:
+            return TensileLite::DataType::Half;
+        case rocblaslt_compute_f32_fast_bf16:
+            return TensileLite::DataType::BFloat16;
+        case rocblaslt_compute_f32_fast_f8_fnuz:
+            return TensileLite::DataType::Float8_fnuz;
+        case rocblaslt_compute_f32_fast_bf8_fnuz:
+            return TensileLite::DataType::BFloat8_fnuz;
+        case rocblaslt_compute_f32_fast_f8bf8_fnuz:
+            return TensileLite::DataType::Float8_fnuz;
+        case rocblaslt_compute_f32_fast_bf8f8_fnuz:
+            return TensileLite::DataType::BFloat8_fnuz;
+#ifdef ROCM_USE_FLOAT8
+        case rocblaslt_compute_f32_fast_f8:
+            return TensileLite::DataType::Float8;
+        case rocblaslt_compute_f32_fast_bf8:
+            return TensileLite::DataType::BFloat8;
+        case rocblaslt_compute_f32_fast_f8bf8:
+            return TensileLite::DataType::Float8;
+        case rocblaslt_compute_f32_fast_bf8f8:
+            return TensileLite::DataType::BFloat8;
+#endif
+        default:;
+        }
+
+        if(typeA == TensileLite::DataType::Float8_fnuz
+           && typeB == TensileLite::DataType::BFloat8_fnuz)
+        {
+            return TensileLite::DataType::Float8_fnuz;
+        }
+        else if(typeA == TensileLite::DataType::BFloat8_fnuz
+                && typeB == TensileLite::DataType::Float8_fnuz)
+        {
+            return TensileLite::DataType::BFloat8_fnuz;
+        }
+
+#ifdef ROCM_USE_FLOAT8
+        if(typeA == TensileLite::DataType::Float8 && typeB == TensileLite::DataType::BFloat8)
+        {
+            return TensileLite::DataType::Float8;
+        }
+        else if(typeA == TensileLite::DataType::BFloat8 && typeB == TensileLite::DataType::Float8)
+        {
+            return TensileLite::DataType::BFloat8;
+        }
+#endif
+
+        return TensileLite::DataTypeInfo::Get(typeA).elementSize
+                       <= TensileLite::DataTypeInfo::Get(typeB).elementSize
+                   ? typeA
+                   : typeB;
+    }
+
+    inline const TensileLite::DataType
+        roc2TensileComputeInputTypeB(const TensileLite::DataType&  typeA,
                                     const TensileLite::DataType&  typeB,
                                     const rocblaslt_compute_type& typeCompute)
     {
@@ -302,18 +362,18 @@ namespace
         case rocblaslt_compute_f32_fast_bf8_fnuz:
             return TensileLite::DataType::BFloat8_fnuz;
         case rocblaslt_compute_f32_fast_f8bf8_fnuz:
-            return TensileLite::DataType::Float8BFloat8_fnuz;
+            return TensileLite::DataType::BFloat8_fnuz;
         case rocblaslt_compute_f32_fast_bf8f8_fnuz:
-            return TensileLite::DataType::BFloat8Float8_fnuz;
+            return TensileLite::DataType::Float8_fnuz;
 #ifdef ROCM_USE_FLOAT8
         case rocblaslt_compute_f32_fast_f8:
             return TensileLite::DataType::Float8;
         case rocblaslt_compute_f32_fast_bf8:
             return TensileLite::DataType::BFloat8;
         case rocblaslt_compute_f32_fast_f8bf8:
-            return TensileLite::DataType::Float8BFloat8;
+            return TensileLite::DataType::BFloat8;
         case rocblaslt_compute_f32_fast_bf8f8:
-            return TensileLite::DataType::BFloat8Float8;
+            return TensileLite::DataType::Float8;
 #endif
         default:;
         }
@@ -321,22 +381,22 @@ namespace
         if(typeA == TensileLite::DataType::Float8_fnuz
            && typeB == TensileLite::DataType::BFloat8_fnuz)
         {
-            return TensileLite::DataType::Float8BFloat8_fnuz;
+            return TensileLite::DataType::BFloat8_fnuz;
         }
         else if(typeA == TensileLite::DataType::BFloat8_fnuz
                 && typeB == TensileLite::DataType::Float8_fnuz)
         {
-            return TensileLite::DataType::BFloat8Float8_fnuz;
+            return TensileLite::DataType::Float8_fnuz;
         }
 
 #ifdef ROCM_USE_FLOAT8
         if(typeA == TensileLite::DataType::Float8 && typeB == TensileLite::DataType::BFloat8)
         {
-            return TensileLite::DataType::Float8BFloat8;
+            return TensileLite::DataType::BFloat8;
         }
         else if(typeA == TensileLite::DataType::BFloat8 && typeB == TensileLite::DataType::Float8)
         {
-            return TensileLite::DataType::BFloat8Float8;
+            return TensileLite::DataType::Float8;
         }
 #endif
 
@@ -386,7 +446,8 @@ namespace
             hip2TensileType(typeD),
             roc2TensileType(typeCompute),
             roc2TensileType(typeCompute),
-            roc2TensileComputeInputType(typeATensile, typeBTensile, typeCompute),
+            roc2TensileComputeInputTypeA(typeATensile, typeBTensile, typeCompute),
+            roc2TensileComputeInputTypeB(typeATensile, typeBTensile, typeCompute),
             roc2TensileType(typeCompute),
             alpha,
             beta,
@@ -400,7 +461,8 @@ namespace
 
     const char* tensileComputeInputType_to_bench_string(TensileLite::DataType typeCompute,
                                                         TensileLite::DataType F32XdlMathOp,
-                                                        TensileLite::DataType typeComputeInput,
+                                                        TensileLite::DataType typeComputeInputA,
+                                                        TensileLite::DataType typeComputeInputB,
                                                         TensileLite::DataType typeA,
                                                         TensileLite::DataType typeB)
     {
@@ -422,12 +484,14 @@ namespace
         {
             return "xf32_r";
         }
-        else if(typeComputeInput == TensileLite::DataType::BFloat16
+        else if(typeComputeInputA == TensileLite::DataType::BFloat16
+                && typeComputeInputB == TensileLite::DataType::BFloat16
                 && typeA == TensileLite::DataType::Half && typeB == TensileLite::DataType::Half)
         {
             return "f32_bf16_r";
         }
-        else if(typeComputeInput == TensileLite::DataType::Half
+        else if(typeComputeInputA == TensileLite::DataType::Half
+                && typeComputeInputB == TensileLite::DataType::Half
                 && (typeA == TensileLite::DataType::Float8_fnuz
                         && typeB == TensileLite::DataType::Half
                     || typeA == TensileLite::DataType::Half
@@ -443,7 +507,8 @@ namespace
 
     const char* tensileComputeInputType_to_profile_string(TensileLite::DataType typeCompute,
                                                           TensileLite::DataType F32XdlMathOp,
-                                                          TensileLite::DataType typeComputeInput,
+                                                          TensileLite::DataType typeComputeInputA,
+                                                          TensileLite::DataType typeComputeInputB,
                                                           TensileLite::DataType typeA,
                                                           TensileLite::DataType typeB)
     {
@@ -465,12 +530,14 @@ namespace
         {
             return "c_xf32_r";
         }
-        else if(typeComputeInput == TensileLite::DataType::BFloat16
+        else if(typeComputeInputA == TensileLite::DataType::BFloat16
+                && typeComputeInputB == TensileLite::DataType::BFloat16
                 && typeA == TensileLite::DataType::Half && typeB == TensileLite::DataType::Half)
         {
             return "c_f32_fast_bf16_r";
         }
-        else if(typeComputeInput == TensileLite::DataType::Half
+        else if(typeComputeInputA == TensileLite::DataType::Half
+                && typeComputeInputB == TensileLite::DataType::Half
                 && (typeA == TensileLite::DataType::Float8_fnuz
                         && typeB == TensileLite::DataType::Half
                     || typeA == TensileLite::DataType::Half
@@ -595,7 +662,8 @@ namespace
             "--compute_type",
             tensileComputeInputType_to_bench_string(problem.computeType(),
                                                     problem.f32XdlMathOp(),
-                                                    problem.computeInputType(),
+                                                    problem.computeInputTypeA(),
+                                                    problem.computeInputTypeB(),
                                                     problem.a().dataType(),
                                                     problem.b().dataType()),
             "--algo_method",
@@ -691,7 +759,8 @@ namespace
                     "compute_type",
                     tensileComputeInputType_to_profile_string(problem.computeType(),
                                                               problem.f32XdlMathOp(),
-                                                              problem.computeInputType(),
+                                                              problem.computeInputTypeA(),
+                                                              problem.computeInputTypeB(),
                                                               problem.a().dataType(),
                                                               problem.b().dataType()),
                     "activation_type",
@@ -780,7 +849,8 @@ namespace
                     "compute_type",
                     tensileComputeInputType_to_profile_string(problem.computeType(),
                                                               problem.f32XdlMathOp(),
-                                                              problem.computeInputType(),
+                                                              problem.computeInputTypeA(),
+                                                              problem.computeInputTypeB(),
                                                               problem.a().dataType(),
                                                               problem.b().dataType()),
                     "activation_type",
@@ -901,7 +971,8 @@ namespace
             "--compute_type",
             tensileComputeInputType_to_bench_string(problem.gemms[0].computeType(),
                                                     problem.gemms[0].f32XdlMathOp(),
-                                                    problem.gemms[0].computeInputType(),
+                                                    problem.gemms[0].computeInputTypeA(),
+                                                    problem.gemms[0].computeInputTypeB(),
                                                     problem.gemms[0].a().dataType(),
                                                     problem.gemms[0].b().dataType()),
             "--algo_method",
@@ -1043,7 +1114,8 @@ namespace
             "compute_type",
             tensileComputeInputType_to_profile_string(problem.gemms[0].computeType(),
                                                       problem.gemms[0].f32XdlMathOp(),
-                                                      problem.gemms[0].computeInputType(),
+                                                      problem.gemms[0].computeInputTypeA(),
+                                                      problem.gemms[0].computeInputTypeB(),
                                                       problem.gemms[0].a().dataType(),
                                                       problem.gemms[0].b().dataType()),
             "activation_type",
@@ -1190,8 +1262,10 @@ namespace
                                                            value_category(beta),
                                                            prob.workspaceSize};
 
-        tensileProblem.setComputeInputType(
-            roc2TensileComputeInputType(a_type, b_type, prob.compute_type));
+        tensileProblem.setComputeInputTypeA(
+            roc2TensileComputeInputTypeA(a_type, b_type, prob.compute_type));
+        tensileProblem.setComputeInputTypeB(
+            roc2TensileComputeInputTypeB(a_type, b_type, prob.compute_type));
         tensileProblem.setAlphaType(compute_type);
         tensileProblem.setBetaType(compute_type);
 
@@ -1366,8 +1440,10 @@ namespace
 
         tensileProblem.updateProblem(freeIndex, batchIndex, boundIndex, beta, prob.workspaceSize);
 
-        tensileProblem.setComputeInputType(
-            roc2TensileComputeInputType(a_type, b_type, prob.compute_type));
+        tensileProblem.setComputeInputTypeA(
+            roc2TensileComputeInputTypeA(a_type, b_type, prob.compute_type));
+        tensileProblem.setComputeInputTypeB(
+            roc2TensileComputeInputTypeB(a_type, b_type, prob.compute_type));
         tensileProblem.setAlphaType(compute_type);
         tensileProblem.setBetaType(compute_type);
 
@@ -2041,7 +2117,7 @@ TensileLite::ProblemOverride TensileDataGemm2ProblemOverride(std::shared_ptr<voi
                                         data->problem.transB(),
                                         data->problem.a().dataType(),
                                         data->problem.b().dataType(),
-                                        data->problem.computeInputType(),
+                                        data->problem.computeType(),
                                         data->problem.c().dataType(),
                                         data->problem.freeSizeA(0),
                                         data->problem.freeSizeB(0),
