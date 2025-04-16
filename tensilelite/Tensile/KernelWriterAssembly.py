@@ -6393,12 +6393,15 @@ class KernelWriterAssembly(KernelWriter):
     shiftK = Module("shiftK")
     m = (u) % (self.states.numVgprBuffer) # local to use for MACs
 
-    miInputType      = kernel["ProblemType"]["F32XdlMathOp"] if kernel["EnableF32XdlMathOp"] else kernel["ProblemType"]["DataType"]
+    miInputTypeA     = kernel["ProblemType"]["F32XdlMathOp"] if kernel["EnableF32XdlMathOp"] else kernel["ProblemType"]["MacDataTypeA"]
+    miInputTypeB     = kernel["ProblemType"]["F32XdlMathOp"] if kernel["EnableF32XdlMathOp"] else kernel["ProblemType"]["MacDataTypeB"]
     # calculate constant
     is_mfma          = self.states.asmCaps["HasMFMA"]
-    is_wmma_v1          = self.states.asmCaps["HasWMMA_V1"]
-    is_wmma_v2          = self.states.asmCaps["HasWMMA_V2"]
-    numRegistersIn   = miInputType.numRegisters()
+    is_wmma_v1       = self.states.asmCaps["HasWMMA_V1"]
+    is_wmma_v2       = self.states.asmCaps["HasWMMA_V2"]
+    numRegistersInA  = miInputTypeA.numRegisters()
+    numRegistersInB  = miInputTypeB.numRegisters()
+    numRegistersIn   = max(numRegistersInA, numRegistersInB)
     numRegistersOut  = kernel["MIRegPerOut"]
     loopCounterName  = self.loopCounterName(kernel, self.states.unrollIdx)
     accs_per_wave    = kernel["MatrixInstM"] * kernel["MatrixInstN"] * kernel["MatrixInstB"] \
@@ -6407,19 +6410,20 @@ class KernelWriterAssembly(KernelWriter):
     numMIInputA      = kernel["MIInputPerThreadA"]
     numMIInputB      = kernel["MIInputPerThreadB"]
     numMIInput       = max(numMIInputA,numMIInputB)
-    miInInstType, miOutInstType = dataTypeToMfmaInstTypePair(miInputType, kernel["SourceSwap"])
+    miInInstType, miOutInstType = dataTypeToMfmaInstTypePair(miInputTypeA, miInputTypeB, kernel["SourceSwap"])
     neg_flag         = True if ((not is_mfma) and (miInInstType == InstType.INST_I8)) else False
     miInInstType     = InstType.INST_U8 if ((not is_mfma) and miInInstType == InstType.INST_I8) else miInInstType
-    miOutInstType    = miOutInstType if is_mfma else dataTypeNameAbbrevToInstType(kernel["ProblemType"]["ComputeDataType"].toNameAbbrev())
+    computeAbbrev    = kernel["ProblemType"]["ComputeDataType"].toNameAbbrev()
+    miOutInstType    = miOutInstType if is_mfma else dataTypeNameAbbrevToInstType(computeAbbrev, computeAbbrev)
     numReadsIterCoalescedA = self.states.numReadsIterCoalescedA
     numReadsIterCoalescedB = self.states.numReadsIterCoalescedB
     numReadsIterCoalesced = max(numReadsIterCoalescedA, numReadsIterCoalescedB)
 
-    vgprPerInputA    = int(numMIInputA * numRegistersIn)
+    vgprPerInputA    = int(numMIInputA * numRegistersInA)
     vgprPerInputMXSA = ceil(vgprPerInputA / kernel["ProblemType"]["MXBlockA"]) if kernel["ProblemType"]["MXBlockA"] else 0
-    vgprPerInputB    = int(numMIInputB * numRegistersIn)
+    vgprPerInputB    = int(numMIInputB * numRegistersInB)
     vgprPerInputMXSB = ceil(vgprPerInputB / kernel["ProblemType"]["MXBlockB"]) if kernel["ProblemType"]["MXBlockB"] else 0
-    vgprPerInput     = max(vgprPerInputA,vgprPerInputB)
+    vgprPerInput     = max(vgprPerInputA, vgprPerInputB)
     shiftPerElement  = int(numRegistersIn * 32)
     s_nop            = 0
     accumRegType     = "acc" if not kernel["MIArchVgpr"] else "v"

@@ -203,7 +203,7 @@ class DataType:
         {   # NANOO E4M3
             'char': 'F8N',
             'name': 'float8_fnuz',
-            'nameAbbrev': 'fp8_fp8',               # to match v_mfma inst
+            'nameAbbrev': 'fp8',               # to match v_mfma inst
             'miOutTypeNameAbbrev': 'f32',
             'enum': 'Float8_fnuz',                 # mapping to new client c++ enum
             'reg': 0.25,
@@ -218,7 +218,7 @@ class DataType:
         {   # NANOO E5M2
             'char': 'B8N',
             'name': 'bfloat8_fnuz',
-            'nameAbbrev': 'bf8_bf8',               # to match v_mfma inst
+            'nameAbbrev': 'bf8',               # to match v_mfma inst
             'miOutTypeNameAbbrev': 'f32',
             'enum': 'BFloat8_fnuz',                # mapping to new client c++ enum
             'reg': 0.25,
@@ -263,7 +263,7 @@ class DataType:
         {   # OCP E4M3
             'char': 'F8',
             'name': 'float8',
-            'nameAbbrev': 'fp8_fp8',               # to match v_mfma inst
+            'nameAbbrev': 'fp8',               # to match v_mfma inst
             'miOutTypeNameAbbrev': 'f32',
             'enum': 'Float8',                      # mapping to new client c++ enum
             'reg': 0.25,
@@ -278,7 +278,7 @@ class DataType:
         {   # OCP E5M2
             'char': 'B8',
             'name': 'bfloat8',
-            'nameAbbrev': 'bf8_bf8',               # to match v_mfma inst
+            'nameAbbrev': 'bf8',               # to match v_mfma inst
             'miOutTypeNameAbbrev': 'f32',
             'enum': 'BFloat8',                     # mapping to new client c++ enum
             'reg': 0.25,
@@ -323,7 +323,7 @@ class DataType:
         {
             'char': 'F6',
             'name': 'float6',
-            'nameAbbrev': 'fp6_fp6',
+            'nameAbbrev': 'fp6',
             'miOutTypeNameAbbrev': 'f32',
             'enum': 'Float6',
             'reg': 0.1875,
@@ -338,7 +338,7 @@ class DataType:
         {
             'char': 'B6',
             'name': 'bfloat6',
-            'nameAbbrev': 'bf6_bf6',
+            'nameAbbrev': 'bf6',
             'miOutTypeNameAbbrev': 'f32',
             'enum': 'BFloat6',
             'reg': 0.1875,
@@ -353,7 +353,7 @@ class DataType:
         {
             'char': 'F4',
             'name': 'float4',
-            'nameAbbrev': 'fp4_fp4',
+            'nameAbbrev': 'fp4',
             'miOutTypeNameAbbrev': 'f32',
             'enum': 'Float4',
             'reg': 0.125,

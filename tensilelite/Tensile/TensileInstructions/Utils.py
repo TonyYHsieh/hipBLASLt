@@ -96,20 +96,21 @@ class Holder:
 # mfma
 ########################################
 
-def dataTypeNameAbbrevToInstType(abbrev: str, sourceSwap: bool = False) -> InstType:
-    if abbrev == 'f64':
+def dataTypeNameAbbrevToInstType(abbrevA: str, abbrevB: str, sourceSwap: bool = False) -> InstType:
+    abbrev = abbrevA + '_' + abbrevB
+    if abbrev == 'f64_f64':
         return InstType.INST_F64
-    elif abbrev == 'f32':
+    elif abbrev == 'f32_f32':
         return InstType.INST_F32
-    elif abbrev == 'f16':
+    elif abbrev == 'f16_f16':
         return InstType.INST_F16
-    elif abbrev == 'i32':
+    elif abbrev == 'i32_i32':
         return InstType.INST_I32
-    elif abbrev == 'i8':
+    elif abbrev == 'i8_i8':
         return InstType.INST_I8
-    elif abbrev == 'bf16':
+    elif abbrev == 'bf16_bf16':
         return InstType.INST_BF16
-    elif abbrev == 'xf32':
+    elif abbrev == 'xf32_xf32':
         return InstType.INST_XF32
     elif abbrev == 'fp8_fp8':
         return InstType.INST_F8
@@ -131,10 +132,13 @@ def dataTypeNameAbbrevToInstType(abbrev: str, sourceSwap: bool = False) -> InstT
         assert("Unsupported data type.")
     return InstType.INST_NOTYPE
 
-def dataTypeToMfmaInstTypePair(dataType: DataType, sourceSwap: bool) -> Tuple[InstType, InstType]:
-    miInTypeStr  = dataType.toNameAbbrev()
-    miInInstType = dataTypeNameAbbrevToInstType(miInTypeStr, sourceSwap) # v_mfma_[...xK]<InType>
-    miOutInstType = dataTypeNameAbbrevToInstType(dataType.MIOutputTypeNameAbbrev()) # v_mfma_<OutType>..
+def dataTypeToMfmaInstTypePair(dataTypeA: DataType, dataTypeB: DataType, sourceSwap: bool) -> Tuple[InstType, InstType]:
+    miInTypeStrA  = dataTypeA.toNameAbbrev()
+    miInTypeStrB  = dataTypeB.toNameAbbrev()
+    miInInstType = dataTypeNameAbbrevToInstType(miInTypeStrA, miInTypeStrB, sourceSwap) # v_mfma_[...xK]<InType>
+
+    miOutTypeStr = dataTypeA.MIOutputTypeNameAbbrev()
+    miOutInstType = dataTypeNameAbbrevToInstType(miOutTypeStr, miOutTypeStr) # v_mfma_<OutType>..
     return miInInstType, miOutInstType
 
 ########################################
