@@ -31,13 +31,15 @@ class FMA_I8_HPA(MAC):
         return True
 
     kernel = {
-        "ProblemType": {"DataType": DataType(DataType.int8), "HighPrecisionAccumulate": True},
+        "ProblemType": {"MacDataTypeA": DataType(DataType.int8),
+                        "MacDataTypeB": DataType(DataType.int8),
+                        "HighPrecisionAccumulate": True},
     }
 
     def __call__(self, writer, m, innerUnroll):
         kernel      = writer.states.kernel
         priority    = Component.Priority.find(writer)
-        spacePerReg = writer.states.bpr // writer.states.bpeAB
+        spacePerReg = writer.states.bpr
         elemPerReg  = min(kernel['VectorWidth'], spacePerReg)
 
         module = Module("FMA_I8_HPA")

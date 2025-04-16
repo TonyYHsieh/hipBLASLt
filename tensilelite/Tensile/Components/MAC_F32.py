@@ -33,7 +33,8 @@ class MAC_F32_Plain(MAC):
     def asmCaps(caps):
         return caps["v_mac_f32"] or caps["v_fma_f32"]
 
-    kernel = {"ProblemType": {"DataType": DataType(DataType.single)}}
+    kernel = {"ProblemType": {"MacDataTypeA": DataType(DataType.single),
+                              "MacDataTypeB": DataType(DataType.single),}}
 
     def __call__(self, writer, tPA, tPB, m, innerUnroll):
         kernel = writer.states.kernel

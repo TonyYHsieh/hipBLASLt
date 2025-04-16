@@ -107,7 +107,8 @@ class StateValues:
   bpr: int = 4 # all registers are 32bit
   # default setup
   # AB=DataType / Cexternal=DestDataType / Cinternal=Accumulation (MAC or MFMA)
-  bpeAB: float = field(init=False)
+  bpeA: float = field(init=False)
+  bpeB: float = field(init=False)
   bpeE: int = field(init=False)
   # Cexternal = the "current" kernel output type,
   # - default: the "current" kernel is a non-GSU-kernel,
@@ -658,10 +659,10 @@ class KernelWriter(metaclass=abc.ABCMeta):
       # BF16 or FP16: each packCode is for one 32-bit reg,  1 packing inst: half-to-single x1
       # INT8        : each packCode is for one 32-bit regs, 3 packing inst: byte-to-half x2 + half-to-single x1
       if self.states.archCaps["HasEccHalf"] or not self.states.asmCaps["HasWMMA_V1"]:
-        instPerRegPack = 1 / kernel["ProblemType"]["DataType"].numRegisters() - 1
+        instPerRegPack = 1 / kernel["ProblemType"]["MacDataTypeA"].numRegisters() - 1
       else:
-        instPerRegPack = 1 if (kernel["ProblemType"]["DataType"].numRegisters() == 0.25) else 0
-      instPerPack    = int(kernel["MIInputPerThread"] * kernel["ProblemType"]["DataType"].numRegisters() * instPerRegPack)
+        instPerRegPack = 1 if (kernel["ProblemType"]["MacDataTypeA"].numRegisters() == 0.25) else 0
+      instPerPack    = int(kernel["MIInputPerThread"] * kernel["ProblemType"]["MacDataTypeA"].numRegisters() * instPerRegPack)
       packItems = []
       for iui in range(kernel["InnerUnroll"]):
         packINtems = [ [] for j in range(max(self.states.numReadsIterCoalescedA,self.states.numReadsIterCoalescedB)) ]
@@ -851,11 +852,13 @@ class KernelWriter(metaclass=abc.ABCMeta):
       # INT8        : each packCode is for one 32-bit regs, 3 packing inst: byte-to-half x2 + half-to-single x1
       ####
       if self.states.archCaps["HasEccHalf"] or not self.states.asmCaps["HasWMMA_V1"]:
-        instPerRegPack = 1 / kernel["ProblemType"]["DataType"].numRegisters() - 1
+        instPerRegPackA = 1 / kernel["ProblemType"]["MacDataTypeA"].numRegisters() - 1
+        instPerRegPackB = 1 / kernel["ProblemType"]["MacDataTypeB"].numRegisters() - 1
       else:
-        instPerRegPack = 1 if (kernel["ProblemType"]["DataType"].numRegisters() == 0.25) else 0
-      instPerPackA    = 0 if kernel["UnrollMajorLDSA"] else int(kernel["MIInputPerThreadA"] * kernel["ProblemType"]["DataType"].numRegisters() * instPerRegPack)
-      instPerPackB    = 0 if kernel["UnrollMajorLDSB"] else int(kernel["MIInputPerThreadB"] * kernel["ProblemType"]["DataType"].numRegisters() * instPerRegPack)
+        instPerRegPackA = 1 if (kernel["ProblemType"]["MacDataTypeA"].numRegisters() == 0.25) else 0
+        instPerRegPackB = 1 if (kernel["ProblemType"]["MacDataTypeB"].numRegisters() == 0.25) else 0
+      instPerPackA    = 0 if kernel["UnrollMajorLDSA"] else int(kernel["MIInputPerThreadA"] * kernel["ProblemType"]["MacDataTypeA"].numRegisters() * instPerRegPackA)
+      instPerPackB    = 0 if kernel["UnrollMajorLDSB"] else int(kernel["MIInputPerThreadB"] * kernel["ProblemType"]["MacDataTypeB"].numRegisters() * instPerRegPackB)
       if kernel["ConvertAfterDS"]:
         if kernel["ProblemType"]["DataTypeA"].isAnyFloat8():
           if kernel["UnrollMajorLDSA"]:
@@ -3665,7 +3668,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
     # force lrvwTile = 1 for numBytes >= 4 + MIInputPerThread > 1
     # TODO: implement extra logic to swap vgprs after local read to suport lrvwTile > 1 for umBytes >= 4 + MIInputPerThread > 1
-    forceLrvwTile1 = kernel["ProblemType"]["DataType"].numBytes() >= 4 and (kernel["EnableMatrixInstruction"] and kernel["MIInputPerThread"] > 1)
+    forceLrvwTile1 = kernel["ProblemType"]["MacDataTypeA"].numBytes() >= 4 and (kernel["EnableMatrixInstruction"] and kernel["MIInputPerThread"] > 1)
     if not kernel["UnrollMajorLDSA"] and not forceLrvwTile1:
       self.states.lrvwTileA = kernel["VectorWidthA"]
       if kernel["ProblemType"]["MXBlockA"]:
@@ -3675,6 +3678,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       if kernel["ProblemType"]["MXBlockA"]:
         self.states.lrvwTileMXSA = 1
 
+    forceLrvwTile1 = kernel["ProblemType"]["MacDataTypeB"].numBytes() >= 4 and (kernel["EnableMatrixInstruction"] and kernel["MIInputPerThread"] > 1)
     if not kernel["UnrollMajorLDSB"] and not forceLrvwTile1:
       self.states.lrvwTileB = kernel["VectorWidthB"]
       if kernel["ProblemType"]["MXBlockB"]:
@@ -3700,14 +3704,14 @@ class KernelWriter(metaclass=abc.ABCMeta):
       if self.states.lrvwTileMetadata > 1:
         self.states.numVgprBufferPackB = 1
 
-    if self.states.lrvwTileA > 1 and (kernel["ProblemType"]["DataType"].isHalf() or kernel["ProblemType"]["DataType"].isBFloat16() or \
-      kernel["ProblemType"]["DataType"].isInt8() or kernel["ProblemType"]["DataType"].is8bitFloat()):
+    if self.states.lrvwTileA > 1 and (kernel["ProblemType"]["MacDataTypeA"].isHalf() or kernel["ProblemType"]["MacDataTypeA"].isBFloat16() or \
+      kernel["ProblemType"]["MacDataTypeA"].isInt8() or kernel["ProblemType"]["MacDataTypeA"].is8bitFloat()):
       self.states.numVgprBufferPackA = 1
       if kernel["ProblemType"]["MXBlockA"]:
         self.states.numVgprBufferPackMXSA = 1
 
-    if self.states.lrvwTileB > 1 and (kernel["ProblemType"]["DataType"].isHalf() or kernel["ProblemType"]["DataType"].isBFloat16() or \
-      kernel["ProblemType"]["DataType"].isInt8() or kernel["ProblemType"]["DataType"].is8bitFloat()):
+    if self.states.lrvwTileB > 1 and (kernel["ProblemType"]["MacDataTypeB"].isHalf() or kernel["ProblemType"]["MacDataTypeB"].isBFloat16() or \
+      kernel["ProblemType"]["MacDataTypeB"].isInt8() or kernel["ProblemType"]["MacDataTypeB"].is8bitFloat()):
       self.states.numVgprBufferPackB = 1
       if kernel["ProblemType"]["MXBlockB"]:
         self.states.numVgprBufferPackMXSB = 1
@@ -3760,7 +3764,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
     if kernel["ScheduleIterAlg"] == 3 or kernel["ScheduleIterAlg"] == 2:
       self.states.numMfmaPerIter = kernel["MIWaveTile"][0] * kernel["MIWaveTile"][1] * kernel["InnerUnroll"]
-      if kernel["ProblemType"]["DataType"].isComplex(): self.states.numMfmaPerIter *= 4
+      if kernel["ProblemType"]["MacDataTypeA"].isComplex(): self.states.numMfmaPerIter *= 4
 
     # NamedTuple is immutable
     class intermediateTPValues(NamedTuple):
@@ -3917,7 +3921,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       self.states.doubleVgpr = True
 
     if kernel["EnableMatrixInstruction"]:
-      if (kernel["ProblemType"]["DataType"].MIOutputTypeNameAbbrev() == 'f64') and (not self.states.asmCaps["HasMFMA_f64"]):
+      if (kernel["ProblemType"]["MacDataTypeA"].MIOutputTypeNameAbbrev() == 'f64') and (not self.states.asmCaps["HasMFMA_f64"]):
         raise RuntimeError("FP64 MatrixInstruction not supported for {0}".format(self.states.version))
       elif not ( self.states.asmCaps["HasMFMA"] or self.states.asmCaps["HasWMMA"]):
         raise RuntimeError("MatrixInstruction not supported for {0}".format(self.states.version))
@@ -3950,8 +3954,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
       self.states.mixinst = VMadMixF32
 
 
-    self.states.bpeAB = self.states.bpr * kernel["ProblemType"]["DataType"].numRegisters()
-    self.states.bpeE  = int(self.states.bpr * kernel["ProblemType"]["DataTypeE"].numRegisters())
+    self.states.bpeA = self.states.bpr * kernel["ProblemType"]["MacDataTypeA"].numRegisters()
+    self.states.bpeB = self.states.bpr * kernel["ProblemType"]["MacDataTypeB"].numRegisters()
+    self.states.bpeE = int(self.states.bpr * kernel["ProblemType"]["DataTypeE"].numRegisters())
     self.states.bpeCinternal = int(self.states.bpr * kernel["ProblemType"]["ComputeDataType"].numRegisters())
 
     self.states.bpeCexternalGSU1 = int(self.states.bpr * kernel["ProblemType"]["DestDataType"].numRegisters())
@@ -3975,15 +3980,15 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
     # HPA not allowed in dgemm, cgemm, zgemm, sgemm
     if kernel["ProblemType"]["HighPrecisionAccumulate"] and \
-       not (kernel["ProblemType"]["DataType"].isHalf() or kernel["ProblemType"]["DataType"].isBFloat16() or \
-          kernel["ProblemType"]["DataType"].isInt8x4() or kernel["ProblemType"]["DataType"].isInt8() or \
-          kernel["ProblemType"]["DataType"].is8bitFloat() or kernel["ProblemType"]["DataType"].is6bitFloat() or \
-          kernel["ProblemType"]["DataType"].isFloat4()):
+       not (kernel["ProblemType"]["MacDataTypeA"].isHalf() or kernel["ProblemType"]["MacDataTypeA"].isBFloat16() or \
+          kernel["ProblemType"]["MacDataTypeA"].isInt8x4() or kernel["ProblemType"]["MacDataTypeA"].isInt8() or \
+          kernel["ProblemType"]["MacDataTypeA"].is8bitFloat() or kernel["ProblemType"]["MacDataTypeA"].is6bitFloat() or \
+          kernel["ProblemType"]["MacDataTypeA"].isFloat4()):
         print("HighPrecisionAccumulate only valid when DataType is half, bf16, Int8x4, Int8, fp8, bf8. Forcing HPA to False")
         kernel["ProblemType"]["HighPrecisionAccumulate"] = False
 
-    assert self.states.bpeAB == tensorParametersA["bpe"]
-    assert self.states.bpeAB == tensorParametersB["bpe"]
+    assert self.states.bpeA == tensorParametersA["bpe"]
+    assert self.states.bpeB == tensorParametersB["bpe"]
 
     #######################################L
     # Available Memory Instructions
@@ -4772,7 +4777,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
               + max(self.states.mxsb.numVgprValu + numVgprValuPackMXSB, self.states.mxsb.numVgprG2LAllocated)
 
     if ((tensorParametersA["bpe"] < 4 and not kernel["UnrollMajorLDSA"]) or (tensorParametersB["bpe"] < 4 and not kernel["UnrollMajorLDSB"])) \
-        and (kernel["ProblemType"]["DataType"].isInt8() or kernel["ProblemType"]["DataType"].is8bitFloat()):
+        and (kernel["ProblemType"]["MacDataTypeA"].isInt8() or kernel["ProblemType"]["MacDataTypeA"].is8bitFloat()):
       self.states.a.startVgprValuPackTemp = vgprIdx
       self.states.b.startVgprValuPackTemp = vgprIdx
       vgprIdx += 1
@@ -4899,7 +4904,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     vgprIdx += numVgprAddressDbg
 
     # for zgemm + (SCIU or MIAV) case, allocate 4 vgpr for alpha calculation (cannot use tmp vgpr in unroll loop or write batch)
-    if kernel["ProblemType"]["DataType"].isComplex() \
+    if kernel["ProblemType"]["MacDataTypeA"].isComplex() \
         and (kernel["StoreCInUnroll"] or kernel["MIArchVgpr"]) \
         and (kernel["_GlobalAccumulation"] != 'MultipleBuffer'):
       # need proper alignment
@@ -5225,9 +5230,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
     self.states.preloadScaleA = False
     self.states.preloadScaleB = False
     if kernel["ProblemType"]["UseScaleAB"] == "Scalar":
-      if kernel["ProblemType"]["DataTypeA"].numRegisters() > kernel["ProblemType"]["DataType"].numRegisters():
+      if kernel["ProblemType"]["DataTypeA"].numRegisters() > kernel["ProblemType"]["MacDataTypeA"].numRegisters():
         self.states.preloadScaleA = True
-      if kernel["ProblemType"]["DataTypeB"].numRegisters() > kernel["ProblemType"]["DataType"].numRegisters():
+      if kernel["ProblemType"]["DataTypeB"].numRegisters() > kernel["ProblemType"]["MacDataTypeB"].numRegisters():
         self.states.preloadScaleB = True
 
       for preloadScale, name in zip([self.states.preloadScaleA, self.states.preloadScaleB], ['A','B']):
@@ -5360,10 +5365,10 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
       miIssueLatency = 2
       if (self.states.version == (9,4,0) or self.states.version == (9,4,1) or self.states.version == (9,4,2) or self.states.version == (9,5,0)) and kernel["MatrixInstB"] == 1 and \
-         (kernel["ProblemType"]["DataType"].isHalf() or \
-          kernel["ProblemType"]["DataType"].isBFloat16() or \
-          kernel["ProblemType"]["DataType"].isInt8() or \
-          kernel["ProblemType"]["DataType"].is8bitFloat()):
+         (kernel["ProblemType"]["MacDataTypeA"].isHalf() or \
+          kernel["ProblemType"]["MacDataTypeA"].isBFloat16() or \
+          kernel["ProblemType"]["MacDataTypeA"].isInt8() or \
+          kernel["ProblemType"]["MacDataTypeA"].is8bitFloat()):
         mi_divisor = 4
         miIssueLatency = 1
 
@@ -5371,7 +5376,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
         mi_divisor = 4
 
       # special checking : F8 MFMA takes 2x more cycles and computes 4xK in gfx950
-      if (self.states.version == (9,5,0) and kernel["ProblemType"]["DataType"].is8bitFloat()):
+      if (self.states.version == (9,5,0) and kernel["ProblemType"]["MacDataTypeA"].is8bitFloat()):
           mi_divisor = 2
 
       self.states.miLatency = kernel["MatrixInstM"] // mi_divisor
@@ -5389,10 +5394,10 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
     # shift vectors determined later
 
-    canCheckValueC = (kernel["ProblemType"]["DataType"].isHalf() or kernel["ProblemType"]["DataType"].isBFloat16()) and \
+    canCheckValueC = (kernel["ProblemType"]["MacDataTypeA"].isHalf() or kernel["ProblemType"]["MacDataTypeA"].isBFloat16()) and \
                       kernel["ProblemType"]["HighPrecisionAccumulate"]
-    canCheckValueC = canCheckValueC or kernel["ProblemType"]["DataType"].isSingle()
-    canCheckValueC = canCheckValueC or (kernel["ProblemType"]["DataType"].isInt8() and kernel["ProblemType"]["HighPrecisionAccumulate"])
+    canCheckValueC = canCheckValueC or kernel["ProblemType"]["MacDataTypeA"].isSingle()
+    canCheckValueC = canCheckValueC or (kernel["ProblemType"]["MacDataTypeA"].isInt8() and kernel["ProblemType"]["HighPrecisionAccumulate"])
     assert not self.db["CheckValueC"] or canCheckValueC
 
     # Epilogue related

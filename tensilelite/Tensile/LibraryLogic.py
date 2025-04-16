@@ -298,7 +298,7 @@ class LogicAnalyzer:
           self.solutionMinNaming))
       self.solutionTiles.append("%ux%u"%(solution["MacroTile0"], \
           solution["MacroTile1"]))
-    self.flopsPerMac = self.problemType["DataType"].flopsPerMac()
+    self.flopsPerMac = self.problemType["MacDataTypeA"].flopsPerMac()
 
     # merge problem sizes from size groups
     #self.numIndices = len(problemSizesList[0].numProblemSizes)

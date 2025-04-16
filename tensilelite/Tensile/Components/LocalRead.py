@@ -116,24 +116,24 @@ class LocalReadVALU(LocalRead):
                             # localReadCode.addInst( "s_waitcnt_vscnt", "null", "0", "")
                             localReadCode.add(SWaitCnt(vmcnt=0, vscnt=0))
 
-                        if kernel["ProblemType"]["DataType"].isHalf():
+                        if kernel["ProblemType"]["MacDataTypeA"].isHalf():
                             localReadCode.add(SMovB32(dst=sgpr(tmpSgpr), src=hex(0x3c003c00), comment="CheckValue1: FP16")) # packed 1s
                             localReadCode.add(writer.assert_eq( dbgVgpr, sgpr(tmpSgpr)))
 
-                        elif kernel["ProblemType"]["DataType"].isBFloat16():
+                        elif kernel["ProblemType"]["MacDataTypeA"].isBFloat16():
                             localReadCode.add(SMovB32(dst=sgpr(tmpSgpr), src=hex(0x3f803f80), comment="CheckValue1: BF16")) # packed 1s
                             localReadCode.add(writer.assert_eq( dbgVgpr, sgpr(tmpSgpr)))
 
                         # TODO - Check if this works
-                        if kernel["ProblemType"]["DataType"].isInt8():
+                        if kernel["ProblemType"]["MacDataTypeA"].isInt8():
                             localReadCode.add(SMovB32(dst=sgpr(tmpSgpr), src=hex(0x01010101), comment="CheckValue1: INT8")) # packed 1s
                             localReadCode.add(writer.assert_eq( dbgVgpr, sgpr(tmpSgpr)))
 
                         # TODO - Check if this works
-                        elif kernel["ProblemType"]["DataType"].isInt8x4():
+                        elif kernel["ProblemType"]["MacDataTypeA"].isInt8x4():
                             localReadCode.add(writer.assert_eq( dbgVgpr, 1))
 
-                        elif kernel["ProblemType"]["DataType"].isSingle():
+                        elif kernel["ProblemType"]["MacDataTypeA"].isSingle():
                             localReadCode.add(writer.assert_eq( dbgVgpr, 1.0) )
 
         return imod, pack
@@ -265,7 +265,7 @@ class LocalReadMFMA(LocalRead):
         if writer.states.archCaps["HasEccHalf"] or not writer.states.asmCaps["HasWMMA_V1"]:
             needPack = tP["bpeDS"] < 4 and not kernel["UnrollMajorLDS%s"%tc] and not tP["isM"]
             # specify I8 for the case that input number is equal to the localread blockwidth but need to split low and high bytes to different vgprs.
-            needPackMetadata = tP["isM"] and ((kernel["MIInputPerThread%s"%tc] * tP["bpeDS"] / (blockWidth * 4) > 1) or (kernel["ProblemType"]["DataType"].numBytes() == 1 and writer.states.lrvwTileMetadata > 1))
+            needPackMetadata = tP["isM"] and ((kernel["MIInputPerThread%s"%tc] * tP["bpeDS"] / (blockWidth * 4) > 1) or (kernel["ProblemType"]["MacDataTypeA"].numBytes() == 1 and writer.states.lrvwTileMetadata > 1))
             needPack |= needPackMetadata
         else:
             needPack = blockWidth == 0.25
@@ -478,7 +478,7 @@ class LocalReadMFMA(LocalRead):
                                                                       src2=sgpr("PackKForV%u"%elementIdx), \
                                                                       comment="select K=%u%u for vector=%u"%(vgprOffset*2+1, vgprOffset*2, elementIdx)))
                                                 vgprOffset += (1 if elementIdx % 2 == 1 else 0)
-                                        elif kernel["ProblemType"]["DataType"].isHalf() or kernel["MFMA_BF16_1K"] or kernel["ProblemType"]["DataType"].isBFloat16():
+                                        elif kernel["ProblemType"]["MacDataTypeA"].isHalf() or kernel["MFMA_BF16_1K"] or kernel["ProblemType"]["MacDataTypeA"].isBFloat16():
                                             vgprOffset = 0
                                             for vectorIdx in range(0, numElementPerReg):
                                                 for elementIdx in range(0, int(tP["bpe"]*kernel["MIInputPerThread%s"%tc]//writer.states.bpr)):
@@ -487,7 +487,7 @@ class LocalReadMFMA(LocalRead):
                                                                           src1=vgpr("Valu%s_X%u_I%u_D%u+%u"%(tc, bufferIdx, iui, elementIdx*numElementPerReg, i+vIdx*numVgpr)), src2=sgpr("PackKForV%u"%vectorIdx), \
                                                                           comment="select K=%u%u for vector=%u"%(elementIdx*numElementPerReg,  elementIdx*numElementPerReg+1, vectorIdx)))
                                                     vgprOffset += 1
-                                        elif kernel["ProblemType"]["DataType"].isInt8() or kernel["ProblemType"]["DataType"].is8bitFloat():
+                                        elif kernel["ProblemType"]["MacDataTypeA"].isInt8() or kernel["ProblemType"]["MacDataTypeA"].is8bitFloat():
                                             vgprOffset = 0
                                             # vertorIdx 2,3 is for the case vectorWidth > 2
                                             for vectorIdx in range(0, numElementPerReg):
@@ -622,32 +622,32 @@ class LocalReadMFMA(LocalRead):
 
                                 localReadCode.add(SWaitCnt(lgkmcnt=0, vscnt=0, comment="CheckValue1 wait for LDS read"))
 
-                                if kernel["ProblemType"]["DataType"].isHalf():
+                                if kernel["ProblemType"]["MacDataTypeA"].isHalf():
                                     hexValue = hex(0x3c003c00)     # packed 1s
                                     if needPack:
                                         hexValue = hex(0x3c000000) if highBitsForHalf else hex(0x00003c00)
                                     localReadCode.add(SMovB32(dst=sgpr(tmpSgpr), src=hexValue, comment="CheckValue1: FP16"))
                                     localReadCode.add(writer.assert_eq( dbgVgpr, sgpr(tmpSgpr)))
 
-                                elif kernel["ProblemType"]["DataType"].isBFloat16():
+                                elif kernel["ProblemType"]["MacDataTypeA"].isBFloat16():
                                     hexValue = hex(0x3f803f80)     # packed 1s
                                     if needPack:
                                         hexValue = hex(0x3f800000) if highBitsForHalf else hex(0x00003f80)
                                     localReadCode.add(SMovB32(dst=sgpr(tmpSgpr), src=hexValue, comment="CheckValue1: BF16"))
                                     localReadCode.add(writer.assert_eq( dbgVgpr, sgpr(tmpSgpr)))
 
-                                if kernel["ProblemType"]["DataType"].isInt8():
+                                if kernel["ProblemType"]["MacDataTypeA"].isInt8():
                                     if needPack:
                                         hexValue = hex(0x00010000) if isHigh16Bits else hex(0x00000001)
                                         localReadCode.add(SMovB32(dst=sgpr(tmpSgpr), src=hexValue, comment="CheckValue1: INT8"))
                                         localReadCode.add(writer.assert_eq( dbgVgpr, sgpr(tmpSgpr)))
 
                                 # TODO - Check if this works. But need this? MFMA would use INT8
-                                elif kernel["ProblemType"]["DataType"].isInt8x4():
+                                elif kernel["ProblemType"]["MacDataTypeA"].isInt8x4():
                                     localReadCode.add(SMovB32(dst=sgpr(tmpSgpr), src=hex(0x01010101), comment="CheckValue1: INT8x4"))
                                     localReadCode.add(writer.assert_eq( dbgVgpr, sgpr(tmpSgpr)))
 
-                                elif kernel["ProblemType"]["DataType"].isSingle():
+                                elif kernel["ProblemType"]["MacDataTypeA"].isSingle():
                                     localReadCode.add(writer.assert_eq( dbgVgpr, 1.0) )
 
         # DTV case, do not return local read code. Return pack code only.

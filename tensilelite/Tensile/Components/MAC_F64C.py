@@ -27,7 +27,8 @@ from ..Component import Component, MAC
 
 class FMA_F64C_Plain(MAC):
     asmCaps = {"v_fma_f64": True}
-    kernel = {"ProblemType": {"DataType": DataType(DataType.complexDouble)}}
+    kernel = {"ProblemType": {"MacDataTypeA": DataType(DataType.complexDouble),
+                              "MacDataTypeB": DataType(DataType.complexDouble)}}
 
     def __call__(self, writer, m, innerUnroll):
         kernel = writer.states.kernel

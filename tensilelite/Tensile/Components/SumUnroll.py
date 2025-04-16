@@ -50,8 +50,8 @@ class SumUnrollMfma(SumUnroll):
 
         # Init sum unroll, create pack for dot if needed
         # Unregister is in storeSumLDS
-        if kernel["ProblemType"]["DataType"].numRegisters() < 1:
-            if kernel["ProblemType"]["DataType"].isHalf():
+        if kernel["ProblemType"]["MacDataTypeA"].numRegisters() < 1:
+            if kernel["ProblemType"]["MacDataTypeA"].isHalf():
                 writer.defineSgpr("SumUnrollConstOne", 1)
                 imod.add(RegSet("s", "sgprSumUnrollConstOne", writer.sgprs["SumUnrollConstOne"]))
                 imod.add(SMovB32(dst=sgpr("SumUnrollConstOne"), src=hex(0x3c003c00), comment="packed 1.0"))
@@ -65,11 +65,6 @@ class SumUnrollMfma(SumUnroll):
 
         m = (u) % (writer.states.numVgprBuffer) # local to use for MACs
 
-        # calculate constant
-        numRegistersIn   = kernel["ProblemType"]["DataType"].numRegisters()
-        numMIInput       = kernel["MIInputPerThread%s"%tc]
-        vgprPerInput     = int(numMIInput * numRegistersIn)
-
         if tc == "A":
             waveTile = kernel["MIWaveTile"][0]
             numIterPerCoalescedRead = writer.states.numIterPerCoalescedReadA
@@ -80,6 +75,12 @@ class SumUnrollMfma(SumUnroll):
             numReadsIterCoalesced = writer.states.numReadsIterCoalescedB
         else:
             printExit("Unsupported tc %s"%tc)
+
+        # calculate constant
+        numRegistersIn   = kernel["ProblemType"]["MacDataType%s"%tc].numRegisters()
+        numMIInput       = kernel["MIInputPerThread%s"%tc]
+        vgprPerInput     = int(numMIInput * numRegistersIn)
+
         # here we remap index to where it read for wider local read
         # ex. if we read 2 iteration at a time,
         #   original   : _ds_load_b64  valuA_X0_I0
@@ -89,7 +90,7 @@ class SumUnrollMfma(SumUnroll):
         vgprBuffer_new = (m//numIterPerCoalescedRead)*numIterPerCoalescedRead
         vgprBuffer_new_offset = m%numIterPerCoalescedRead*kernel["InnerUnroll"]*vgprPerInput
 
-        if kernel["ProblemType"]["DataType"].isBFloat16():
+        if kernel["ProblemType"]["MacDataType%s"%tc].isBFloat16():
             hiBitsMaskVgpr = writer.vgprPool.checkOut(1)
             imod.add(VMovB32(dst=vgpr(hiBitsMaskVgpr), src=hex(0xffff0000), comment="mask 0xffff0000 for pack two bfloat16 element to 32bit"))
 
@@ -102,19 +103,19 @@ class SumUnrollMfma(SumUnroll):
                 valuStr    = "Valu%s_X%u_I%u+%u+%u" % (tc, vgprBuffer_new, iui_new, new, vgprBuffer_new_offset)
                 valuSumStr = "ValuSum+%u"%idx
                 # If direct ot vgpr, use "G2LA+%u+%u+%u", currently not supported
-                if kernel["ProblemType"]["DataType"].isHalf():
+                if kernel["ProblemType"]["MacDataType%s"%tc].isHalf():
                     # First version only supports mfma with K > 1
                     if vgprPerInput > 1 and (vgprPerInput % 2 == 0):
                         for inputIdx in range(0, vgprPerInput):
                             imod.add(VDot2F32F16(dst=vgpr(valuSumStr), src0=vgpr("%s+%s"%(valuStr, iui_new_offset + inputIdx)), src1=sgpr("SumUnrollConstOne"), src2=vgpr(valuSumStr), comment="sum K"))
                     else:
                         printExit("Currently unsupported vgprPerInput %u"%vgprPerInput)
-                elif kernel["ProblemType"]["DataType"].isSingle():
+                elif kernel["ProblemType"]["MacDataType%s"%tc].isSingle():
                     inputIdx = 0
                     while inputIdx < vgprPerInput:
                         imod.add(VAddF32(dst=vgpr(valuSumStr), src0=vgpr("%s+%s"%(valuStr, iui_new_offset + inputIdx)), src1=vgpr(valuSumStr), comment="sum K"))
                         inputIdx += 1
-                elif kernel["ProblemType"]["DataType"].isBFloat16():
+                elif kernel["ProblemType"]["MacDataType%s"%tc].isBFloat16():
                     # BF16 BiasSrcA,B
                     tmpVgpr = writer.vgprPool.checkOutAligned(2,2)
                     if vgprPerInput > 1 and (vgprPerInput % 2 == 0):
@@ -126,8 +127,7 @@ class SumUnrollMfma(SumUnroll):
                     else:
                         printExit("Currently unsupported vgprPerInput %u"%vgprPerInput)
                     writer.vgprPool.checkIn(tmpVgpr)
-                elif (kernel["ProblemType"]["DataType"].isAnyFloat8A() and tc == "A") or \
-                     (kernel["ProblemType"]["DataType"].isAnyFloat8B() and tc == "B"):
+                elif kernel["ProblemType"]["MacDataType%s"%tc].isAnyFloat8():
                     #FP8
                     tmpVgpr = writer.vgprPool.checkOutAligned(4,2)
                     if vgprPerInput > 1 and (vgprPerInput % 2 == 0):
@@ -143,8 +143,7 @@ class SumUnrollMfma(SumUnroll):
                     else:
                         printExit("Currently unsupported vgprPerInput %u"%vgprPerInput)
                     writer.vgprPool.checkIn(tmpVgpr)
-                elif (kernel["ProblemType"]["DataType"].isAnyBFloat8A() and tc == "A") or \
-                     (kernel["ProblemType"]["DataType"].isAnyBFloat8B() and tc == "B"):
+                elif kernel["ProblemType"]["MacDataType%s"%tc].isAnyBFloat8():
                     #BF8
                     tmpVgpr = writer.vgprPool.checkOutAligned(4,2)
                     if vgprPerInput > 1 and (vgprPerInput % 2 == 0):
@@ -163,7 +162,7 @@ class SumUnrollMfma(SumUnroll):
                 else:
                     printExit("Currently unsupported data type")
 
-        if kernel["ProblemType"]["DataType"].isBFloat16():
+        if kernel["ProblemType"]["MacDataType%s"%tc].isBFloat16():
             writer.vgprPool.checkIn(hiBitsMaskVgpr)
 
         return imod
@@ -176,8 +175,8 @@ class SumUnrollMfma(SumUnroll):
     def storeSumLDS(self, writer, kernel, tP):
         imod = Module("StoreSumLDS")
         # Unregister defined sgpr
-        if kernel["ProblemType"]["DataType"].numRegisters() < 1:
-            if kernel["ProblemType"]["DataType"].isHalf():
+        if kernel["ProblemType"]["MacDataTypeA"].numRegisters() < 1:
+            if kernel["ProblemType"]["MacDataTypeA"].isHalf():
                 writer.undefineSgpr("SumUnrollConstOne")
 
         # bias data type

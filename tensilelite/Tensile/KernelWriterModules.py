@@ -213,7 +213,7 @@ def accVgprImagNumOffset(kernel):
 def mapAcctoArchRegs(kernel, maxAgpr=256, write=False):
   acc2arch, _ = accToArchMapper(kernel)
 
-  complexMultiplier = 2 if kernel["ProblemType"]["DataType"].isComplex() else 1
+  complexMultiplier = 2 if kernel["ProblemType"]["MacDataTypeA"].isComplex() else 1
   imod = Module("AccVgpr{}".format("Write" if write else "Read"))
   imod.itemList = [None] * kernel["MIRegPerOut"] * complexMultiplier * len(acc2arch)
   accImOffset = accVgprImagNumOffset(kernel)

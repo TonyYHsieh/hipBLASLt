@@ -26,7 +26,8 @@ from ..TensileInstructions import DataType, Module
 from ..Component import Component, MAC
 
 class MAC_F32C_Plain(MAC):
-    kernel = {"ProblemType": {"DataType": DataType(DataType.complexSingle)}}
+    kernel = {"ProblemType": {"MacDataTypeA": DataType(DataType.complexSingle),
+                              "MacDataTypeB": DataType(DataType.complexSingle)}}
 
     def __call__(self, writer, m, innerUnroll):
         kernel = writer.states.kernel

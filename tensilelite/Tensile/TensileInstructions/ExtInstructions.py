@@ -632,7 +632,7 @@ class Dump:
 
         return module
 
-    def dumpLds(self, startU: int, numU: int, tmpVgprRes: RegisterPoolResource, bpeAB: int, \
+    def dumpLds(self, startU: int, numU: int, tmpVgprRes: RegisterPoolResource, bpeA: int, \
                 numThreads: int, labelName: str) -> Module:
         module = Module("dump lds")
         if self.enableDump:
@@ -644,7 +644,7 @@ class Dump:
             module.add(SBarrier(comment="dump LDS"))
             module.add(VLShiftLeftB32(
                 dst=vgpr(tmpAddr), \
-                shiftHex=hex(bpeAB), \
+                shiftHex=hex(bpeA), \
                 src=vgpr("Serial"), \
                 comment="dump lds"))
             for i in range(startU, startU+numU):
