@@ -136,7 +136,6 @@ class ProblemType(Mapping):
       self["DataTypeA"] = self["DataType"]
       self["DataTypeB"] = self["DataType"]
     else:
-      printExit("NO data type specified")
       self["DataType"]  = DataType(0)
       self["MacDataTypeA"] = DataType(0)
       self["MacDataTypeB"] = DataType(0)
@@ -2351,15 +2350,11 @@ class Solution(collections.abc.Mapping):
       if not (globalParameters["AsmCaps"][isa]["HasMFMA"] or globalParameters["AsmCaps"][isa]["HasWMMA"]):
         reject(state, f"isa {isa} doesn't support matrix instruction")
         return
-      if not (state["ProblemType"]["MacDataTypeA"].isSingle() \
-              or state["ProblemType"]["MacDataTypeA"].isDouble() \
-              or state["ProblemType"]["MacDataTypeA"].isBFloat16() \
-              or state["ProblemType"]["MacDataTypeA"].isHalf() \
-              or state["ProblemType"]["MacDataTypeA"].isComplex() \
-              or state["ProblemType"]["MacDataTypeA"].is8bitFloat() \
-              or state["ProblemType"]["MacDataTypeA"].isInt8() \
-              or state["ProblemType"]["MacDataTypeA"].is6bitFloat() \
-              or state["ProblemType"]["MacDataTypeA"].isFloat4()):
+      key = state["ProblemType"]["MacDataTypeA"].toChar() + state["ProblemType"]["MacDataTypeB"].toChar()
+      if key not in ("SS", "XX", "DD", "BB", "HH", "CC", "ZZ", \
+                     "F8F8", "F8B8", "B8B8", "B8F8", \
+                     "F8NF8N", "F8NB8N", "B8NB8N", "B8NF8N", \
+                     "I8I8", "F6F6", "B6B6", "F4F4"):
         reject(state, "didn't support Matrix Instruction with type %s" % str(state["ProblemType"]["MacDataTypeA"]))
         return
       if (not globalParameters["AsmCaps"][isa]["HasMFMA"] and globalParameters["AsmCaps"][isa]["HasWMMA"] and (state["WavefrontSize"] == 64)):

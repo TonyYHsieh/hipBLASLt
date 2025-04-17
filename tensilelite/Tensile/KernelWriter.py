@@ -5581,7 +5581,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     tP["isMXSB"] = (cM == "MXSB")                                      # is this tensor B
     tP["isM"] = (cM == "Metadata")                               # is this tensor Metadata
 
-    bpe = self.tpBpe(kernel, "DataType", cM)
+    bpe = self.tpBpe(kernel, f"MacDataType{cM}", cM)
     bpetc = self.tpBpe(kernel, f"DataType{cM}", cM)
     bpeA = self.tpBpe(kernel, "DataTypeA", cM)
 
