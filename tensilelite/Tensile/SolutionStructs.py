@@ -2354,7 +2354,7 @@ class Solution(collections.abc.Mapping):
       if key not in ("SS", "XX", "DD", "BB", "HH", "CC", "ZZ", \
                      "F8F8", "F8B8", "B8B8", "B8F8", \
                      "F8NF8N", "F8NB8N", "B8NB8N", "B8NF8N", \
-                     "I8I8", "F6F6", "B6B6", "F4F4"):
+                     "I8I8", "F6F6", "B6B6", "F6F4", "F4F6", "F4F4"):
         reject(state, "didn't support Matrix Instruction with type %s" % str(state["ProblemType"]["MacDataTypeA"]))
         return
       if (not globalParameters["AsmCaps"][isa]["HasMFMA"] and globalParameters["AsmCaps"][isa]["HasWMMA"] and (state["WavefrontSize"] == 64)):

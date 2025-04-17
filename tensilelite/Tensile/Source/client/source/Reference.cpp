@@ -672,6 +672,10 @@ omp_set_num_threads(MAX_OMP_THREADS);
 #ifdef TENSILE_USE_FP4
                                && (!std::is_same<Float4x2, AType>::value && !std::is_same<Float4x2, BType>::value)
 #endif // #ifdef TENSILE_USE_FP4
+#if defined(TENSILE_USE_FP6) && defined(TENSILE_USE_FP4)
+                               && (!std::is_same<Float6x32, AType>::value && !std::is_same<Float4x2, BType>::value)
+                               && (!std::is_same<Float4x2, AType>::value && !std::is_same<Float6x32, BType>::value)
+#endif // #if defined(TENSILE_USE_FP6) && defined(TENSILE_USE_FP4)
                                , bool> = true
 #endif // defined(TENSILE_USE_FP6) || defined(TENSILE_USE_BF6) || defined(TENSILE_USE_FP4)
         >
@@ -769,6 +773,10 @@ omp_set_num_threads(MAX_OMP_THREADS);
 #ifdef TENSILE_USE_FP4
                              || (std::is_same<Float4x2, AType>::value && std::is_same<Float4x2, BType>::value)
 #endif // #ifdef TENSILE_USE_FP4
+#if defined(TENSILE_USE_FP6) && defined(TENSILE_USE_FP4)
+                             || (std::is_same<Float6x32, AType>::value && std::is_same<Float4x2, BType>::value)
+                             || (std::is_same<Float4x2, AType>::value && std::is_same<Float6x32, BType>::value)
+#endif // defined(TENSILE_USE_FP6) && defined(TENSILE_USE_FP4)
                              , bool> = true>
         Accumulator multiply(
             ContractionProblemGemm const& problem,
@@ -1818,6 +1826,18 @@ omp_set_num_threads(MAX_OMP_THREADS);
                     problem, inputs, elementsToValidate);
             }
 #endif //TENSILE_USE_FP4
+#if defined(TENSILE_USE_FP6) && defined(TENSILE_USE_FP4)
+            case TypedGemm_F6F4_S_S::TypeId():
+            {
+                return ReferenceSolution<TypedGemm_F6F4_S_S>::SolveCPU(
+                    problem, inputs, elementsToValidate);
+            }
+            case TypedGemm_F4F6_S_S::TypeId():
+            {
+                return ReferenceSolution<TypedGemm_F4F6_S_S>::SolveCPU(
+                    problem, inputs, elementsToValidate);
+            }
+#endif // defined(TENSILE_USE_FP6) && defined(TENSILE_USE_FP4)
             default:;
             }
 

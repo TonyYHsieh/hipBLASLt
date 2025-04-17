@@ -226,4 +226,8 @@ namespace TensileLite
 #ifdef TENSILE_USE_FP4
     using TypedGemm_F4_S_S = TypedGemm<Float4x2, Float4x2, float, float>;
 #endif // TENSILE_USE_FP4
+#if defined(TENSILE_USE_FP6) && defined(TENSILE_USE_FP4)
+    using TypedGemm_F6F4_S_S = TypedGemm<Float6x32, Float4x2, float, float, float, float, Float6x32, Float4x2>;
+    using TypedGemm_F4F6_S_S = TypedGemm<Float4x2, Float6x32, float, float, float, float, Float4x2, Float6x32>;
+#endif // defined(TENSILE_USE_FP6) && defined(TENSILE_USE_BF6)
 } // namespace TensileLite
