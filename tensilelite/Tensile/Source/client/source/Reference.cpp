@@ -1801,9 +1801,20 @@ omp_set_num_threads(MAX_OMP_THREADS);
             }
 #endif //TENSILE_USE_BF6
 #ifdef TENSILE_USE_FP4
+
             case TypedGemm_F4_S_S::TypeId():
             {
                 return ReferenceSolution<TypedGemm_F4_S_S>::SolveCPU(
+                    problem, inputs, elementsToValidate);
+            }
+            case TypedGemm_F8F4_S_S::TypeId():
+            {
+                return ReferenceSolution<TypedGemm_F8F4_S_S>::SolveCPU(
+                    problem, inputs, elementsToValidate);
+            }
+            case TypedGemm_F4F8_S_S::TypeId():
+            {
+                return ReferenceSolution<TypedGemm_F4F8_S_S>::SolveCPU(
                     problem, inputs, elementsToValidate);
             }
 #endif //TENSILE_USE_FP4
