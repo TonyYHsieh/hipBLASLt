@@ -330,6 +330,10 @@ class MFMAInstruction(Instruction):
             kStr = "f8f6f4"
         elif iType == InstType.INST_F4_F6:
             kStr = "f8f6f4"
+        elif iType == InstType.INST_B6_F4:
+            kStr = "f8f6f4"
+        elif iType == InstType.INST_F4_B6:
+            kStr = "f8f6f4"
         else:
             printExit("Type %s not found"%str(iType))
         return kStr
@@ -376,6 +380,10 @@ class MFMAInstruction(Instruction):
                 return " cbsz:2 blgp:4"
             elif self.instType == InstType.INST_F4_F6:
                 return " cbsz:4 blgp:2"
+            elif self.instType == InstType.INST_B6_F4:
+                return " cbsz:3 blgp:4"
+            elif self.instType == InstType.INST_F4_B6:
+                return " cbsz:4 blgp:3"
 
         return ""
 
@@ -437,6 +445,10 @@ class MXMFMAInstruction(Instruction):
                 return " cbsz:2 blgp:4"
             elif self.instType == InstType.INST_F4_F6:
                 return " cbsz:4 blgp:2"
+            elif self.instType == InstType.INST_B6_F4:
+                return " cbsz:3 blgp:4"
+            elif self.instType == InstType.INST_F4_B6:
+                return " cbsz:4 blgp:3"
 
         return ""
 

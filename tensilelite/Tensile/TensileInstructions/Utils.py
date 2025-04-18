@@ -140,6 +140,12 @@ def dataTypeNameAbbrevToInstType(abbrevA: str, abbrevB: str, sourceSwap: bool = 
     elif (abbrev == 'fp4_fp6' and sourceSwap == False) or \
         (abbrev == 'fp6_fp4' and sourceSwap == True):
         return InstType.INST_F4_F6
+    elif (abbrev == 'bf6_fp4' and sourceSwap == False) or \
+        (abbrev == 'fp4_bf6' and sourceSwap == True):
+        return InstType.INST_B6_F4
+    elif (abbrev == 'fp4_bf6' and sourceSwap == False) or \
+        (abbrev == 'bf6_fp4' and sourceSwap == True):
+        return InstType.INST_F4_B6
     else:
         assert("Unsupported data type.")
     return InstType.INST_NOTYPE
