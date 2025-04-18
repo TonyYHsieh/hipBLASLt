@@ -2355,7 +2355,7 @@ class Solution(collections.abc.Mapping):
                      "F8F8", "F8B8", "B8B8", "B8F8", \
                      "F8NF8N", "F8NB8N", "B8NB8N", "B8NF8N", \
                      "F8F4", "F4F8", \
-                     "F6F6", "B6B6", "B6F4", "F4B6", "F6F4", "F4F6", "F4F4"):
+                     "F6F6", "B6B6", "F6B6", "B6F6","B6F4", "F4B6", "F6F4", "F4F6", "F4F4"):
         reject(state, "didn't support Matrix Instruction with type %s" % key)
         return
       if (not globalParameters["AsmCaps"][isa]["HasMFMA"] and globalParameters["AsmCaps"][isa]["HasWMMA"] and (state["WavefrontSize"] == 64)):

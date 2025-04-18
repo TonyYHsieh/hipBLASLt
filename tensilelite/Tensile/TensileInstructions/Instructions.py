@@ -326,6 +326,10 @@ class MFMAInstruction(Instruction):
             kStr = "f8f6f4"
         elif iType == InstType.INST_F4_F8:
             kStr = "f8f6f4"
+        elif iType == InstType.INST_F6_B6:
+            kStr = "f8f6f4"
+        elif iType == InstType.INST_B6_F6:
+            kStr = "f8f6f4"
         elif iType == InstType.INST_F6_F4:
             kStr = "f8f6f4"
         elif iType == InstType.INST_F4_F6:
@@ -376,6 +380,10 @@ class MFMAInstruction(Instruction):
                 return " cbsz:0 blgp:4"
             elif self.instType == InstType.INST_F4_F8:
                 return " cbsz:4 blgp:0"
+            elif self.instType == InstType.INST_F6_B6:
+                return " cbsz:2 blgp:3"
+            elif self.instType == InstType.INST_B6_F6:
+                return " cbsz:3 blgp:2"
             elif self.instType == InstType.INST_F6_F4:
                 return " cbsz:2 blgp:4"
             elif self.instType == InstType.INST_F4_F6:
@@ -441,6 +449,10 @@ class MXMFMAInstruction(Instruction):
                 return " cbsz:0 blgp:4"
             elif self.instType == InstType.INST_F4_F8:
                 return " cbsz:4 blgp:0"
+            elif self.instType == InstType.INST_F6_B6:
+                return " cbsz:2 blgp:3"
+            elif self.instType == InstType.INST_B6_F6:
+                return " cbsz:3 blgp:2"
             elif self.instType == InstType.INST_F6_F4:
                 return " cbsz:2 blgp:4"
             elif self.instType == InstType.INST_F4_F6:
