@@ -3022,16 +3022,12 @@ class Solution(collections.abc.Mapping):
 
         if state["LocalReadVectorWidthA"] == -1:
           state["LocalReadVectorWidthA"] = state["LocalReadVectorWidth"]
-          if state["ProblemType"]["Sparse"] == 1:
-            state["LocalReadVectorWidthA"] = state["LocalReadVectorWidthA"] // 2
 
         if state["LocalReadVectorWidthB"] == -1:
           state["LocalReadVectorWidthB"] = state["LocalReadVectorWidth"]
-          if state["ProblemType"]["Sparse"] == 2:
-            state["LocalReadVectorWidthB"] = state["LocalReadVectorWidthB"] // 2
 
         if state["ProblemType"]["Sparse"]:
-          state["LocalReadVectorWidthMetadata"] = state["LocalReadVectorWidth"] // 8
+          state["LocalReadVectorWidthMetadata"] = state["LocalReadVectorWidth"]
 
         if state["ProblemType"]["MXBlockA"]:
           state["LocalReadVectorWidthMXSA"] = 1 # TODO: check if need to fomulization

@@ -157,6 +157,14 @@ class LraTileAssignmentMFMA(LraTileAssignment):
         waveWidth = writer.states.kernel["WavefrontSize"]
         lrvw      = kernel["LocalReadVectorWidth%s"%tc]
 
+        if kernel["ProblemType"]["Sparse"]:
+          if (kernel["ProblemType"]["Sparse"] == 2 and tP["isB"]) or (kernel["ProblemType"]["Sparse"] == 1 and tP["isA"]):
+            lrvw = lrvw // 2
+          elif tP["isM"]:
+            lrvw = lrvw // 8
+          elif tc in ["MXSA", "MXSB"]:
+            lrvw = 1
+
         miInputPerGroup = kernel["MIInputPerThread%s"%tc]
         if writer.states.asmCaps["HasMFMA_f8f6f4"] and ((tP["bpeDS"] * miInputPerGroup) > 24):
           miInputPerGroup = int(16 / tP["bpeDS"])
