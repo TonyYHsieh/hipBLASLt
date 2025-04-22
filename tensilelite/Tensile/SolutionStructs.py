@@ -2737,6 +2737,8 @@ class Solution(collections.abc.Mapping):
     ########################################
     resetStaggerUStride = state["StaggerUStride"]
     resetLocalReadVectorWidth = state["LocalReadVectorWidth"]
+    resetLocalReadVectorWidthA = state["LocalReadVectorWidthA"]
+    resetLocalReadVectorWidthB = state["LocalReadVectorWidthB"]
     resetGlobalReadVectorWidthA = state["GlobalReadVectorWidthA"]
     resetGlobalReadVectorWidthB = state["GlobalReadVectorWidthB"]
 
@@ -2744,6 +2746,8 @@ class Solution(collections.abc.Mapping):
       userDepthU = depthuList[index[0]]
       state["StaggerUStride"] = resetStaggerUStride
       state["LocalReadVectorWidth"] = resetLocalReadVectorWidth
+      state["LocalReadVectorWidthA"] = resetLocalReadVectorWidthA
+      state["LocalReadVectorWidthB"] = resetLocalReadVectorWidthB
       state["GlobalReadVectorWidthA"] = resetGlobalReadVectorWidthA
       state["GlobalReadVectorWidthB"] =  resetGlobalReadVectorWidthB
       state["Valid"] = True
@@ -2988,6 +2992,7 @@ class Solution(collections.abc.Mapping):
         return ldsNumBytesA, ldsNumBytesAlignedA, ldsNumBytesB, ldsNumBytesAlignedB, ldsNumBytesMetadata, ldsNumBytesAlignedMetadata, \
                ldsNumBytesMXSA, ldsNumBytesAlignedMXSA, ldsNumBytesMXSB, ldsNumBytesAlignedMXSB
 
+
       # Default LocalReadVectorWidth
       if state["EnableMatrixInstruction"]:
         autoLRVW = 0
@@ -3012,6 +3017,7 @@ class Solution(collections.abc.Mapping):
             if (state["DepthU"] // state["MatrixInstK"] <= state["LocalReadVectorWidth"] // state["MIInputPerThread"]):
               # if only have 1 iteration with wider local read, reduce LRVW to have better scheduling (at least 2 iterations)
               state["LocalReadVectorWidth"] //= 2
+
           if state["LocalReadVectorWidth"] // state["MIInputPerThread"] > 1:
             padA, padB, padM = calcLdsPad(state["LocalReadVectorWidth"])
             ldsBlockSizePerPadA, ldsBlockSizePerPadB = calcLdsBlockSizePerPad(state["LocalReadVectorWidth"])
@@ -3019,8 +3025,20 @@ class Solution(collections.abc.Mapping):
               ldsNumBytesMXSA, ldsNumBytesAlignedMXSA, ldsNumBytesMXSB, ldsNumBytesAlignedMXSB = calcLdsNumBytes(padA, ldsBlockSizePerPadA, padB, ldsBlockSizePerPadB)
             if (ldsNumBytesAlignedA + ldsNumBytesAlignedB) > globalParameters["MaxLDS"]:
               state["LocalReadVectorWidth"] //= 2
-        if state["ProblemType"]["MXBlockA"] or state["ProblemType"]["MXBlockB"]:
-          state["LocalReadVectorWidthMXS"] = 1 # TODO: check if need to fomulization
+
+        if state["LocalReadVectorWidthA"] == -1:
+          state["LocalReadVectorWidthA"] = state["LocalReadVectorWidth"]
+
+        if state["LocalReadVectorWidthB"] == -1:
+          state["LocalReadVectorWidthB"] = state["LocalReadVectorWidth"]
+
+        if state["ProblemType"]["Sparse"]:
+          state["LocalReadVectorWidthMetadata"] = state["LocalReadVectorWidth"]
+
+        if state["ProblemType"]["MXBlockA"]:
+          state["LocalReadVectorWidthMXSA"] = 1 # TODO: check if need to fomulization
+        if state["ProblemType"]["MXBlockB"]:
+          state["LocalReadVectorWidthMXSB"] = 1 # TODO: check if need to fomulization
       else:
         if state["UseDotInstruction"]:
           # dot2: LRVW should be equal to NumDotElements * InnerUnroll
@@ -3029,9 +3047,15 @@ class Solution(collections.abc.Mapping):
               % (state["NumDotElements"], state["InnerUnroll"]))
             return
           state["LocalReadVectorWidth"] = state["NumDotElements"] * state["InnerUnroll"]
+          state["LocalReadVectorWidthA"] = state["NumDotElements"] * state["InnerUnroll"]
+          state["LocalReadVectorWidthB"] = state["NumDotElements"] * state["InnerUnroll"]
         else:
           if state["LocalReadVectorWidth"] == -1:
             state["LocalReadVectorWidth"] = 1
+          if state["LocalReadVectorWidthA"] == -1:
+            state["LocalReadVectorWidthA"] = 1
+          if state["LocalReadVectorWidthB"] == -1:
+            state["LocalReadVectorWidthB"] = 1
 
       def calcOptGRVW(lrvw: int, unrollMajorLDS: bool, datatype: DataType) -> int:
         # with UnrollMajorLDS, GRVW need to less or equal than LRVW to have conflict free LDS read with padding.
@@ -3058,7 +3082,7 @@ class Solution(collections.abc.Mapping):
             if state["ProblemType"]["SwizzleTensorA"]:
               state["GlobalReadVectorWidthA"] = state["MIInputPerThreadA"] * calSwizzleK(state, "A")
             else:
-              optGRVW = calcOptGRVW(state["LocalReadVectorWidth"], state["UnrollMajorLDSA"], state["ProblemType"]["DataTypeA"])
+              optGRVW = calcOptGRVW(state["LocalReadVectorWidthA"], state["UnrollMajorLDSA"], state["ProblemType"]["DataTypeA"])
               curGRVW = 1
               state["GlobalReadVectorWidthA"] = int(curGRVW)
               while (curGRVW <= optGRVW):
@@ -3097,7 +3121,7 @@ class Solution(collections.abc.Mapping):
             if state["ProblemType"]["SwizzleTensorB"]:
               state["GlobalReadVectorWidthB"] = state["MIInputPerThreadB"] * calSwizzleK(state, "B")
             else:
-              optGRVW = calcOptGRVW(state["LocalReadVectorWidth"], state["UnrollMajorLDSB"], state["ProblemType"]["DataTypeB"])
+              optGRVW = calcOptGRVW(state["LocalReadVectorWidthB"], state["UnrollMajorLDSB"], state["ProblemType"]["DataTypeB"])
               curGRVW = 1
               state["GlobalReadVectorWidthB"] = int(curGRVW)
               while (curGRVW <= optGRVW):

@@ -155,7 +155,7 @@ class LraTileAssignmentMFMA(LraTileAssignment):
         tc        = tP["tensorChar"]
         tile01    = tP["tile01Idx"]
         waveWidth = writer.states.kernel["WavefrontSize"]
-        lrvw      = kernel["LocalReadVectorWidthMXS"] if ("MX" in tc) else kernel["LocalReadVectorWidth"]
+        lrvw      = kernel["LocalReadVectorWidth%s"%tc]
 
         if kernel["ProblemType"]["Sparse"]:
           if (kernel["ProblemType"]["Sparse"] == 2 and tP["isB"]) or (kernel["ProblemType"]["Sparse"] == 1 and tP["isA"]):

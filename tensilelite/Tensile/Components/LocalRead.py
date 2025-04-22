@@ -177,7 +177,7 @@ class LocalReadMFMA(LocalRead):
         instruction      = tP["localReadInstruction"]
         LdsPad           = kernel["LdsPad%s"%tc] if kernel["LdsBlockSizePerPad%s"%tc] == 0 else 0
         UnrollStride     = kernel["MacroTile%s" % tP["tensorChar"]] + LdsPad
-        inputPerThread   = kernel["LocalReadVectorWidth"] if not writer.states.inTailLoop else kernel["MIInputPerThread%s"%tc]
+        inputPerThread   = kernel["LocalReadVectorWidth%s"%tc] if not writer.states.inTailLoop else kernel["MIInputPerThread%s"%tc]
         MIWaveGroupShape = [kernel["MatrixInstM"] * kernel["MatrixInstBM"] * kernel["MIWaveGroup"][0] * kernel["VectorWidthA"], \
                             kernel["MatrixInstN"] * kernel["MatrixInstBN"] * kernel["MIWaveGroup"][1] * kernel["VectorWidthB"]]
 
