@@ -1792,6 +1792,16 @@ omp_set_num_threads(MAX_OMP_THREADS);
                 return ReferenceSolution<TypedGemm_F6_S_S>::SolveCPU(
                     problem, inputs, elementsToValidate);
             }
+            case TypedGemm_F8F6_S_S::TypeId():
+            {
+                return ReferenceSolution<TypedGemm_F8F6_S_S>::SolveCPU(
+                    problem, inputs, elementsToValidate);
+            }
+            case TypedGemm_F6F8_S_S::TypeId():
+            {
+                return ReferenceSolution<TypedGemm_F6F8_S_S>::SolveCPU(
+                    problem, inputs, elementsToValidate);
+            }
 #endif //TENSILE_USE_FP6
 #ifdef TENSILE_USE_BF6
             case TypedGemm_BF6_S_S::TypeId():
