@@ -3718,7 +3718,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
     if kernel["UnrollMajorLDSA"]:
       divider = 2 if (kernel["ProblemType"]["Sparse"] == 1) else 1
-      self.states.lrvwUnrollA = kernel["LocalReadVectorWidth"] // divider
+      self.states.lrvwUnrollA = kernel["LocalReadVectorWidthA"] // divider
     else:
       self.states.lrvwUnrollA = 1
     if kernel["ProblemType"]["MXBlockA"]:
@@ -3726,7 +3726,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
     if kernel["UnrollMajorLDSB"]:
       divider = 2 if (kernel["ProblemType"]["Sparse"] == 2) else 1
-      self.states.lrvwUnrollB = kernel["LocalReadVectorWidth"] // divider
+      self.states.lrvwUnrollB = kernel["LocalReadVectorWidthB"] // divider
     else:
       self.states.lrvwUnrollB = 1
     if kernel["ProblemType"]["MXBlockB"]:
