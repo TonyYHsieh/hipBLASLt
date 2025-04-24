@@ -2820,42 +2820,48 @@ class Solution(collections.abc.Mapping):
               optPadB *= 2
 
         if ldsPadA == -1:
-          if not state["UnrollMajorLDSA"]:
-            if state["EnableMatrixInstruction"]:
-              ldsPadA = 0
-              if state["MatrixInstB"] == 1 and state["MatrixInstM"] == 16:
-                ldsPadA = int(((16 * state["VectorWidthA"] * state["ProblemType"]["MacDataTypeA"].numBytes() + state["MacroTile0"] * state["ProblemType"]["MacDataTypeA"].numBytes() * lrvwA) % 128) // state["ProblemType"]["MacDataTypeA"].numBytes())
-              if state["GlobalReadVectorWidthA"] * state["ProblemType"]["MacDataTypeA"].numBytes() == 32 and ldsPadA == 0:
-                ldsPadA = int(16 // state["ProblemType"]["MacDataTypeA"].numBytes())
-            else: # mac instruction
-              if state["ProblemType"]["TLUA"]:
-                ldsPadA = 0
-              else:
-                ldsPadA = state["VectorWidthA"]
+          if state["ProblemType"]["DataTypeA"].is6bitFloat():
+            ldsPadA = 0
           else:
-            ldsPadA = max(state["GlobalReadVectorWidthA"],optPadA)
-            ## turn-off padding for directToLds
-            if state["DirectToLdsA"]:
-              ldsPadA = 0
+            if not state["UnrollMajorLDSA"]:
+              if state["EnableMatrixInstruction"]:
+                ldsPadA = 0
+                if state["MatrixInstB"] == 1 and state["MatrixInstM"] == 16:
+                  ldsPadA = int(((16 * state["VectorWidthA"] * state["ProblemType"]["MacDataTypeA"].numBytes() + state["MacroTile0"] * state["ProblemType"]["MacDataTypeA"].numBytes() * lrvwA) % 128) // state["ProblemType"]["MacDataTypeA"].numBytes())
+                if state["GlobalReadVectorWidthA"] * state["ProblemType"]["MacDataTypeA"].numBytes() == 32 and ldsPadA == 0:
+                  ldsPadA = int(16 // state["ProblemType"]["MacDataTypeA"].numBytes())
+              else: # mac instruction
+                if state["ProblemType"]["TLUA"]:
+                  ldsPadA = 0
+                else:
+                  ldsPadA = state["VectorWidthA"]
+            else:
+              ldsPadA = max(state["GlobalReadVectorWidthA"],optPadA)
+              ## turn-off padding for directToLds
+              if state["DirectToLdsA"]:
+                ldsPadA = 0
           assert(ldsPadA >= 0)
 
         if ldsPadB == -1:
-          if not state["UnrollMajorLDSB"]:
-            if state["EnableMatrixInstruction"]:
-              ldsPadB = 0
-              if state["MatrixInstB"] == 1 and state["MatrixInstM"] == 16:
-                ldsPadB = int(((16 * state["VectorWidthB"] * state["ProblemType"]["MacDataTypeB"].numBytes() + state["MacroTile1"] * state["ProblemType"]["MacDataTypeB"].numBytes() * lrvwB) % 128) // state["ProblemType"]["MacDataTypeB"].numBytes())
-              if state["GlobalReadVectorWidthB"] * state["ProblemType"]["MacDataTypeB"].numBytes() == 32 and ldsPadB == 0:
-                ldsPadB = int(16 // state["ProblemType"]["MacDataTypeB"].numBytes())
-            else:
-              if state["ProblemType"]["TLUB"]:
-                ldsPadB = 0
-              else:
-                ldsPadB = state["VectorWidthB"]
+          if state["ProblemType"]["DataTypeB"].is6bitFloat():
+            ldsPadB = 0
           else:
-            ldsPadB = max(state["GlobalReadVectorWidthB"],optPadB)
-            if state["DirectToLdsB"]:
-              ldsPadB = 0
+            if not state["UnrollMajorLDSB"]:
+              if state["EnableMatrixInstruction"]:
+                ldsPadB = 0
+                if state["MatrixInstB"] == 1 and state["MatrixInstM"] == 16:
+                  ldsPadB = int(((16 * state["VectorWidthB"] * state["ProblemType"]["MacDataTypeB"].numBytes() + state["MacroTile1"] * state["ProblemType"]["MacDataTypeB"].numBytes() * lrvwB) % 128) // state["ProblemType"]["MacDataTypeB"].numBytes())
+                if state["GlobalReadVectorWidthB"] * state["ProblemType"]["MacDataTypeB"].numBytes() == 32 and ldsPadB == 0:
+                  ldsPadB = int(16 // state["ProblemType"]["MacDataTypeB"].numBytes())
+              else:
+                if state["ProblemType"]["TLUB"]:
+                  ldsPadB = 0
+                else:
+                  ldsPadB = state["VectorWidthB"]
+            else:
+              ldsPadB = max(state["GlobalReadVectorWidthB"],optPadB)
+              if state["DirectToLdsB"]:
+                ldsPadB = 0
           assert(ldsPadB >= 0)
 
         ldsPadM = state["LdsPadMetadata"]
@@ -2892,7 +2898,7 @@ class Solution(collections.abc.Mapping):
         LdsBlockSizePerPadB = state["LdsBlockSizePerPadB"]
         tmpBpe = state["ProblemType"]["DataTypeA"].numBytes() if state["ConvertAfterDS"] else state["ProblemType"]["MacDataTypeA"].numBytes()
         if LdsBlockSizePerPadA == -1:
-          if state["EnableMatrixInstruction"]:
+          if state["EnableMatrixInstruction"] and not state["ProblemType"]["DataTypeA"].is6bitFloat():
             if state["UnrollMajorLDSA"]:
               LdsBlockSizePerPadA = roundUpToNearestMultiple(int(state["_DepthUA"] * tmpBpe), 128)
               if state["_DepthUA"] * tmpBpe * state["VectorWidthA"] > 128:
@@ -2906,7 +2912,7 @@ class Solution(collections.abc.Mapping):
             LdsBlockSizePerPadA = 0
         tmpBpe = state["ProblemType"]["DataTypeB"].numBytes() if state["ConvertAfterDS"] else state["ProblemType"]["MacDataTypeB"].numBytes()
         if LdsBlockSizePerPadB == -1:
-          if state["EnableMatrixInstruction"]:
+          if state["EnableMatrixInstruction"] and not state["ProblemType"]["DataTypeB"].is6bitFloat():
             if state["UnrollMajorLDSB"]:
               LdsBlockSizePerPadB = roundUpToNearestMultiple(int(state["_DepthUB"] * tmpBpe), 128)
               if state["_DepthUB"] * tmpBpe * state["VectorWidthB"] > 128:
@@ -3004,50 +3010,54 @@ class Solution(collections.abc.Mapping):
       # Default LocalReadVectorWidth
       if state["EnableMatrixInstruction"]:
         autoLRVWA = 0
-        if state["LocalReadVectorWidthA"] == -1:
-          autoLRVWA = 1
-          if state["TransposeLDS"] and (not state["DirectToLds"]):
-            state["LocalReadVectorWidthA"] = int(16 // state["ProblemType"]["MacDataTypeA"].numBytes())
-          else:
-            if state["ProblemType"]["Sparse"] and state["MIInputPerThread"] * state["ProblemType"]["MacDataTypeA"].numBytes() > 16:
-              state["LocalReadVectorWidthA"] = int(16 // state["ProblemType"]["MacDataTypeA"].numBytes())
-            else:
-              state["LocalReadVectorWidthA"] = state["MIInputPerThread"]
-        else:
+        if state["LocalReadVectorWidthA"] != -1:
           tmplrvw = (state["LocalReadVectorWidthA"] // 2) if state["ProblemType"]["Sparse"] else state["LocalReadVectorWidthA"]
           if tmplrvw * state["ProblemType"]["MacDataTypeA"].numRegisters() < 1:
             reject(state, "LocalReadVectorWidth * dataRegister < 1")
           if state["LocalReadVectorWidthA"] > state["MIInputPerThread"] and not state["TransposeLDS"]:
             reject(state, "LocalReadVectorWidth require Transpose LDS")
+        else:
+          if state["ProblemType"]["MacDataTypeA"].is6bitFloat():
+            state["LocalReadVectorWidthA"] = 32 if state["UnrollMajorLDSA"] else 16
+          else:
+            autoLRVWA = 1
+            if state["TransposeLDS"] and (not state["DirectToLds"]):
+              state["LocalReadVectorWidthA"] = int(16 // state["ProblemType"]["MacDataTypeA"].numBytes())
+            else:
+              if state["ProblemType"]["Sparse"] and state["MIInputPerThread"] * state["ProblemType"]["MacDataTypeA"].numBytes() > 16:
+                state["LocalReadVectorWidthA"] = int(16 // state["ProblemType"]["MacDataTypeA"].numBytes())
+              else:
+                state["LocalReadVectorWidthA"] = state["MIInputPerThread"]
 
-        if autoLRVWA:
-          if state["LocalReadVectorWidthA"] // state["MIInputPerThread"] > 1:
-            if (state["DepthU"] // state["MatrixInstK"] <= state["LocalReadVectorWidthA"] // state["MIInputPerThread"]):
-              # if only have 1 iteration with wider local read, reduce LRVW to have better scheduling (at least 2 iterations)
-              state["LocalReadVectorWidthA"] //= 2
+            if state["LocalReadVectorWidthA"] // state["MIInputPerThread"] > 1:
+              if (state["DepthU"] // state["MatrixInstK"] <= state["LocalReadVectorWidthA"] // state["MIInputPerThread"]):
+                # if only have 1 iteration with wider local read, reduce LRVW to have better scheduling (at least 2 iterations)
+                state["LocalReadVectorWidthA"] //= 2
 
         autoLRVWB = 0
-        if state["LocalReadVectorWidthB"] == -1:
-          autoLRVWB = 1
-          if state["TransposeLDS"] and (not state["DirectToLds"]):
-            state["LocalReadVectorWidthB"] = int(16 // state["ProblemType"]["MacDataTypeB"].numBytes())
-          else:
-            if state["ProblemType"]["Sparse"] and state["MIInputPerThread"] * state["ProblemType"]["MacDataTypeB"].numBytes() > 16:
-              state["LocalReadVectorWidthB"] = int(16 // state["ProblemType"]["MacDataTypeB"].numBytes())
-            else:
-              state["LocalReadVectorWidthB"] = state["MIInputPerThread"]
-        else:
+        if state["LocalReadVectorWidthB"] != -1:
           tmplrvw = (state["LocalReadVectorWidthB"] // 2) if state["ProblemType"]["Sparse"] else state["LocalReadVectorWidthB"]
           if tmplrvw * state["ProblemType"]["MacDataTypeB"].numRegisters() < 1:
             reject(state, "LocalReadVectorWidth * dataRegister < 1")
           if state["LocalReadVectorWidthB"] > state["MIInputPerThread"] and not state["TransposeLDS"]:
             reject(state, "LocalReadVectorWidth require Transpose LDS")
+        else:
+          if state["ProblemType"]["MacDataTypeB"].is6bitFloat():
+            state["LocalReadVectorWidthB"] = 32 if state["UnrollMajorLDSB"] else 16
+          else:
+            autoLRVWB = 1
+            if state["TransposeLDS"] and (not state["DirectToLds"]):
+              state["LocalReadVectorWidthB"] = int(16 // state["ProblemType"]["MacDataTypeB"].numBytes())
+            else:
+              if state["ProblemType"]["Sparse"] and state["MIInputPerThread"] * state["ProblemType"]["MacDataTypeB"].numBytes() > 16:
+                state["LocalReadVectorWidthB"] = int(16 // state["ProblemType"]["MacDataTypeB"].numBytes())
+              else:
+                state["LocalReadVectorWidthB"] = state["MIInputPerThread"]
 
-        if autoLRVWB:
-          if state["LocalReadVectorWidthB"] // state["MIInputPerThread"] > 1:
-            if (state["DepthU"] // state["MatrixInstK"] <= state["LocalReadVectorWidthB"] // state["MIInputPerThread"]):
-              # if only have 1 iteration with wider local read, reduce LRVW to have better scheduling (at least 2 iterations)
-              state["LocalReadVectorWidthB"] //= 2
+            if state["LocalReadVectorWidthB"] // state["MIInputPerThread"] > 1:
+              if (state["DepthU"] // state["MatrixInstK"] <= state["LocalReadVectorWidthB"] // state["MIInputPerThread"]):
+                # if only have 1 iteration with wider local read, reduce LRVW to have better scheduling (at least 2 iterations)
+                state["LocalReadVectorWidthB"] //= 2
 
         if autoLRVWA or autoLRVWB:
           wlrA = max(state["LocalReadVectorWidthA"] // state["MIInputPerThread"], 1)
@@ -3122,6 +3132,8 @@ class Solution(collections.abc.Mapping):
           elif state["GlobalReadVectorWidthA"] == -1:
             if state["ProblemType"]["SwizzleTensorA"]:
               state["GlobalReadVectorWidthA"] = state["MIInputPerThreadA"] * calSwizzleK(state, "A")
+            elif state["ProblemType"]["DataTypeA"].is6bitFloat():
+              state["GlobalReadVectorWidthA"] = 32
             else:
               optGRVW = calcOptGRVW(state["LocalReadVectorWidthA"], state["UnrollMajorLDSA"], state["ProblemType"]["DataTypeA"])
               curGRVW = 1
@@ -3161,6 +3173,8 @@ class Solution(collections.abc.Mapping):
           elif state["GlobalReadVectorWidthB"] == -1:
             if state["ProblemType"]["SwizzleTensorB"]:
               state["GlobalReadVectorWidthB"] = state["MIInputPerThreadB"] * calSwizzleK(state, "B")
+            elif state["ProblemType"]["DataTypeB"].is6bitFloat():
+              state["GlobalReadVectorWidthB"] = 32
             else:
               optGRVW = calcOptGRVW(state["LocalReadVectorWidthB"], state["UnrollMajorLDSB"], state["ProblemType"]["DataTypeB"])
               curGRVW = 1
